@@ -1,0 +1,436 @@
+"""
+KIMIDORI Movie Auto — FastAPI メインエントリーポイント
+Cloud Run 上で動作する動画処理APIサーバー
+"""
+
+import asyncio
+import logging
+import traceback
+from datetime import datetime
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from typing import Optional
+
+import config
+from services.firestore_service import FirestoreService
+from services.storage_service import StorageService
+from services.youtube_service import YouTubeService
+from processors.mode_a import ModeAProcessor
+from processors.mode_b import ModeBProcessor
+
+# ロガー設定
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
+
+# FastAPIアプリケーション
+app = FastAPI(
+    title="KIMIDORI Movie Auto API",
+    description="YouTube動画自動生成・編集・投稿ツール",
+    version="1.0.0",
+)
+
+# CORS設定（フロントエンドからのアクセスを許可）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 本番環境では特定のオリジンに制限する
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# サービス初期化
+firestore = FirestoreService()
+storage = StorageService()
+youtube = YouTubeService()
+
+
+# =============================================================================
+# リクエスト/レスポンスモデル
+# =============================================================================
+class ModeARequest(BaseModel):
+    """モードA: ゼロから生成リクエスト"""
+    theme: str = Field(..., description="動画のテーマ")
+    style: Optional[str] = Field("informative", description="動画のスタイル")
+    duration_seconds: Optional[int] = Field(45, description="目標の動画長さ（秒）")
+    user_id: str = Field(..., description="FirebaseユーザーID")
+    gemini_api_key: str = Field("", description="ユーザーのGemini APIキー")
+    voice_name: str = Field("nanami", description="Edge TTSの音声名")
+    speaking_rate: float = Field(1.0, description="読み上げ速度")
+
+
+class ModeBRequest(BaseModel):
+    """モードB: 既存動画の自動編集リクエスト"""
+    storage_path: str = Field(..., description="Cloud Storageにアップロードされた素材動画のパス")
+    enable_jet_cut: bool = Field(True, description="ジェットカット（無音カット）を有効にする")
+    enable_subtitles: bool = Field(True, description="自動テロップを有効にする")
+    user_id: str = Field(..., description="FirebaseユーザーID")
+
+
+class JobStatusResponse(BaseModel):
+    """ジョブステータスレスポンス"""
+    job_id: str
+    status: str
+    progress: int = 0
+    message: str = ""
+    youtube_url: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+# =============================================================================
+# ヘルスチェック
+# =============================================================================
+@app.get("/health")
+async def health_check():
+    """ヘルスチェックエンドポイント"""
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+
+
+# =============================================================================
+# モードA: ゼロから生成
+# =============================================================================
+@app.post("/api/process/mode-a", response_model=JobStatusResponse)
+async def process_mode_a(request: ModeARequest, background_tasks: BackgroundTasks):
+    """
+    モードA: テーマからショート動画を自動生成
+    非同期でバックグラウンド処理を開始し、即座にジョブIDを返す
+    """
+    try:
+        # 動画長さの制限
+        duration = min(request.duration_seconds or 45, config.SHORT_VIDEO_MAX_DURATION)
+
+        # Firestoreにジョブドキュメントを作成
+        job_id = firestore.create_job(
+            user_id=request.user_id,
+            mode="A",
+            params={
+                "theme": request.theme,
+                "style": request.style,
+                "duration_seconds": duration,
+            }
+        )
+
+        # バックグラウンドで動画処理を実行
+        background_tasks.add_task(
+            run_mode_a_pipeline,
+            job_id=job_id,
+            theme=request.theme,
+            style=request.style,
+            duration=duration,
+            user_id=request.user_id,
+            gemini_api_key=request.gemini_api_key,
+            voice_name=request.voice_name,
+            speaking_rate=request.speaking_rate,
+        )
+
+        logger.info(f"モードAジョブ開始: {job_id} テーマ='{request.theme}'")
+
+        return JobStatusResponse(
+            job_id=job_id,
+            status="pending",
+            progress=0,
+            message="ジョブを受け付けました。処理を開始します...",
+            created_at=datetime.utcnow().isoformat(),
+        )
+
+    except Exception as e:
+        logger.error(f"モードAジョブ作成失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"ジョブの作成に失敗しました: {str(e)}")
+
+
+# =============================================================================
+# モードB: 既存動画の自動編集
+# =============================================================================
+@app.post("/api/process/mode-b", response_model=JobStatusResponse)
+async def process_mode_b(request: ModeBRequest, background_tasks: BackgroundTasks):
+    """
+    モードB: アップロードされた素材動画を自動編集
+    非同期でバックグラウンド処理を開始し、即座にジョブIDを返す
+    """
+    try:
+        # Firestoreにジョブドキュメントを作成
+        job_id = firestore.create_job(
+            user_id=request.user_id,
+            mode="B",
+            params={
+                "storage_path": request.storage_path,
+                "enable_jet_cut": request.enable_jet_cut,
+                "enable_subtitles": request.enable_subtitles,
+            }
+        )
+
+        # バックグラウンドで動画処理を実行
+        background_tasks.add_task(
+            run_mode_b_pipeline,
+            job_id=job_id,
+            storage_path=request.storage_path,
+            enable_jet_cut=request.enable_jet_cut,
+            enable_subtitles=request.enable_subtitles,
+            user_id=request.user_id,
+        )
+
+        logger.info(f"モードBジョブ開始: {job_id} 素材='{request.storage_path}'")
+
+        return JobStatusResponse(
+            job_id=job_id,
+            status="pending",
+            progress=0,
+            message="ジョブを受け付けました。処理を開始します...",
+            created_at=datetime.utcnow().isoformat(),
+        )
+
+    except Exception as e:
+        logger.error(f"モードBジョブ作成失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"ジョブの作成に失敗しました: {str(e)}")
+
+
+# =============================================================================
+# ジョブステータス取得
+# =============================================================================
+@app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
+async def get_job_status(job_id: str):
+    """ジョブの現在のステータスを取得"""
+    try:
+        job = firestore.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="ジョブが見つかりません")
+
+        return JobStatusResponse(
+            job_id=job_id,
+            status=job.get("status", "unknown"),
+            progress=job.get("progress", 0),
+            message=job.get("message", ""),
+            youtube_url=job.get("youtube_url"),
+            created_at=job.get("created_at"),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/jobs")
+async def list_jobs(user_id: str, limit: int = 20):
+    """ユーザーのジョブ一覧を取得"""
+    try:
+        jobs = firestore.list_jobs(user_id, limit)
+        return {"jobs": jobs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# 台本プレビュー（動画生成前に台本だけ確認）
+# =============================================================================
+class ScriptPreviewRequest(BaseModel):
+    """台本プレビューリクエスト"""
+    theme: str
+    style: str = "informative"
+    duration_seconds: int = 45
+    gemini_api_key: str = ""
+
+@app.post("/api/preview/script")
+async def preview_script(request: ScriptPreviewRequest):
+    """台本のみを生成して返す（動画生成は行わない）"""
+    try:
+        from processors.script_generator import ScriptGenerator
+        gen = ScriptGenerator(api_key=request.gemini_api_key)
+        duration = min(request.duration_seconds, config.SHORT_VIDEO_MAX_DURATION)
+        script_data = await gen.generate(request.theme, request.style, duration)
+        return {"script": script_data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"台本生成に失敗: {str(e)}")
+
+
+# =============================================================================
+# 動画ダウンロード
+# =============================================================================
+@app.get("/api/download/{job_id}")
+async def download_video(job_id: str):
+    """完成動画のダウンロードURL（署名付き）を返す"""
+    from fastapi.responses import RedirectResponse
+    try:
+        job = firestore.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="ジョブが見つかりません")
+        if job.get("status") != "completed":
+            raise HTTPException(status_code=400, detail="動画がまだ完成していません")
+
+        storage_url = job.get("storage_url")
+        if storage_url:
+            return RedirectResponse(url=storage_url)
+
+        raise HTTPException(status_code=404, detail="動画ファイルが見つかりません")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# バックグラウンド処理パイプライン
+# =============================================================================
+async def run_mode_a_pipeline(
+    job_id: str,
+    theme: str,
+    style: str,
+    duration: int,
+    user_id: str,
+    gemini_api_key: str,
+    voice_name: str,
+    speaking_rate: float,
+):
+    """モードAの処理パイプライン全体を実行"""
+    processor = ModeAProcessor(
+        firestore, storage,
+        voice_name=voice_name,
+        speaking_rate=speaking_rate,
+        gemini_api_key=gemini_api_key
+    )
+    try:
+        firestore.update_job(job_id, status="processing", progress=5, message="処理を開始しています...")
+
+        # 1. 台本生成 (10%)
+        firestore.update_job(job_id, progress=10, message="Geminiで台本を生成中...")
+        script_data = await processor.generate_script(theme, style, duration)
+
+        # 2. 音声合成 (30%)
+        firestore.update_job(job_id, progress=30, message="音声を合成中...")
+        audio_path = await processor.synthesize_audio(script_data, job_id)
+
+        # 3. 画像素材生成 (50%)
+        firestore.update_job(job_id, progress=50, message="画像素材を生成中...")
+        image_paths = await processor.generate_visuals(script_data, job_id)
+
+        # 4. 動画合成 (70%)
+        firestore.update_job(job_id, progress=70, message="動画を合成中...")
+        video_path = await processor.compose_video(
+            script_data, audio_path, image_paths, job_id, duration
+        )
+
+        # 5. Cloud Storageにアップロード (85%)
+        firestore.update_job(job_id, progress=85, message="動画をアップロード中...")
+        storage_url = storage.upload_file(
+            video_path,
+            f"outputs/{user_id}/{job_id}/output.mp4"
+        )
+
+        # 6. YouTubeに投稿 (95%)
+        firestore.update_job(job_id, progress=95, message="YouTubeに投稿中...")
+        youtube_url = youtube.upload_video(
+            video_path=str(video_path),
+            title=f"{theme} | KIMIDORI Movie Auto",
+            description=f"テーマ「{theme}」から自動生成された動画です。\n\n{script_data.get('description', '')}",
+            tags=script_data.get("tags", ["自動生成", "AI"]),
+            privacy_status="private",  # 非公開で投稿
+        )
+
+        # 7. 完了 (100%)
+        firestore.update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            message="処理が完了しました！",
+            youtube_url=youtube_url,
+            storage_url=storage_url,
+        )
+        logger.info(f"モードAジョブ完了: {job_id} → {youtube_url}")
+
+    except Exception as e:
+        error_msg = f"処理中にエラーが発生しました: {str(e)}"
+        logger.error(f"モードAジョブ失敗: {job_id} — {traceback.format_exc()}")
+        firestore.update_job(job_id, status="failed", message=error_msg)
+
+    finally:
+        # 一時ファイルの掃除
+        processor.cleanup(job_id)
+
+
+async def run_mode_b_pipeline(
+    job_id: str,
+    storage_path: str,
+    enable_jet_cut: bool,
+    enable_subtitles: bool,
+    user_id: str,
+):
+    """モードBの処理パイプライン全体を実行"""
+    processor = ModeBProcessor(firestore, storage)
+    try:
+        firestore.update_job(job_id, status="processing", progress=5, message="処理を開始しています...")
+
+        # 1. 素材動画をダウンロード (10%)
+        firestore.update_job(job_id, progress=10, message="素材動画をダウンロード中...")
+        source_video_path = storage.download_file(storage_path, config.TMP_DIR / job_id / "source.mp4")
+
+        # 2. 音声認識 (30%)
+        firestore.update_job(job_id, progress=30, message="Whisperで音声認識中...")
+        transcription = await processor.transcribe_audio(source_video_path, job_id)
+
+        # 3. 無音区間の検出とジェットカット (50%)
+        if enable_jet_cut:
+            firestore.update_job(job_id, progress=50, message="無音区間を検出してカット中...")
+            cut_video_path = await processor.jet_cut(source_video_path, transcription, job_id)
+        else:
+            cut_video_path = source_video_path
+
+        # 4. テロップの焼き付け (70%)
+        if enable_subtitles:
+            firestore.update_job(job_id, progress=70, message="自動テロップを焼き付け中...")
+            final_video_path = await processor.burn_subtitles(
+                cut_video_path, transcription, job_id
+            )
+        else:
+            final_video_path = cut_video_path
+
+        # 5. Cloud Storageにアップロード (85%)
+        firestore.update_job(job_id, progress=85, message="完成動画をアップロード中...")
+        storage_url = storage.upload_file(
+            final_video_path,
+            f"outputs/{user_id}/{job_id}/output.mp4"
+        )
+
+        # 6. YouTubeに投稿 (95%)
+        firestore.update_job(job_id, progress=95, message="YouTubeに投稿中...")
+        youtube_url = youtube.upload_video(
+            video_path=str(final_video_path),
+            title=f"自動編集動画 | KIMIDORI Movie Auto",
+            description="自動編集（ジェットカット＋テロップ付与）された動画です。",
+            tags=["自動編集", "ジェットカット", "テロップ"],
+            privacy_status="private",
+        )
+
+        # 7. 完了 (100%)
+        firestore.update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            message="処理が完了しました！",
+            youtube_url=youtube_url,
+            storage_url=storage_url,
+        )
+        logger.info(f"モードBジョブ完了: {job_id} → {youtube_url}")
+
+    except Exception as e:
+        error_msg = f"処理中にエラーが発生しました: {str(e)}"
+        logger.error(f"モードBジョブ失敗: {job_id} — {traceback.format_exc()}")
+        firestore.update_job(job_id, status="failed", message=error_msg)
+
+    finally:
+        processor.cleanup(job_id)
+
+
+# =============================================================================
+# 起動時の初期化
+# =============================================================================
+@app.on_event("startup")
+async def startup_event():
+    """アプリケーション起動時の初期化処理"""
+    logger.info("=== KIMIDORI Movie Auto API 起動 ===")
+    logger.info(f"一時ディレクトリ: {config.TMP_DIR}")
+    logger.info(f"Whisperモデル: {config.WHISPER_MODEL}")
+    logger.info(f"Geminiモデル: {config.GEMINI_MODEL}")
+
+    # 一時ディレクトリの初期化
+    config.TMP_DIR.mkdir(parents=True, exist_ok=True)

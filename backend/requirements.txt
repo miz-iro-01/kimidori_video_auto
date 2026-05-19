@@ -1,0 +1,37 @@
+# ============================================================
+# KIMIDORI Movie Auto — Python 依存関係
+# ============================================================
+
+# Web フレームワーク
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+python-multipart==0.0.9
+
+# Firebase / Google Cloud（システム管理者が設定）
+firebase-admin==6.5.0
+google-cloud-firestore==2.16.0
+google-cloud-storage==2.16.0
+google-auth==2.29.0
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+
+# YouTube API
+google-api-python-client==2.127.0
+
+# AI / 音声認識
+openai-whisper==20231117
+google-generativeai==0.7.0
+
+# 音声合成（完全無料・APIキー不要）
+edge-tts==6.1.12
+
+# 動画処理
+moviepy==1.0.3
+Pillow==10.3.0
+numpy==1.26.4
+
+# ユーティリティ
+pydantic==2.7.0
+python-dotenv==1.0.1
+httpx==0.27.0
+aiofiles==23.2.1
