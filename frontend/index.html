@@ -3,301 +3,390 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="KIMIDORI Movie Auto - YouTube動画を完全自動で生成・編集・投稿するツール">
-  <title>KIMIDORI Movie Auto | YouTube動画自動生成ツール</title>
+  <title>KIMIDORI YouTube Auto</title>
+  
+  <!-- Modern Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+JP:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Favicon -->
+  <link rel="icon" href="img/logo.png" type="image/png">
+  
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="app-container">
+  <!-- 背景のエフェクト -->
+  <div class="bg-mesh"></div>
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
 
-    <!-- ヘッダー -->
-    <header class="app-header">
-      <div class="app-logo">
-        <div class="app-logo-icon">🎬</div>
-        <h1 class="app-title">KIMIDORI Movie Auto</h1>
+  <div class="app-layout">
+    
+    <!-- サイドバー -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <img src="img/logo.png" alt="Logo" class="logo-image">
+          <span class="logo-text">KIMIDORI<br>YouTube Auto</span>
+        </div>
       </div>
-      <p class="app-subtitle">AIが動画を自動生成・編集し、YouTubeに投稿まで完全自動化</p>
-    </header>
-
-    <!-- ナビゲーション -->
-    <nav class="nav-tabs" id="navTabs">
-      <button class="nav-tab active" data-page="generate" id="navGenerate">
-        <span class="nav-tab-icon">🎥</span><span class="nav-tab-label">動画生成</span>
-      </button>
-      <button class="nav-tab" data-page="history" id="navHistory">
-        <span class="nav-tab-icon">📋</span><span class="nav-tab-label">履歴</span>
-      </button>
-      <button class="nav-tab" data-page="settings" id="navSettings">
-        <span class="nav-tab-icon">⚙️</span><span class="nav-tab-label">マイ設定</span>
-      </button>
-    </nav>
-
-    <!-- ==================== 動画生成ページ ==================== -->
-    <div class="page active" id="pageGenerate">
-      <div class="mode-tabs" id="modeTabs">
-        <button class="mode-tab active" data-mode="a" id="tabModeA">
-          <span class="mode-tab-icon">✨</span>モードA：ゼロから生成
+      
+      <nav class="sidebar-nav" id="sidebarNav">
+        <button class="nav-item active" data-target="dashboard">
+          <span class="nav-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+          </span>
+          <span class="nav-label">ダッシュボード</span>
         </button>
-        <button class="mode-tab" data-mode="b" id="tabModeB">
-          <span class="mode-tab-icon">✂️</span>モードB：既存動画を編集
+        <button class="nav-item" data-target="generate">
+          <span class="nav-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v19"></path><path d="M5 10h14"></path><path d="M5 15h14"></path><path d="m9 7 6 10"></path></svg>
+          </span>
+          <span class="nav-label">動画作成 (ウィザード)</span>
         </button>
+        <button class="nav-item" data-target="edit">
+          <span class="nav-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
+          </span>
+          <span class="nav-label">自動編集</span>
+        </button>
+        <button class="nav-item" data-target="settings">
+          <span class="nav-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          </span>
+          <span class="nav-label">API・連携設定</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="status-indicator">
+          <div class="status-dot" id="systemStatusDot"></div>
+          <span id="systemStatusText">システム待機中</span>
+        </div>
       </div>
+    </aside>
 
-      <!-- モードA -->
-      <div class="mode-panel active" id="panelModeA">
-        <div class="card">
-          <div class="card-header">
-            <span class="card-header-icon">🎯</span>
-            <h2 class="card-title">ショート動画を自動生成</h2>
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+      
+      <!-- ==================== ダッシュボード ==================== -->
+      <section class="view-section active" id="view-dashboard">
+        <header class="section-header">
+          <h1 class="section-title">ダッシュボード</h1>
+          <p class="section-subtitle">最近のジョブとシステム状態の確認</p>
+        </header>
+
+        <div class="dashboard-grid">
+          <!-- 必須設定のアラート -->
+          <div class="glass-card alert-card" id="setupAlertCard">
+            <div class="alert-icon">⚠️</div>
+            <div class="alert-content">
+              <h3>初期設定が完了していません</h3>
+              <p>動画を生成するにはGemini APIキーの登録が必要です。「API・連携設定」から設定を行ってください。</p>
+            </div>
+            <button class="btn btn-outline" onclick="document.querySelector('[data-target=\'settings\']').click()">設定へ進む</button>
           </div>
-          <div class="card-description">テーマ入力 → AI台本生成 → 音声合成 → 画像＆アニメーション → 動画合成まで全自動。<strong>音声合成は完全無料</strong>（Edge TTS使用・APIキー不要）。</div>
 
-          <!-- APIキー未設定の場合の警告 -->
-          <div class="api-warning" id="apiWarningA">
-            <span>⚠️</span>
-            <div>
-              <strong>Gemini APIキーが未設定です</strong>
-              <p>「マイ設定」タブで無料のAPIキーを設定してください。<a href="https://aistudio.google.com/apikey" target="_blank" class="link">取得はこちら（無料）</a></p>
+          <div class="glass-card col-span-2">
+            <h2 class="card-title">最近のジョブ履歴</h2>
+            <div class="job-list-premium" id="dashboardJobList">
+              <div class="empty-state">履歴はありません</div>
             </div>
           </div>
+        </div>
+      </section>
 
-          <form id="formModeA" onsubmit="return false;">
-            <div class="form-group">
-              <label class="form-label" for="inputTheme">動画のテーマ</label>
-              <input type="text" id="inputTheme" class="form-input" placeholder="例：AIの未来について、効果的な朝のルーティン..." required>
-            </div>
-            <div class="form-row">
-              <div class="form-group form-group-half">
-                <label class="form-label" for="selectStyle">スタイル</label>
-                <select id="selectStyle" class="form-select">
-                  <option value="informative">📚 情報・解説系</option>
-                  <option value="entertaining">🎉 エンタメ系</option>
-                  <option value="tutorial">📝 チュートリアル系</option>
-                  <option value="storytelling">📖 ストーリー系</option>
-                </select>
+      <!-- ==================== 動画生成ウィザード ==================== -->
+      <section class="view-section" id="view-generate">
+        <header class="section-header">
+          <h1 class="section-title">新規動画プロジェクト</h1>
+          <p class="section-subtitle">リサーチから投稿までをステップ・バイ・ステップで進めます</p>
+        </header>
+
+        <div class="glass-card main-form-card">
+          
+          <!-- モード選択 (完全自動 vs 手動確認) -->
+          <div class="toggle-group" style="margin-bottom: 2rem; border-color: var(--accent-primary);">
+            <label class="toggle-label">
+              <div>
+                <span class="toggle-text" style="color: var(--accent-primary); font-size: 1.1rem;">⚡ 完全自動投稿モード</span>
+                <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">確認ステップをスキップし、リサーチからYouTube投稿まで全自動で実行します</p>
               </div>
-              <div class="form-group form-group-half">
-                <label class="form-label" for="rangeDuration">長さ</label>
-                <div class="form-range-group">
-                  <input type="range" id="rangeDuration" class="form-range" min="15" max="60" value="45" step="5">
-                  <span class="form-range-value" id="durationValue">45秒</span>
+              <input type="checkbox" id="checkAutoMode">
+              <span class="toggle-switch"></span>
+            </label>
+          </div>
+
+          <div class="wizard-steps" id="wizardContainer">
+            
+            <!-- STEP 1: テーマ入力 -->
+            <div class="wizard-step active" id="step1">
+              <h3 class="step-title">STEP 1: テーマの決定</h3>
+              <div class="form-group">
+                <label class="form-label">作成したい動画のテーマ・キーワード</label>
+                <input type="text" id="inputTheme" class="form-input" placeholder="例：AIの進化、節約術、副業">
+              </div>
+              
+              <div class="form-group">
+                <label class="form-label">YouTube 投稿先（自動投稿時に使用）</label>
+                <div class="custom-select-wrapper">
+                  <select id="inputTargetChannelA" class="form-input form-select">
+                    <option value="">-- 投稿しない（ダウンロードのみ） --</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="action-footer">
+                <button class="btn btn-primary btn-large" id="btnRunResearch">リサーチを開始する</button>
+              </div>
+            </div>
+
+            <!-- STEP 2: リサーチ結果＆切り口選択 -->
+            <div class="wizard-step" id="step2" style="display: none;">
+              <h3 class="step-title">STEP 2: 戦略と切り口の選択</h3>
+              <div id="researchLoading" style="text-align:center; padding: 2rem; color:var(--text-secondary);">
+                YouTubeトレンドを分析中...<br><br>
+                <div class="premium-progress-bar"><div class="premium-progress-fill" style="width:100%; animation: shimmer 1s infinite;"></div></div>
+              </div>
+              <div id="researchResults" style="display: none;">
+                <p style="margin-bottom: 1rem; color: var(--text-secondary);">以下の分析結果から、今回の動画に採用する方向性を選んでください。</p>
+                <div class="guide-box">
+                  <h4 style="color: var(--accent-primary);">💡 分析されたトレンド戦略</h4>
+                  <div id="researchAnalysisText" style="white-space: pre-wrap; font-size: 0.95rem;"></div>
+                </div>
+                <div class="action-footer">
+                  <button class="btn btn-outline" id="btnBackTo1">戻る</button>
+                  <button class="btn btn-primary" id="btnGenerateScript">この戦略で台本を作成する</button>
                 </div>
               </div>
             </div>
-            <button type="submit" class="btn btn-primary" id="btnGenerateA">
-              <span class="btn-icon">🚀</span> 台本を生成して動画を作成する
+
+            <!-- STEP 3: 台本確認 -->
+            <div class="wizard-step" id="step3" style="display: none;">
+              <h3 class="step-title">STEP 3: 台本の確認・編集</h3>
+              <div id="scriptLoading" style="text-align:center; padding: 2rem; color:var(--text-secondary); display:none;">
+                AIが台本を執筆中...
+              </div>
+              <div id="scriptEditor" style="display: none;">
+                <div class="form-group">
+                  <label class="form-label">生成された台本（自由に編集できます）</label>
+                  <textarea id="inputScriptData" class="form-input form-textarea" rows="15" style="font-family: monospace; font-size: 0.9rem;"></textarea>
+                </div>
+                <div class="action-footer">
+                  <button class="btn btn-outline" id="btnBackTo2">戻る</button>
+                  <button class="btn btn-primary" id="btnGenerateVideo">この台本で動画を作成する</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- STEP 4: 動画確認と投稿 -->
+            <div class="wizard-step" id="step4" style="display: none;">
+              <h3 class="step-title">STEP 4: 動画の確認と投稿</h3>
+              
+              <div class="execution-panel" id="execPanelA" style="display:block; margin-top:0; border-top:none; padding-top:0;">
+                <h3 class="exec-title" id="execTitleA">動画をレンダリング中...</h3>
+                <div class="premium-progress-bar">
+                  <div class="premium-progress-fill" id="execBarA"></div>
+                  <div class="premium-progress-glow" id="execGlowA"></div>
+                </div>
+              </div>
+
+              <div id="videoResultPanel" style="display: none; text-align: center;">
+                <video id="finalVideoPlayer" controls style="width: 100%; max-width: 400px; border-radius: var(--radius-md); margin-bottom: 1.5rem; border: 2px solid var(--border-highlight);"></video>
+                <div class="action-footer" style="justify-content: center; display: flex; gap: 1rem;">
+                  <a href="#" class="btn btn-outline" id="btnDownloadFinal" download>ダウンロード</a>
+                  <button class="btn btn-primary" id="btnPostToYouTube">
+                    <span class="icon-youtube"></span> YouTubeに投稿する
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 既存動画編集 (モードB) ==================== -->
+      <section class="view-section" id="view-edit">
+        <header class="section-header">
+          <h1 class="section-title">自動ジェットカット＆テロップ</h1>
+          <p class="section-subtitle">素材動画の無音を自動カットし、音声認識で字幕を焼き付けます</p>
+        </header>
+
+        <div class="glass-card main-form-card">
+          <form id="formEdit" onsubmit="return false;">
+            
+            <div class="upload-zone" id="uploadZoneB">
+              <div class="upload-icon">📁</div>
+              <h3>動画をドラッグ＆ドロップ</h3>
+              <p>またはクリックしてファイルを選択（最大500MB）</p>
+              <input type="file" id="inputFileB" accept="video/*" hidden>
+            </div>
+            <div id="fileNameB" class="selected-file-name"></div>
+
+            <div class="form-grid-2" style="margin-top: 2rem;">
+              <div class="toggle-group">
+                <label class="toggle-label">
+                  <span class="toggle-text">無音自動カット（ジェットカット）</span>
+                  <input type="checkbox" id="checkJetCut" checked>
+                  <span class="toggle-switch"></span>
+                </label>
+              </div>
+              <div class="toggle-group">
+                <label class="toggle-label">
+                  <span class="toggle-text">自動テロップ生成（Whisper）</span>
+                  <input type="checkbox" id="checkSubtitles" checked>
+                  <span class="toggle-switch"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 1.5rem;">
+              <label class="form-label">YouTube 投稿先</label>
+              <div class="custom-select-wrapper">
+                <select id="inputTargetChannelB" class="form-input form-select">
+                  <option value="">-- 投稿しない（ダウンロードのみ） --</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="action-footer">
+              <button type="submit" class="btn btn-primary btn-large" id="btnSubmitB" disabled>
+                <span class="btn-glow"></span>
+                <span class="btn-text">編集を開始する</span>
+              </button>
+            </div>
+          </form>
+
+          <div class="execution-panel" id="execPanelB">
+            <h3 class="exec-title" id="execTitleB">処理を準備中...</h3>
+            <div class="premium-progress-bar">
+              <div class="premium-progress-fill" id="execBarB"></div>
+              <div class="premium-progress-glow" id="execGlowB"></div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ==================== 設定ページ ==================== -->
+      <section class="view-section" id="view-settings">
+        <header class="section-header">
+          <h1 class="section-title">API・連携設定</h1>
+          <p class="section-subtitle">外部サービスとの連携とシステム設定を管理します</p>
+        </header>
+
+        <div class="settings-grid">
+          
+          <!-- Gemini API -->
+          <div class="glass-card">
+            <div class="card-header-icon"><span class="icon-gemini"></span> <h3>Gemini API設定 (必須)</h3></div>
+            <p class="card-desc">動画の台本生成に使用します。Google AI Studioから無料で取得できます。</p>
+            
+            <div class="guide-box">
+              <h4>🔑 取得手順</h4>
+              <ol>
+                <li><a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>にアクセス</li>
+                <li>「Create API key」ボタンをクリックしてキーを生成</li>
+                <li>コピーして以下の入力欄に貼り付け</li>
+              </ol>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">APIキー</label>
+              <div class="input-action-wrapper">
+                <input type="password" id="setGeminiKey" class="form-input" placeholder="AIzaSy...">
+                <button class="btn btn-outline" id="btnSaveGemini">保存</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pexels API (オプション) -->
+          <div class="glass-card">
+            <div class="card-header-icon"><span class="icon-image">🖼️</span> <h3>フリー画像自動取得 (推奨)</h3></div>
+            <p class="card-desc">Pexelsから高品質な画像・動画素材を自動で取得して動画の背景にします。</p>
+            
+            <div class="guide-box">
+              <h4>🔑 取得手順（完全無料）</h4>
+              <ol>
+                <li><a href="https://www.pexels.com/api/" target="_blank">Pexels API</a>に登録・ログイン</li>
+                <li>「Your API Key」を発行して以下に貼り付け</li>
+                <li>※未設定の場合は、グラデーション背景になります。</li>
+              </ol>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Pexels APIキー (オプション)</label>
+              <div class="input-action-wrapper">
+                <input type="password" id="setPexelsKey" class="form-input" placeholder="563492ad6f91700001000001...">
+                <button class="btn btn-outline" id="btnSavePexels">保存</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- YouTube 連携 (5アカウント) -->
+          <div class="glass-card">
+            <div class="card-header-icon"><span class="icon-youtube"></span> <h3>YouTube チャンネル連携</h3></div>
+            <p class="card-desc">最大5つのチャンネルを登録し、投稿先を切り替えることができます。</p>
+            
+            <div class="guide-box">
+              <h4>📺 連携手順</h4>
+              <p>「アカウントを追加」ボタンを押し、Googleの認証画面で連携を許可してください。<br>※ 自動投稿するには、生成時に投稿先チャンネルを選択します。</p>
+            </div>
+
+            <div class="youtube-accounts-list" id="ytAccountList">
+              <!-- JSでアカウント一覧を描画 -->
+            </div>
+
+            <button class="btn btn-primary" id="btnAddYoutube" style="width: 100%; margin-top: 1rem;">
+              + 新しいアカウントを追加連携
             </button>
-          </form>
-
-          <!-- 台本プレビュー -->
-          <div class="script-preview" id="scriptPreviewA">
-            <div class="script-preview-header">
-              <span>📝</span><h3>生成された台本</h3>
-              <button class="btn-icon-only" id="btnToggleScriptA" title="折りたたむ">▼</button>
-            </div>
-            <div class="script-preview-content" id="scriptContentA"></div>
           </div>
 
-          <!-- プログレス -->
-          <div class="progress-section" id="progressA">
-            <div class="progress-bar-wrapper"><div class="progress-bar" id="progressBarA"></div></div>
-            <div class="progress-info">
-              <span class="progress-message" id="progressMessageA">処理を開始しています...</span>
-              <span class="progress-percentage" id="progressPercentA">0%</span>
-            </div>
-          </div>
-
-          <!-- 結果 -->
-          <div class="result-section" id="resultA">
-            <div class="result-header"><span>🎉</span><h3 id="resultTitleA">動画が完成しました！</h3></div>
-            <div class="video-preview" id="videoPreviewA">
-              <video id="videoPlayerA" controls preload="metadata"><source src="" type="video/mp4"></video>
-            </div>
-            <div class="result-actions">
-              <a href="#" class="btn btn-download" id="btnDownloadA" download><span>📥</span> ダウンロード</a>
-              <a href="#" class="btn btn-youtube" id="btnYouTubeA" target="_blank" rel="noopener"><span>▶️</span> YouTubeで確認</a>
-            </div>
-            <p class="result-message" id="resultMessageA"></p>
-          </div>
-        </div>
-      </div>
-
-      <!-- モードB -->
-      <div class="mode-panel" id="panelModeB">
-        <div class="card">
-          <div class="card-header"><span class="card-header-icon">🎥</span><h2 class="card-title">既存動画を自動編集</h2></div>
-          <div class="card-description">無音部分の自動カット（ジェットカット）と音声認識による自動テロップ付与。<strong>Whisperはサーバー上で動作し、追加費用なし</strong>。</div>
-
-          <form id="formModeB" onsubmit="return false;">
+          <!-- 音声設定 -->
+          <div class="glass-card">
+            <div class="card-header-icon"><span class="icon-audio"></span> <h3>ナレーション設定</h3></div>
+            <p class="card-desc">Edge TTS（完全無料）を使用します。</p>
+            
             <div class="form-group">
-              <label class="form-label">素材動画をアップロード</label>
-              <div class="file-upload-area" id="fileUploadArea">
-                <div class="file-upload-icon">📁</div>
-                <p class="file-upload-text">ドラッグ＆ドロップ または <strong>クリックして選択</strong></p>
-                <p class="file-upload-hint">MP4, MOV, AVI — 最大500MB</p>
-                <input type="file" id="inputVideoFile" accept="video/*" hidden>
-              </div>
-              <div class="file-name-display" id="fileNameDisplay"></div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">編集オプション</label>
-              <div class="options-grid">
-                <label class="option-card">
-                  <input type="checkbox" id="checkJetCut" class="form-checkbox" checked>
-                  <div class="option-card-content"><span class="option-icon">✂️</span><span class="option-title">ジェットカット</span><span class="option-desc">無音部分を自動カット</span></div>
-                </label>
-                <label class="option-card">
-                  <input type="checkbox" id="checkSubtitles" class="form-checkbox" checked>
-                  <div class="option-card-content"><span class="option-icon">💬</span><span class="option-title">自動テロップ</span><span class="option-desc">音声認識でテロップ付与</span></div>
-                </label>
+              <label class="form-label">デフォルト音声</label>
+              <div class="custom-select-wrapper">
+                <select id="setVoiceName" class="form-input form-select">
+                  <option value="nanami">七海（女性・標準）</option>
+                  <option value="keita">慶太（男性・標準）</option>
+                  <option value="aoi">あおい（女性・若い）</option>
+                  <option value="daichi">大地（男性・落ち着き）</option>
+                </select>
               </div>
             </div>
-            <button type="submit" class="btn btn-primary" id="btnGenerateB" disabled><span class="btn-icon">✂️</span> 自動編集を開始する</button>
-          </form>
-
-          <div class="progress-section" id="progressB">
-            <div class="progress-bar-wrapper"><div class="progress-bar" id="progressBarB"></div></div>
-            <div class="progress-info">
-              <span class="progress-message" id="progressMessageB">処理を開始しています...</span>
-              <span class="progress-percentage" id="progressPercentB">0%</span>
-            </div>
+            <button class="btn btn-outline" id="btnSaveVoice" style="width: 100%;">設定を保存</button>
           </div>
 
-          <div class="result-section" id="resultB">
-            <div class="result-header"><span>🎉</span><h3 id="resultTitleB">編集完了！</h3></div>
-            <div class="video-preview" id="videoPreviewB"><video id="videoPlayerB" controls preload="metadata"><source src="" type="video/mp4"></video></div>
-            <div class="result-actions">
-              <a href="#" class="btn btn-download" id="btnDownloadB" download><span>📥</span> ダウンロード</a>
-              <a href="#" class="btn btn-youtube" id="btnYouTubeB" target="_blank" rel="noopener"><span>▶️</span> YouTubeで確認</a>
-            </div>
-            <p class="result-message" id="resultMessageB"></p>
-          </div>
         </div>
-      </div>
-    </div>
+      </section>
 
-    <!-- ==================== 履歴ページ ==================== -->
-    <div class="page" id="pageHistory">
-      <div class="card">
-        <div class="card-header"><span class="card-header-icon">📋</span><h2 class="card-title">ジョブ履歴</h2></div>
-        <div class="job-list" id="jobList">
-          <div class="empty-state" id="emptyState">
-            <div class="empty-state-icon">🎬</div>
-            <p>まだジョブがありません。<br>動画生成ページから始めてみましょう！</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== マイ設定ページ ==================== -->
-    <div class="page" id="pageSettings">
-
-      <!-- 無料で使えるAPI説明 -->
-      <div class="card highlight-card">
-        <div class="card-header"><span class="card-header-icon">💡</span><h2 class="card-title">このツールで使うAPI — すべて無料</h2></div>
-        <div class="free-api-grid">
-          <div class="free-api-item">
-            <div class="free-api-badge">無料</div>
-            <h4>🤖 Gemini API</h4>
-            <p>台本の自動生成に使用。Google AI Studioで無料のAPIキーを取得できます。</p>
-          </div>
-          <div class="free-api-item">
-            <div class="free-api-badge">完全無料</div>
-            <h4>🔊 Edge TTS</h4>
-            <p>ナレーション音声の合成。APIキー不要で高品質な日本語音声が使えます。</p>
-          </div>
-          <div class="free-api-item">
-            <div class="free-api-badge">無料</div>
-            <h4>📺 YouTube API</h4>
-            <p>動画の自動投稿。Googleアカウントで無料で利用できます。</p>
-          </div>
-          <div class="free-api-item">
-            <div class="free-api-badge">完全無料</div>
-            <h4>🎙️ Whisper</h4>
-            <p>音声認識（モードB用）。サーバー上で実行されるため設定不要です。</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Gemini API設定 -->
-      <div class="card">
-        <div class="card-header"><span class="card-header-icon">🤖</span><h2 class="card-title">Gemini API キー</h2></div>
-        <div class="card-description">台本の自動生成に必要です。以下の手順で無料のAPIキーを取得してください。</div>
-        <div class="settings-steps">
-          <div class="settings-step"><div class="step-number">1</div><div class="step-content"><h4>Google AI Studio にアクセス</h4><p><a href="https://aistudio.google.com/apikey" target="_blank" class="link">https://aistudio.google.com/apikey</a> を開く</p></div></div>
-          <div class="settings-step"><div class="step-number">2</div><div class="step-content"><h4>「APIキーを作成」をクリック</h4><p>Googleアカウントでログイン後、ボタンを押すだけです</p></div></div>
-          <div class="settings-step"><div class="step-number">3</div><div class="step-content"><h4>取得したキーを下に貼り付け</h4><p>無料枠: 1分間に60リクエストまで（十分です）</p></div></div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="settingGeminiKey">APIキー</label>
-          <div class="input-with-toggle">
-            <input type="password" id="settingGeminiKey" class="form-input" placeholder="AIzaSy...">
-            <button class="btn-icon-only" id="btnToggleGeminiKey" title="表示/非表示">👁️</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- YouTube連携 -->
-      <div class="card">
-        <div class="card-header"><span class="card-header-icon">📺</span><h2 class="card-title">YouTube アカウント連携</h2></div>
-        <div class="card-description">完成した動画をあなたのYouTubeチャンネルに自動投稿します。</div>
-        <div class="youtube-auth-status" id="youtubeAuthStatus">
-          <div class="status-dot pending"></div>
-          <span>未連携</span>
-        </div>
-        <button class="btn btn-secondary" id="btnAuthYouTube">📺 YouTubeアカウントを連携する</button>
-        <div class="form-group" style="margin-top: 1rem;">
-          <label class="form-label" for="settingYouTubePrivacy">デフォルト公開設定</label>
-          <select id="settingYouTubePrivacy" class="form-select">
-            <option value="private">🔒 非公開（推奨）</option>
-            <option value="unlisted">🔗 限定公開</option>
-            <option value="public">🌐 公開</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- 音声設定 -->
-      <div class="card">
-        <div class="card-header"><span class="card-header-icon">🔊</span><h2 class="card-title">ナレーション音声設定</h2></div>
-        <div class="card-description">Edge TTS（完全無料・APIキー不要）を使用しています。7種類の日本語音声から選べます。</div>
-        <div class="form-group">
-          <label class="form-label" for="settingVoiceName">音声の種類</label>
-          <select id="settingVoiceName" class="form-select">
-            <option value="nanami">🎤 七海（女性・標準）</option>
-            <option value="keita">🎤 慶太（男性・標準）</option>
-            <option value="aoi">🎤 あおい（女性・若い）</option>
-            <option value="daichi">🎤 大地（男性・落ち着き）</option>
-            <option value="mayu">🎤 まゆ（女性・明るい）</option>
-            <option value="naoki">🎤 直樹（男性・若い）</option>
-            <option value="shiori">🎤 しおり（女性・柔らか）</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="settingSpeakingRate">読み上げ速度</label>
-          <div class="form-range-group">
-            <input type="range" id="settingSpeakingRate" class="form-range" min="0.5" max="2.0" value="1.0" step="0.1">
-            <span class="form-range-value" id="speakingRateValue">1.0x</span>
-          </div>
-        </div>
-        <button class="btn btn-secondary" id="btnTestVoice">🔊 音声をテスト再生</button>
-      </div>
-
-      <!-- 保存 -->
-      <div class="settings-actions">
-        <button class="btn btn-primary" id="btnSaveSettings"><span class="btn-icon">💾</span> 設定を保存する</button>
-      </div>
-    </div>
-
+    </main>
   </div>
 
-  <div class="toast-container" id="toastContainer"></div>
+  <!-- トースト通知 -->
+  <div class="toast-wrapper" id="toastWrapper"></div>
 
-  <script src="js/firebase-config.js"></script>
+  <!-- モーダル用オーバーレイ -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-content glass-card" id="videoModal">
+      <h2 id="modalTitle">動画が完成しました</h2>
+      <video id="modalVideo" controls></video>
+      <div class="modal-actions">
+        <a href="#" class="btn btn-outline" id="modalDownload" download>ダウンロード</a>
+        <a href="#" class="btn btn-primary" id="modalYoutube" target="_blank" style="display:none;">YouTubeで見る</a>
+        <button class="btn btn-text" id="modalClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/settings-manager.js"></script>
-  <script src="js/job-manager.js"></script>
+  <script src="js/api-client.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,91 @@
+/**
+ * KIMIDORI YouTube Auto - API Client
+ * バックエンド（FastAPI / Cloud Run）との通信用クライアント
+ */
+
+class ApiClient {
+  constructor() {
+    this.baseUrl = window.location.hostname === "localhost" 
+      ? "http://localhost:8080" 
+      : "https://api.your-saas-domain.com"; // 本番環境のURL
+  }
+
+  /** モードA: 動画生成ジョブの発行 */
+  async generateVideo(theme, style, duration, targetChannelId, scriptData = null, autoPost = false) {
+    const geminiKey = window.settingsManager.get("geminiApiKey");
+    const voiceName = window.settingsManager.get("voiceName");
+    const pexelsKey = window.settingsManager.get("pexelsApiKey") || "";
+
+    if (!window.settingsManager.hasGeminiKey()) {
+      throw new Error("Gemini APIキーが設定されていません。");
+    }
+
+    const payload = {
+      theme,
+      style,
+      duration_seconds: parseInt(duration),
+      user_id: "user_123", // 本来は認証済みユーザーID
+      gemini_api_key: geminiKey,
+      voice_name: voiceName,
+      pexels_api_key: pexelsKey,
+      target_youtube_account: targetChannelId || null,
+      script_data: scriptData,
+      auto_post: autoPost
+    };
+
+    const res = await fetch(`${this.baseUrl}/api/process/mode-a`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || `サーバーエラー (${res.status})`);
+    }
+
+    return await res.json();
+  }
+
+  /** 台本プレビュー取得 */
+  async getScriptPreview(theme, style, duration) {
+    const geminiKey = window.settingsManager.get("geminiApiKey");
+    if (!window.settingsManager.hasGeminiKey()) return null;
+
+    const res = await fetch(`${this.baseUrl}/api/preview/script`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        theme, style, duration_seconds: parseInt(duration), gemini_api_key: geminiKey
+      })
+    });
+    
+    if (res.ok) {
+      return await res.json();
+    }
+    return null;
+  }
+
+  /** トレンドリサーチの実行 */
+  async runResearch(keyword) {
+    const geminiKey = window.settingsManager.get("geminiApiKey");
+    if (!window.settingsManager.hasGeminiKey()) {
+      throw new Error("Gemini APIキーが設定されていません。");
+    }
+
+    const res = await fetch(`${this.baseUrl}/api/research`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keyword, gemini_api_key: geminiKey })
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || `リサーチエラー (${res.status})`);
+    }
+
+    return await res.json();
+  }
+}
+
+window.apiClient = new ApiClient();

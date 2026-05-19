@@ -52,6 +52,7 @@ class ScriptGenerator:
                         "scene_number": 1,
                         "narration": "ナレーションテキスト",
                         "visual_description": "表示する画像の説明",
+                        "search_query": "画像検索用の英単語",
                         "text_overlay": "画面に表示するテロップ",
                         "duration_seconds": 5
                     },
@@ -78,7 +79,8 @@ class ScriptGenerator:
         {{
             "scene_number": 1,
             "narration": "このシーンのナレーションテキスト",
-            "visual_description": "このシーンで表示すべき画像やビジュアルの説明（英語で、画像生成用）",
+            "visual_description": "このシーンで表示すべきビジュアルの説明",
+            "search_query": "このシーンに合う背景画像を探すための英単語（1〜2語。例: business, sunset, technology, happy person）",
             "text_overlay": "画面に大きく表示するキーワードやテロップ（短く）",
             "duration_seconds": 5
         }}
@@ -89,7 +91,7 @@ class ScriptGenerator:
 - シーンは5〜8個程度
 - 各シーンのナレーションは自然な日本語で
 - text_overlay は各シーン5〜15文字程度の短いキーワード
-- visual_description は英語で、シンプルな画像生成プロンプトとして使えるもの
+- search_query はPexels等のフリー素材サイトで検索できる一般的な英語のキーワードにすること
 - 全シーンの duration_seconds の合計が {duration_seconds} 秒程度になるようにする
 - 冒頭は視聴者の注意を引くフック、最後はまとめで締める
 """

@@ -1,22 +1,21 @@
 /**
- * KIMIDORI Movie Auto — 設定管理 (SaaS BYOK版)
- * ユーザーが持ち込むAPIキーや設定の保存・読み込み
+ * KIMIDORI YouTube Auto - Premium Settings Manager
  */
 
 class SettingsManager {
   constructor() {
-    this.STORAGE_KEY = "kimidori_user_settings";
+    this.STORAGE_KEY = "kimidori_yt_auto_settings";
+    // YouTubeアカウントは配列で管理 [{id, name, token}, ...]
     this.defaults = {
       geminiApiKey: "",
-      youtubePrivacy: "private",
-      youtubeAuthenticated: false,
+      pexelsApiKey: "",
       voiceName: "nanami",
-      speakingRate: 1.0,
+      youtubeAccounts: [] 
     };
+    this.settings = this.load();
   }
 
-  /** 全設定を取得 */
-  getAll() {
+  load() {
     try {
       const saved = localStorage.getItem(this.STORAGE_KEY);
       return saved ? { ...this.defaults, ...JSON.parse(saved) } : { ...this.defaults };
@@ -25,89 +24,57 @@ class SettingsManager {
     }
   }
 
-  /** 特定の設定値を取得 */
+  save() {
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.settings));
+    this.notifyUpdate();
+  }
+
   get(key) {
-    return this.getAll()[key] ?? this.defaults[key];
+    return this.settings[key];
   }
 
-  /** 全設定を保存 */
-  saveAll(settings) {
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(settings));
-  }
-
-  /** 特定の設定値を保存 */
   set(key, value) {
-    const all = this.getAll();
-    all[key] = value;
-    this.saveAll(all);
+    this.settings[key] = value;
+    this.save();
   }
 
-  /** APIキーが設定されているかチェック */
-  isConfigured(key) {
-    const val = this.get(key);
-    return typeof val === "string" && val.trim().length > 0;
+  // Gemini API Key Validation
+  hasGeminiKey() {
+    const key = this.get("geminiApiKey");
+    return typeof key === "string" && key.startsWith("AIza") && key.length > 30;
   }
 
-  /** フォームから設定値を収集 */
-  collectFromForm() {
-    return {
-      geminiApiKey: document.getElementById("settingGeminiKey")?.value || "",
-      youtubePrivacy: document.getElementById("settingYouTubePrivacy")?.value || "private",
-      voiceName: document.getElementById("settingVoiceName")?.value || "nanami",
-      speakingRate: parseFloat(document.getElementById("settingSpeakingRate")?.value || "1.0"),
-      youtubeAuthenticated: this.get("youtubeAuthenticated"),
-    };
-  }
-
-  /** 設定値をフォームに反映 */
-  populateForm() {
-    const s = this.getAll();
-    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-    
-    setVal("settingGeminiKey", s.geminiApiKey);
-    setVal("settingYouTubePrivacy", s.youtubePrivacy);
-    setVal("settingVoiceName", s.voiceName);
-    setVal("settingSpeakingRate", s.speakingRate);
-
-    // 読み上げ速度表示
-    const rateDisplay = document.getElementById("speakingRateValue");
-    if (rateDisplay) rateDisplay.textContent = `${s.speakingRate}x`;
-
-    this.updateWarnings();
-  }
-
-  /** 未設定の警告表示を更新 */
-  updateWarnings() {
-    const hasKey = this.isConfigured("geminiApiKey");
-    const warningA = document.getElementById("apiWarningA");
-    const btnA = document.getElementById("btnGenerateA");
-    
-    if (warningA) {
-      if (hasKey) {
-        warningA.classList.remove("active");
-        if (btnA) btnA.disabled = false;
-      } else {
-        warningA.classList.add("active");
-        if (btnA) btnA.disabled = true;
-      }
+  // YouTube Accounts Management (Max 5)
+  addYoutubeAccount(account) {
+    const accounts = this.get("youtubeAccounts");
+    if (accounts.length >= 5) {
+      throw new Error("登録できるYouTubeアカウントは最大5つまでです。");
     }
+    // 重複チェック
+    if (accounts.find(a => a.id === account.id)) {
+      throw new Error("このアカウントは既に登録されています。");
+    }
+    accounts.push(account);
+    this.set("youtubeAccounts", accounts);
+  }
 
-    // YouTube認証ステータス
-    const ytStatus = document.getElementById("youtubeAuthStatus");
-    if (ytStatus) {
-      const isAuth = this.get("youtubeAuthenticated");
-      const dot = ytStatus.querySelector(".status-dot");
-      const text = ytStatus.querySelector("span");
-      if (isAuth) {
-        dot.className = "status-dot connected";
-        text.textContent = "連携済み";
-      } else {
-        dot.className = "status-dot pending";
-        text.textContent = "未連携";
-      }
+  removeYoutubeAccount(id) {
+    let accounts = this.get("youtubeAccounts");
+    accounts = accounts.filter(a => a.id !== id);
+    this.set("youtubeAccounts", accounts);
+  }
+
+  getYouTubeAccounts() {
+    return this.get("youtubeAccounts") || [];
+  }
+
+  // UIへの反映イベント
+  notifyUpdate() {
+    if (window.appController) {
+      window.appController.renderSettings();
+      window.appController.validateForms();
     }
   }
 }
 
-// グローバルインスタンス
-const settingsManager = new SettingsManager();
+window.settingsManager = new SettingsManager();

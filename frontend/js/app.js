@@ -1,291 +1,399 @@
 /**
- * KIMIDORI Movie Auto — メインアプリケーション v2
- * ナビゲーション、台本プレビュー、動画プレビュー、設定管理の統合
+ * KIMIDORI YouTube Auto - App Controller
+ * UIの制御・バリデーション・ビュー切り替え
  */
 
-document.addEventListener("DOMContentLoaded", () => {
-  // ===== DOM参照 =====
-  const $ = (id) => document.getElementById(id);
-
-  // ナビゲーション
-  const navTabs = document.querySelectorAll(".nav-tab");
-  const pages = document.querySelectorAll(".page");
-
-  // モードタブ
-  const tabA = $("tabModeA"), tabB = $("tabModeB");
-  const panelA = $("panelModeA"), panelB = $("panelModeB");
-
-  // モードAフォーム
-  const formA = $("formModeA"), inputTheme = $("inputTheme"), selectStyle = $("selectStyle");
-  const rangeDuration = $("rangeDuration"), durationValue = $("durationValue"), btnGenA = $("btnGenerateA");
-  const progressA = $("progressA"), barA = $("progressBarA"), msgA = $("progressMessageA"), pctA = $("progressPercentA");
-  const scriptPreviewA = $("scriptPreviewA"), scriptContentA = $("scriptContentA");
-  const resultA = $("resultA"), resultTitleA = $("resultTitleA"), resultMsgA = $("resultMessageA");
-  const videoPlayerA = $("videoPlayerA"), btnDownloadA = $("btnDownloadA"), btnYouTubeA = $("btnYouTubeA");
-
-  // モードBフォーム
-  const formB = $("formModeB"), fileUploadArea = $("fileUploadArea"), inputVideoFile = $("inputVideoFile");
-  const fileNameDisplay = $("fileNameDisplay"), btnGenB = $("btnGenerateB");
-  const progressB = $("progressB"), barB = $("progressBarB"), msgB = $("progressMessageB"), pctB = $("progressPercentB");
-  const resultB = $("resultB"), btnDownloadB = $("btnDownloadB"), btnYouTubeB = $("btnYouTubeB");
-
-  let selectedFile = null;
-  let jobHistory = JSON.parse(localStorage.getItem("kimidori_jobs") || "[]");
-
-  // ===== ナビゲーション =====
-  navTabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const page = tab.dataset.page;
-      navTabs.forEach((t) => t.classList.toggle("active", t === tab));
-      pages.forEach((p) => p.classList.toggle("active", p.id === `page${page.charAt(0).toUpperCase() + page.slice(1)}`));
-      if (page === "settings") { settingsManager.populateForm(); settingsManager.updateStatusDisplay(); }
-      if (page === "history") renderJobHistory();
-    });
-  });
-
-  // ===== モードタブ =====
-  tabA.addEventListener("click", () => { tabA.classList.add("active"); tabB.classList.remove("active"); panelA.classList.add("active"); panelB.classList.remove("active"); });
-  tabB.addEventListener("click", () => { tabB.classList.add("active"); tabA.classList.remove("active"); panelB.classList.add("active"); panelA.classList.remove("active"); });
-
-  // ===== スライダー =====
-  rangeDuration.addEventListener("input", (e) => { durationValue.textContent = `${e.target.value}秒`; });
-  const speakingRate = $("settingSpeakingRate");
-  if (speakingRate) speakingRate.addEventListener("input", (e) => { $("speakingRateValue").textContent = `${e.target.value}x`; });
-
-  // ===== TTSエンジン切替 =====
-  const ttsSelect = $("settingTTSEngine");
-  if (ttsSelect) ttsSelect.addEventListener("change", (e) => settingsManager.updateTTSOptions(e.target.value));
-
-  // ===== パスワード表示切替 =====
-  const toggleVisibility = (btnId, inputId) => {
-    const btn = $(btnId), inp = $(inputId);
-    if (btn && inp) btn.addEventListener("click", () => { inp.type = inp.type === "password" ? "text" : "password"; });
-  };
-  toggleVisibility("btnToggleGeminiKey", "settingGeminiKey");
-  toggleVisibility("btnToggleYTSecret", "settingYouTubeClientSecret");
-
-  // ===== ファイルアップロード =====
-  fileUploadArea.addEventListener("click", () => inputVideoFile.click());
-  fileUploadArea.addEventListener("dragover", (e) => { e.preventDefault(); fileUploadArea.classList.add("drag-over"); });
-  fileUploadArea.addEventListener("dragleave", () => fileUploadArea.classList.remove("drag-over"));
-  fileUploadArea.addEventListener("drop", (e) => {
-    e.preventDefault(); fileUploadArea.classList.remove("drag-over");
-    if (e.dataTransfer.files[0]?.type.startsWith("video/")) handleFile(e.dataTransfer.files[0]);
-    else showToast("動画ファイルを選択してください", "error");
-  });
-  inputVideoFile.addEventListener("change", (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); });
-
-  function handleFile(file) {
-    selectedFile = file;
-    fileNameDisplay.textContent = `📎 ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`;
-    fileNameDisplay.style.display = "block";
-    btnGenB.disabled = false;
-    showToast(`ファイルを選択: ${file.name}`, "info");
+class AppController {
+  constructor() {
+    this.initViews();
+    this.initForms();
+    this.initSettings();
+    this.renderSettings();
+    this.validateForms();
   }
 
-  // ===== GCPキーアップロード =====
-  const gcpArea = $("gcpKeyUploadArea"), gcpInput = $("inputGCPKey"), gcpName = $("gcpKeyFileName");
-  if (gcpArea) {
-    gcpArea.addEventListener("click", () => gcpInput.click());
-    gcpInput.addEventListener("change", (e) => {
-      if (e.target.files[0]) { gcpName.textContent = `🔑 ${e.target.files[0].name}`; gcpName.style.display = "block"; }
+  // --- ビュー（画面）切り替え ---
+  initViews() {
+    const navItems = document.querySelectorAll('.nav-item');
+    navItems.forEach(item => {
+      item.addEventListener('click', () => {
+        // ナビの切り替え
+        navItems.forEach(n => n.classList.remove('active'));
+        item.classList.add('active');
+
+        // セクションの切り替え
+        const target = item.dataset.target;
+        document.querySelectorAll('.view-section').forEach(sec => {
+          sec.classList.remove('active');
+        });
+        document.getElementById(`view-${target}`).classList.add('active');
+      });
     });
   }
 
-  // ===== モードA: 動画生成 =====
-  formA.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const theme = inputTheme.value.trim();
-    if (!theme) { showToast("テーマを入力してください", "error"); return; }
-
-    btnGenA.disabled = true; btnGenA.innerHTML = "<span>⏳</span> 処理中...";
-    progressA.classList.add("active"); resultA.classList.remove("active");
-    scriptPreviewA.classList.remove("active");
-    updateProgress("A", 0, "ジョブを送信中...");
-
-    try {
-      const result = await jobManager.submitModeA(theme, selectStyle.value, parseInt(rangeDuration.value));
-      showToast("ジョブを受け付けました！", "success");
-      addJob({ id: result.job_id, mode: "A", theme, status: "processing", createdAt: new Date().toISOString() });
-
-      if (result._simulation) {
-        jobManager.runSimulation(result, (update) => handleUpdate("A", result.job_id, update));
+  // --- 設定画面の初期化 ---
+  initSettings() {
+    // Gemini Key
+    const keyInput = document.getElementById('setGeminiKey');
+    const saveKeyBtn = document.getElementById('btnSaveGemini');
+    
+    keyInput.value = window.settingsManager.get('geminiApiKey') || "";
+    
+    saveKeyBtn.addEventListener('click', () => {
+      const val = keyInput.value.trim();
+      if(val && !val.startsWith("AIza")) {
+        this.showToast("有効なGemini APIキーを入力してください（AIza...で始まります）", "error");
+        return;
       }
-    } catch (err) { showToast(`エラー: ${err.message}`, "error"); resetBtn("A"); }
-  });
+      window.settingsManager.set('geminiApiKey', val);
+      this.showToast("Gemini APIキーを保存しました", "success");
+    });
 
-  // ===== モードB: 動画編集 =====
-  formB.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!selectedFile) { showToast("動画ファイルを選択してください", "error"); return; }
-
-    btnGenB.disabled = true; btnGenB.innerHTML = "<span>⏳</span> 処理中...";
-    progressB.classList.add("active"); resultB.classList.remove("active");
-    updateProgress("B", 0, "ファイルをアップロード中...");
-
-    try {
-      const result = await jobManager.submitModeB(selectedFile, $("checkJetCut").checked, $("checkSubtitles").checked);
-      showToast("ジョブを受け付けました！", "success");
-      addJob({ id: result.job_id, mode: "B", theme: selectedFile.name, status: "processing", createdAt: new Date().toISOString() });
-
-      if (result._simulation) {
-        jobManager.runSimulation(result, (update) => handleUpdate("B", result.job_id, update));
-      }
-    } catch (err) { showToast(`エラー: ${err.message}`, "error"); resetBtn("B"); }
-  });
-
-  // ===== ジョブ更新ハンドラー =====
-  function handleUpdate(mode, jobId, data) {
-    updateProgress(mode, data.progress, data.message);
-
-    // 台本表示
-    if (data.scriptData && mode === "A") renderScript(data.scriptData);
-
-    if (data.status === "completed") {
-      showResult(mode, true, data.message, data.youtube_url);
-      updateJob(jobId, "completed", data.youtube_url);
-      resetBtn(mode);
-    } else if (data.status === "failed") {
-      showResult(mode, false, data.message);
-      updateJob(jobId, "failed");
-      resetBtn(mode);
+    // Pexels Key
+    const pexelsInput = document.getElementById('setPexelsKey');
+    const savePexelsBtn = document.getElementById('btnSavePexels');
+    if (pexelsInput && savePexelsBtn) {
+      pexelsInput.value = window.settingsManager.get('pexelsApiKey') || "";
+      savePexelsBtn.addEventListener('click', () => {
+        window.settingsManager.set('pexelsApiKey', pexelsInput.value.trim());
+        this.showToast("Pexels APIキーを保存しました", "success");
+      });
     }
-  }
 
-  function updateProgress(mode, progress, message) {
-    const bar = mode === "A" ? barA : barB;
-    const msg = mode === "A" ? msgA : msgB;
-    const pct = mode === "A" ? pctA : pctB;
-    bar.style.width = `${progress}%`;
-    msg.textContent = message;
-    pct.textContent = `${progress}%`;
-  }
+    // Voice
+    const voiceSelect = document.getElementById('setVoiceName');
+    const saveVoiceBtn = document.getElementById('btnSaveVoice');
+    voiceSelect.value = window.settingsManager.get('voiceName') || "nanami";
 
-  // ===== 台本プレビュー =====
-  function renderScript(script) {
-    scriptPreviewA.classList.add("active");
-    let html = `<div class="script-title">📌 ${esc(script.title)}</div>`;
-    html += `<div class="script-tags">${script.tags.map(t => `<span class="script-tag">#${esc(t)}</span>`).join("")}</div>`;
-    script.scenes.forEach((s) => {
-      html += `<div class="script-scene">
-        <div class="script-scene-header">
-          <span class="script-scene-num">シーン ${s.scene_number}</span>
-          <span class="script-scene-duration">⏱ ${s.duration_seconds}秒</span>
-        </div>
-        <div class="script-scene-narration">${esc(s.narration)}</div>
-        <div class="script-scene-overlay">💬 ${esc(s.text_overlay)}</div>
-      </div>`;
+    saveVoiceBtn.addEventListener('click', () => {
+      window.settingsManager.set('voiceName', voiceSelect.value);
+      this.showToast("ナレーション設定を保存しました", "success");
     });
-    scriptContentA.innerHTML = html;
-  }
 
-  // ===== 台本折りたたみ =====
-  const toggleScript = $("btnToggleScriptA");
-  if (toggleScript) {
-    toggleScript.addEventListener("click", () => {
-      const content = scriptContentA;
-      const isHidden = content.style.display === "none";
-      content.style.display = isHidden ? "block" : "none";
-      toggleScript.textContent = isHidden ? "▼" : "▶";
+    // YouTube Add Button
+    document.getElementById('btnAddYoutube').addEventListener('click', () => {
+      // 実際にはOAuth画面へ遷移する
+      this.simulateYouTubeOAuth();
     });
   }
 
-  // ===== 結果表示 =====
-  function showResult(mode, success, message, youtubeUrl) {
-    const res = mode === "A" ? resultA : resultB;
-    const title = mode === "A" ? resultTitleA : $("resultTitleB");
-    const msg = mode === "A" ? resultMsgA : $("resultMessageB");
-    const dl = mode === "A" ? btnDownloadA : btnDownloadB;
-    const yt = mode === "A" ? btnYouTubeA : btnYouTubeB;
+  // 設定状況をUIに反映
+  renderSettings() {
+    // 必須設定のアラート表示
+    const hasKey = window.settingsManager.hasGeminiKey();
+    const alertCard = document.getElementById('setupAlertCard');
+    if (alertCard) {
+      alertCard.style.display = hasKey ? 'none' : 'flex';
+    }
 
-    res.classList.toggle("error", !success);
-    title.textContent = success ? "🎉 動画が完成しました！" : "❌ 処理に失敗しました";
-    msg.textContent = message;
-
-    if (success && youtubeUrl) {
-      yt.href = youtubeUrl; yt.style.display = "inline-flex";
-      // デモではダウンロードリンクにダミーを設定
-      dl.href = "#"; dl.style.display = "inline-flex";
-      dl.addEventListener("click", (e) => { e.preventDefault(); showToast("デモモードではダウンロードできません。Cloud Runデプロイ後に利用可能です。", "info"); });
+    const statusDot = document.getElementById('systemStatusDot');
+    const statusText = document.getElementById('systemStatusText');
+    if (hasKey) {
+      statusDot.className = "status-dot ready";
+      statusText.textContent = "システム準備完了";
     } else {
-      yt.style.display = "none"; dl.style.display = "none";
+      statusDot.className = "status-dot";
+      statusText.textContent = "システム待機中（設定待ち）";
     }
 
-    res.classList.add("active");
-    showToast(success ? "動画の処理が完了しました！" : "処理中にエラーが発生しました", success ? "success" : "error");
-  }
+    // YouTube アカウント一覧
+    const accounts = window.settingsManager.getYouTubeAccounts();
+    const list = document.getElementById('ytAccountList');
+    
+    if (accounts.length === 0) {
+      list.innerHTML = `<p style="color: var(--text-muted); font-size: 0.9rem;">連携済みのチャンネルはありません。</p>`;
+    } else {
+      list.innerHTML = accounts.map(acc => `
+        <div class="yt-account-item">
+          <div class="yt-account-info">
+            <div class="yt-avatar">${acc.name.charAt(0)}</div>
+            <span class="yt-name">${acc.name}</span>
+          </div>
+          <button class="btn btn-outline" onclick="window.appController.removeYouTube('${acc.id}')">解除</button>
+        </div>
+      `).join('');
+    }
 
-  function resetBtn(mode) {
-    if (mode === "A") { btnGenA.disabled = false; btnGenA.innerHTML = '<span class="btn-icon">🚀</span> 台本を生成して動画を作成する'; }
-    else { btnGenB.disabled = false; btnGenB.innerHTML = '<span class="btn-icon">✂️</span> 自動編集を開始する'; }
-  }
-
-  // ===== ジョブ履歴 =====
-  function addJob(job) { jobHistory.unshift(job); jobHistory = jobHistory.slice(0, 50); localStorage.setItem("kimidori_jobs", JSON.stringify(jobHistory)); }
-  function updateJob(id, status, url) { const j = jobHistory.find(x => x.id === id); if (j) { j.status = status; if (url) j.youtubeUrl = url; localStorage.setItem("kimidori_jobs", JSON.stringify(jobHistory)); } }
-
-  function renderJobHistory() {
-    const list = $("jobList"), empty = $("emptyState");
-    list.querySelectorAll(".job-item").forEach(el => el.remove());
-    if (!jobHistory.length) { empty.style.display = "block"; return; }
-    empty.style.display = "none";
-    jobHistory.forEach((job) => {
-      const item = document.createElement("div"); item.className = "job-item";
-      const statusText = { pending: "待機中", processing: "処理中", completed: "完了", failed: "失敗" }[job.status] || job.status;
-      const date = new Date(job.createdAt).toLocaleString("ja-JP", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-      item.innerHTML = `<div class="job-item-info"><span class="job-item-mode">モード${job.mode}</span><div><div class="job-item-theme">${esc(job.theme)}</div><div class="job-item-date">${date}</div></div></div><span class="status-badge ${job.status}">${statusText}</span>`;
-      if (job.youtubeUrl) { item.style.cursor = "pointer"; item.onclick = () => window.open(job.youtubeUrl, "_blank"); }
-      list.appendChild(item);
+    // 投稿先セレクトボックスの更新
+    ['inputTargetChannelA', 'inputTargetChannelB'].forEach(id => {
+      const select = document.getElementById(id);
+      if (!select) return;
+      select.innerHTML = '<option value="">-- 投稿しない（ダウンロードのみ） --</option>' + 
+        accounts.map(acc => `<option value="${acc.id}">${acc.name}</option>`).join('');
     });
   }
 
-  // ===== 設定保存 =====
-  const btnSave = $("btnSaveSettings");
-  if (btnSave) btnSave.addEventListener("click", () => {
-    settingsManager.saveAll(settingsManager.collectFromForm());
-    settingsManager.updateStatusDisplay();
-    showToast("設定を保存しました", "success");
-  });
-
-  const btnReset = $("btnResetSettings");
-  if (btnReset) btnReset.addEventListener("click", () => {
-    if (confirm("すべての設定をリセットしますか？")) {
-      settingsManager.reset(); settingsManager.populateForm(); settingsManager.updateStatusDisplay();
-      showToast("設定をリセットしました", "info");
+  // --- フォームバリデーション ---
+  validateForms() {
+    const hasKey = window.settingsManager.hasGeminiKey();
+    const btnA = document.getElementById('btnSubmitA');
+    if(btnA) btnA.disabled = !hasKey;
+    
+    // UIのHintの更新
+    const accounts = window.settingsManager.getYouTubeAccounts();
+    const hintA = document.getElementById('hintChannelA');
+    if (hintA) {
+      hintA.style.display = accounts.length > 0 ? 'none' : 'block';
     }
-  });
-
-  // 接続テスト
-  const btnTest = $("btnTestConnection");
-  if (btnTest) btnTest.addEventListener("click", async () => {
-    const url = $("settingApiUrl")?.value;
-    if (!url) { showToast("URLを入力してください", "error"); return; }
-    try {
-      const resp = await fetch(`${url}/health`, { signal: AbortSignal.timeout(5000) });
-      if (resp.ok) showToast("✅ Cloud Run APIに接続成功！", "success");
-      else showToast(`接続失敗: HTTP ${resp.status}`, "error");
-    } catch { showToast("接続失敗: サーバーに到達できません", "error"); }
-  });
-
-  // YouTube認証
-  const btnAuth = $("btnAuthYouTube");
-  if (btnAuth) btnAuth.addEventListener("click", () => {
-    showToast("YouTube認証はCloud Runバックエンドのデプロイ後に利用可能です", "info");
-  });
-
-  // ===== ユーティリティ =====
-  function showToast(message, type = "info") {
-    const icons = { success: "✅", error: "❌", info: "ℹ️", warning: "⚠️" };
-    const toast = document.createElement("div"); toast.className = `toast ${type}`;
-    toast.innerHTML = `<span>${icons[type] || ""}</span><span>${esc(message)}</span>`;
-    $("toastContainer").appendChild(toast);
-    setTimeout(() => { toast.style.opacity = "0"; toast.style.transform = "translateX(100px)"; toast.style.transition = "all 0.3s ease"; setTimeout(() => toast.remove(), 300); }, 4000);
   }
 
-  function esc(text) { const d = document.createElement("div"); d.textContent = text; return d.innerHTML; }
+  // --- フォーム初期化 (モードA: ウィザード) ---
+  initForms() {
+    // 状態管理
+    this.wizardState = { theme: "", strategy: "", scriptData: null, duration: 45, style: "informative", target: "" };
 
-  // ===== 初期化 =====
-  renderJobHistory();
-  settingsManager.updateStatusDisplay();
-  console.log("🎬 KIMIDORI Movie Auto v2 初期化完了");
+    const showStep = (stepNum) => {
+      document.querySelectorAll('.wizard-step').forEach(el => el.style.display = 'none');
+      document.getElementById(`step${stepNum}`).style.display = 'block';
+    };
+
+    // STEP 1: リサーチ開始
+    document.getElementById('btnRunResearch')?.addEventListener('click', async () => {
+      const theme = document.getElementById('inputTheme').value.trim();
+      const target = document.getElementById('inputTargetChannelA').value;
+      const isAuto = document.getElementById('checkAutoMode').checked;
+
+      if (!theme) return this.showToast("テーマを入力してください", "error");
+      if (!window.settingsManager.hasGeminiKey()) return this.showToast("設定画面でGemini APIキーを登録してください", "error");
+
+      this.wizardState.theme = theme;
+      this.wizardState.target = target;
+
+      if (isAuto) {
+        // 完全自動モード：確認をスキップしてバックエンドで全処理
+        showStep(4);
+        document.getElementById('execPanelA').style.display = 'block';
+        document.getElementById('videoResultPanel').style.display = 'none';
+        document.getElementById('execTitleA').textContent = "完全自動でリサーチから動画生成、投稿まで実行中...";
+        this.simulateProgress('A');
+        
+        try {
+          // script_data=null, auto_post=true でリクエスト
+          await window.apiClient.generateVideo(theme, "informative", 45, target, null, true);
+          this.showToast("完全自動投稿タスクが開始されました！", "success");
+        } catch(e) {
+          this.showToast(e.message, "error");
+          showStep(1);
+        }
+        return;
+      }
+
+      // 手動モード：STEP 2へ
+      showStep(2);
+      document.getElementById('researchLoading').style.display = 'block';
+      document.getElementById('researchResults').style.display = 'none';
+
+      try {
+        const res = await window.apiClient.runResearch(theme);
+        document.getElementById('researchAnalysisText').textContent = res.analysis_result;
+        this.wizardState.strategy = res.analysis_result;
+        
+        document.getElementById('researchLoading').style.display = 'none';
+        document.getElementById('researchResults').style.display = 'block';
+      } catch (err) {
+        this.showToast("リサーチ失敗: " + err.message, "error");
+        showStep(1);
+      }
+    });
+
+    // 戻るボタン
+    document.getElementById('btnBackTo1')?.addEventListener('click', () => showStep(1));
+    document.getElementById('btnBackTo2')?.addEventListener('click', () => showStep(2));
+
+    // STEP 2 -> STEP 3: 台本生成
+    document.getElementById('btnGenerateScript')?.addEventListener('click', async () => {
+      showStep(3);
+      document.getElementById('scriptLoading').style.display = 'block';
+      document.getElementById('scriptEditor').style.display = 'none';
+
+      try {
+        const combinedTheme = `テーマ: ${this.wizardState.theme}\n\n戦略:\n${this.wizardState.strategy}`;
+        const preview = await window.apiClient.getScriptPreview(combinedTheme, this.wizardState.style, this.wizardState.duration);
+        
+        if (preview && preview.script) {
+          this.wizardState.scriptData = preview.script;
+          document.getElementById('inputScriptData').value = JSON.stringify(preview.script, null, 2);
+        } else {
+          throw new Error("台本データが取得できませんでした。");
+        }
+        
+        document.getElementById('scriptLoading').style.display = 'none';
+        document.getElementById('scriptEditor').style.display = 'block';
+      } catch (err) {
+        this.showToast(err.message, "error");
+        showStep(2);
+      }
+    });
+
+    // STEP 3 -> STEP 4: 動画生成
+    document.getElementById('btnGenerateVideo')?.addEventListener('click', async () => {
+      try {
+        // ユーザーが編集したJSONをパース
+        this.wizardState.scriptData = JSON.parse(document.getElementById('inputScriptData').value);
+      } catch (e) {
+        return this.showToast("台本のJSONフォーマットが不正です。修正してください。", "error");
+      }
+
+      showStep(4);
+      document.getElementById('execPanelA').style.display = 'block';
+      document.getElementById('videoResultPanel').style.display = 'none';
+      document.getElementById('execTitleA').textContent = "動画をレンダリング中...";
+      this.simulateProgress('A');
+
+      try {
+        // 編集済みのscript_dataを渡して動画生成
+        await window.apiClient.generateVideo(
+          this.wizardState.theme, 
+          this.wizardState.style, 
+          this.wizardState.duration, 
+          this.wizardState.target,
+          this.wizardState.scriptData,
+          false
+        );
+        this.showToast("動画の生成リクエストを送信しました！", "success");
+        
+        // 実際にはFirestore等のリスナーで完了検知するが、今回はモックとして完了画面へ切り替え
+        setTimeout(() => {
+          document.getElementById('execPanelA').style.display = 'none';
+          document.getElementById('videoResultPanel').style.display = 'block';
+          // デモ用に適当な動画URLをセット（実際はstorageのURLが入る）
+          document.getElementById('finalVideoPlayer').src = "https://www.w3schools.com/html/mov_bbb.mp4";
+        }, 8000);
+
+      } catch (err) {
+        this.showToast(err.message, "error");
+        showStep(3);
+      }
+    });
+
+    // 投稿ボタン（手動モード時の最終ステップ）
+    document.getElementById('btnPostToYouTube')?.addEventListener('click', () => {
+      this.showToast("YouTubeへの投稿処理を開始しました！", "success");
+      // 実際にはバックエンドの投稿APIを叩く
+    });
+
+    // Modal Close
+    document.getElementById('modalClose')?.addEventListener('click', () => {
+      document.getElementById('modalOverlay').classList.remove('active');
+      document.getElementById('modalVideo').pause();
+    });
+
+    // --- トレンドリサーチのアクション ---
+    const formResearch = document.getElementById('formResearch');
+    const btnSubmitResearch = document.getElementById('btnSubmitResearch');
+    
+    if (formResearch && btnSubmitResearch) {
+      formResearch.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!window.settingsManager.hasGeminiKey()) {
+          return this.showToast("設定画面でGemini APIキーを登録してください", "error");
+        }
+
+        const keyword = document.getElementById('inputResearchKeyword').value.trim();
+        if (!keyword) return this.showToast("キーワードを入力してください", "error");
+
+        btnSubmitResearch.disabled = true;
+        const panel = document.getElementById('execPanelResearch');
+        const title = document.getElementById('execTitleResearch');
+        const resultPanel = document.getElementById('researchResultPanel');
+        
+        panel.style.display = 'block';
+        resultPanel.style.display = 'none';
+        
+        // 疑似プログレスアニメーション
+        title.textContent = "YouTubeでバズっている動画を検索中...";
+        this.simulateProgress('Research');
+
+        try {
+          const res = await window.apiClient.runResearch(keyword);
+          
+          // 結果表示の組み立て
+          const list = document.getElementById('analyzedVideosList');
+          list.innerHTML = res.analyzed_videos.map(v => 
+            `<li><a href="${v.link}" target="_blank" style="color: var(--accent-primary);">${v.title}</a> (再生数: ${v.views})</li>`
+          ).join('');
+          
+          document.getElementById('researchAnalysisText').textContent = res.analysis_result;
+          
+          // この戦略を動画生成に反映するボタンのフック
+          const btnApply = document.getElementById('btnApplyResearchToVideo');
+          btnApply.onclick = () => {
+            document.querySelector('.nav-item[data-target="generate"]').click();
+            const themeInput = document.getElementById('inputTheme');
+            themeInput.value = `以下のリサーチ戦略に基づいて動画を作って：\n\n${res.analysis_result}\n\nテーマ: ${keyword}`;
+            themeInput.focus();
+          };
+
+          panel.style.display = 'none';
+          resultPanel.style.display = 'block';
+          this.showToast("リサーチが完了しました！", "success");
+
+        } catch (err) {
+          this.showToast(err.message, "error");
+          panel.style.display = 'none';
+        } finally {
+          btnSubmitResearch.disabled = false;
+        }
+      });
+    }
+  }
+
+  simulateProgress(mode) {
+    const bar = document.getElementById(`execBar${mode}`);
+    const title = document.getElementById(`execTitle${mode}`);
+    if(!bar || !title) return;
+    
+    let p = 0;
+    const interval = setInterval(() => {
+      p += 5;
+      if (p > 90) clearInterval(interval);
+      bar.style.width = `${p}%`;
+      if(p===20) title.textContent = "台本と構成を作成中...";
+      if(p===40) title.textContent = "フリー素材をPexelsから取得中...";
+      if(p===60) title.textContent = "画像素材とエフェクトを適用中...";
+      if(p===80) title.textContent = "動画をエンコード中...";
+    }, 500);
+  }
+
+  // --- YouTube疑似OAuth連携 ---
+  simulateYouTubeOAuth() {
+    try {
+      const mockAccounts = ["ゲーム実況チャンネル", "Vlogチャンネル", "解説チャンネル", "メインチャンネル", "サブチャンネル"];
+      const current = window.settingsManager.getYouTubeAccounts().length;
+      if (current >= 5) throw new Error("登録できるアカウントは最大5つまでです。");
+      
+      const newAcc = {
+        id: `yt_${Date.now()}`,
+        name: mockAccounts[current % mockAccounts.length],
+        token: "dummy_oauth_token"
+      };
+      
+      window.settingsManager.addYoutubeAccount(newAcc);
+      this.showToast(`${newAcc.name}を連携しました`, "success");
+    } catch(err) {
+      this.showToast(err.message, "error");
+    }
+  }
+
+  removeYouTube(id) {
+    window.settingsManager.removeYoutubeAccount(id);
+    this.showToast("連携を解除しました", "success");
+  }
+
+  // --- トースト通知 ---
+  showToast(message, type = "info") {
+    const wrapper = document.getElementById('toastWrapper');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    wrapper.appendChild(toast);
+    setTimeout(() => {
+      toast.style.animation = "toastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) reverse forwards";
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  window.appController = new AppController();
 });

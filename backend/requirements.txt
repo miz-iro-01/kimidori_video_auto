@@ -17,6 +17,8 @@ google-auth-httplib2==0.2.0
 
 # YouTube API
 google-api-python-client==2.127.0
+youtube-transcript-api==0.6.2
+youtube-search-python==1.6.6
 
 # AI / 音声認識
 openai-whisper==20231117

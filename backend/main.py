@@ -59,14 +59,24 @@ class ModeARequest(BaseModel):
     gemini_api_key: str = Field("", description="ユーザーのGemini APIキー")
     voice_name: str = Field("nanami", description="Edge TTSの音声名")
     speaking_rate: float = Field(1.0, description="読み上げ速度")
+    pexels_api_key: str = Field("", description="Pexels APIキー（フリー画像用）")
+    script_data: Optional[dict] = Field(None, description="編集済みの台本データ（あれば生成をスキップ）")
+    auto_post: bool = Field(False, description="完全自動投稿フラグ")
 
 
 class ModeBRequest(BaseModel):
     """モードB: 既存動画の自動編集リクエスト"""
-    storage_path: str = Field(..., description="Cloud Storageにアップロードされた素材動画のパス")
-    enable_jet_cut: bool = Field(True, description="ジェットカット（無音カット）を有効にする")
-    enable_subtitles: bool = Field(True, description="自動テロップを有効にする")
-    user_id: str = Field(..., description="FirebaseユーザーID")
+    job_id: str
+    user_id: str
+    target_youtube_account: Optional[str] = None
+    jet_cut: bool = True
+    auto_subtitle: bool = True
+
+
+class ResearchRequest(BaseModel):
+    """トレンドリサーチリクエスト"""
+    keyword: str = Field(..., description="リサーチしたいキーワード")
+    gemini_api_key: str = Field(..., description="ユーザーのGemini APIキー")
 
 
 class JobStatusResponse(BaseModel):
@@ -123,9 +133,12 @@ async def process_mode_a(request: ModeARequest, background_tasks: BackgroundTask
             gemini_api_key=request.gemini_api_key,
             voice_name=request.voice_name,
             speaking_rate=request.speaking_rate,
+            pexels_api_key=request.pexels_api_key,
+            script_data=request.script_data,
+            auto_post=request.auto_post,
         )
 
-        logger.info(f"モードAジョブ開始: {job_id} テーマ='{request.theme}'")
+        logger.info(f"モードAジョブ開始: {job_id} テーマ='{request.theme}' 自動投稿={request.auto_post}")
 
         return JobStatusResponse(
             job_id=job_id,
@@ -244,6 +257,23 @@ async def preview_script(request: ScriptPreviewRequest):
         raise HTTPException(status_code=500, detail=f"台本生成に失敗: {str(e)}")
 
 
+@app.post("/api/research")
+async def run_research(request: ResearchRequest):
+    """指定キーワードで伸びているショート動画を検索し、構成を分析する"""
+    try:
+        from processors.research_engine import ResearchEngine
+        engine = ResearchEngine(gemini_api_key=request.gemini_api_key)
+        result = await engine.analyze_trend(request.keyword)
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+            
+        return result
+    except Exception as e:
+        logger.error(f"リサーチ処理エラー: {e}")
+        raise HTTPException(status_code=500, detail=f"リサーチに失敗しました: {str(e)}")
+
+
 # =============================================================================
 # 動画ダウンロード
 # =============================================================================
@@ -281,20 +311,28 @@ async def run_mode_a_pipeline(
     gemini_api_key: str,
     voice_name: str,
     speaking_rate: float,
+    pexels_api_key: str = "",
+    script_data: dict = None,
+    auto_post: bool = False,
 ):
     """モードAの処理パイプライン全体を実行"""
     processor = ModeAProcessor(
         firestore, storage,
         voice_name=voice_name,
         speaking_rate=speaking_rate,
-        gemini_api_key=gemini_api_key
+        gemini_api_key=gemini_api_key,
+        pexels_api_key=pexels_api_key
     )
     try:
         firestore.update_job(job_id, status="processing", progress=5, message="処理を開始しています...")
 
-        # 1. 台本生成 (10%)
-        firestore.update_job(job_id, progress=10, message="Geminiで台本を生成中...")
-        script_data = await processor.generate_script(theme, style, duration)
+        # 1. 台本生成 (script_dataがあればスキップ)
+        if script_data:
+            firestore.update_job(job_id, progress=20, message="提供された台本を読み込み中...")
+        else:
+            firestore.update_job(job_id, progress=10, message="Geminiで台本を生成中...")
+            script_data = await processor.generate_script(theme, style, duration)
+            firestore.update_job(job_id, progress=30, message="台本生成完了")
 
         # 2. 音声合成 (30%)
         firestore.update_job(job_id, progress=30, message="音声を合成中...")
