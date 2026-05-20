@@ -60,20 +60,105 @@ class AppController {
       });
     }
 
-    // Voice
+    // --- YouTube OAuth Settings ---
+    const ytClientIdInput = document.getElementById('setYoutubeClientId');
+    const ytClientSecretInput = document.getElementById('setYoutubeClientSecret');
+    const saveYoutubeCredsBtn = document.getElementById('btnSaveYoutubeCreds');
+    
+    if (ytClientIdInput) ytClientIdInput.value = window.settingsManager.get('youtubeClientId') || "";
+    if (ytClientSecretInput) ytClientSecretInput.value = window.settingsManager.get('youtubeClientSecret') || "";
+    
+    if (saveYoutubeCredsBtn) {
+      saveYoutubeCredsBtn.addEventListener('click', () => {
+        window.settingsManager.set('youtubeClientId', ytClientIdInput.value.trim());
+        window.settingsManager.set('youtubeClientSecret', ytClientSecretInput.value.trim());
+        this.showToast("YouTube OAuth情報を保存しました", "success");
+      });
+    }
+
+    // --- TTS Engine Settings ---
+    const ttsEngineSelect = document.getElementById('setTtsEngine');
+    const googleTtsInput = document.getElementById('setGoogleTtsKey');
+    const elevenLabsInput = document.getElementById('setElevenLabsKey');
+    const aivisInput = document.getElementById('setAivisKey');
+    
+    const groupGoogle = document.getElementById('groupGoogleTtsKey');
+    const groupElevenLabs = document.getElementById('groupElevenLabsKey');
+    const groupAivis = document.getElementById('groupAivisKey');
+
+    const updateTtsUi = (engine) => {
+      groupGoogle.style.display = engine === 'google' ? 'block' : 'none';
+      groupElevenLabs.style.display = engine === 'elevenlabs' ? 'block' : 'none';
+      groupAivis.style.display = engine === 'aivis' ? 'block' : 'none';
+    };
+
+    if (ttsEngineSelect) {
+      const currentEngine = window.settingsManager.get('ttsEngine') || 'edge';
+      ttsEngineSelect.value = currentEngine;
+      updateTtsUi(currentEngine);
+      
+      if (googleTtsInput) googleTtsInput.value = window.settingsManager.get('googleTtsKey') || "";
+      if (elevenLabsInput) elevenLabsInput.value = window.settingsManager.get('elevenLabsKey') || "";
+      if (aivisInput) aivisInput.value = window.settingsManager.get('aivisKey') || "";
+
+      ttsEngineSelect.addEventListener('change', (e) => {
+        updateTtsUi(e.target.value);
+      });
+    }
+
+    // Voice & General TTS Save
     const voiceSelect = document.getElementById('setVoiceName');
     const saveVoiceBtn = document.getElementById('btnSaveVoice');
-    voiceSelect.value = window.settingsManager.get('voiceName') || "nanami";
+    if (voiceSelect && saveVoiceBtn) {
+      voiceSelect.value = window.settingsManager.get('voiceName') || "nanami";
+      saveVoiceBtn.addEventListener('click', () => {
+        if(ttsEngineSelect) window.settingsManager.set('ttsEngine', ttsEngineSelect.value);
+        if(googleTtsInput) window.settingsManager.set('googleTtsKey', googleTtsInput.value.trim());
+        if(elevenLabsInput) window.settingsManager.set('elevenLabsKey', elevenLabsInput.value.trim());
+        if(aivisInput) window.settingsManager.set('aivisKey', aivisInput.value.trim());
+        window.settingsManager.set('voiceName', voiceSelect.value);
+        this.showToast("ナレーション設定を保存しました", "success");
+      });
+    }
 
-    saveVoiceBtn.addEventListener('click', () => {
-      window.settingsManager.set('voiceName', voiceSelect.value);
-      this.showToast("ナレーション設定を保存しました", "success");
-    });
+    // YouTube Add Button (OAuth Login)
+    const btnAddYoutube = document.getElementById('btnAddYoutube');
+    if (btnAddYoutube) {
+      btnAddYoutube.addEventListener('click', async () => {
+        const clientId = window.settingsManager.get('youtubeClientId');
+        const clientSecret = window.settingsManager.get('youtubeClientSecret');
+        
+        if (!clientId || !clientSecret) {
+          return this.showToast("先にClient IDとClient Secretを設定して保存してください。", "error");
+        }
 
-    // YouTube Add Button
-    document.getElementById('btnAddYoutube').addEventListener('click', () => {
-      // 実際にはOAuth画面へ遷移する
-      this.simulateYouTubeOAuth();
+        try {
+          const res = await fetch("http://localhost:8080/api/auth/youtube/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: "user_123", // 本来はログイン中のユーザーID
+              client_id: clientId,
+              client_secret: clientSecret
+            })
+          });
+          if (!res.ok) throw new Error("認証URLの取得に失敗しました");
+          
+          const data = await res.json();
+          // 認証ウィンドウを開く
+          window.open(data.auth_url, "youtube_auth", "width=600,height=700");
+        } catch (e) {
+          this.showToast(e.message, "error");
+        }
+      });
+    }
+
+    // 認証完了時のメッセージ受信
+    window.addEventListener('message', (event) => {
+      if (event.data === 'youtube_auth_success') {
+        this.showToast("YouTubeアカウントの連携が完了しました！", "success");
+        // 本来はここでYouTubeアカウント一覧をリロードする
+      }
     });
   }
 

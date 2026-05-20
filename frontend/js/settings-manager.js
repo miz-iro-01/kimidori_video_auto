@@ -5,11 +5,17 @@
 class SettingsManager {
   constructor() {
     this.STORAGE_KEY = "kimidori_yt_auto_settings";
-    // YouTubeアカウントは配列で管理 [{id, name, token}, ...]
+    // デフォルト設定
     this.defaults = {
       geminiApiKey: "",
       pexelsApiKey: "",
+      ttsEngine: "edge", // edge, google, elevenlabs, aivis
+      googleTtsKey: "",
+      elevenLabsKey: "",
+      aivisKey: "",
       voiceName: "nanami",
+      youtubeClientId: "",
+      youtubeClientSecret: "",
       youtubeAccounts: [] 
     };
     this.settings = this.load();

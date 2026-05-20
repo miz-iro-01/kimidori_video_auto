@@ -11,7 +11,8 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 import config
 from processors.script_generator import ScriptGenerator
-from processors.edge_tts_engine import EdgeTTSEngine
+from processors.script_generator import ScriptGenerator
+from processors.tts_manager import TTSManager
 from utils.ffmpeg_utils import concat_video_clips
 
 logger = logging.getLogger(__name__)
@@ -21,13 +22,22 @@ class ModeAProcessor:
     """モードA: テーマからショート動画を自動生成（ケンバーンズ効果付き）"""
 
     def __init__(self, firestore_service, storage_service,
-                 voice_name: str = "nanami", speaking_rate: float = 1.0,
-                 gemini_api_key: str = "", pexels_api_key: str = ""):
+                 gemini_api_key: str = "", pexels_api_key: str = "",
+                 tts_engine: str = "edge", voice_name: str = "nanami", speaking_rate: float = 1.0,
+                 google_tts_key: str = "", elevenlabs_key: str = "", aivis_key: str = ""):
         self.firestore = firestore_service
         self.storage = storage_service
         self.script_gen = ScriptGenerator(api_key=gemini_api_key)
-        self.tts = EdgeTTSEngine(voice_name=voice_name, speaking_rate=speaking_rate)
         self.pexels_api_key = pexels_api_key
+        
+        self.tts = TTSManager(
+            engine=tts_engine,
+            voice_name=voice_name,
+            speaking_rate=speaking_rate,
+            google_tts_key=google_tts_key,
+            elevenlabs_key=elevenlabs_key,
+            aivis_key=aivis_key
+        )
 
     def _get_job_dir(self, job_id: str) -> Path:
         job_dir = config.TMP_DIR / job_id

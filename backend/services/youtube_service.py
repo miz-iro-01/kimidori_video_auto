@@ -26,57 +26,123 @@ YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 class YouTubeService:
     """YouTube Data API v3 を使用した自動アップロードサービス"""
 
-    def __init__(self):
+    def __init__(self, firestore_service=None):
         self._youtube = None
+        self.firestore = firestore_service
 
-    def _get_authenticated_service(self):
-        """
-        認証済みYouTube APIサービスを取得
+    def generate_auth_url(self, client_id: str, client_secret: str, redirect_uri: str, user_id: str) -> str:
+        """SaaSユーザーが連携するためのOAuth認証URLを発行する"""
+        client_config = {
+            "web": {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [redirect_uri]
+            }
+        }
+        
+        from google_auth_oauthlib.flow import Flow
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=YOUTUBE_SCOPES,
+            redirect_uri=redirect_uri
+        )
+        
+        # オフラインアクセス（リフレッシュトークン取得用）
+        auth_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            prompt='consent'
+        )
+        
+        # stateを保存（セキュリティ検証用）
+        if self.firestore:
+            self.firestore.db.collection('oauth_states').document(state).set({
+                "user_id": user_id,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": redirect_uri
+            })
+            
+        return auth_url
 
-        OAuth 2.0 の認証フロー:
-        1. 保存済みトークンがあればそれを使用
-        2. トークンが期限切れなら自動更新
-        3. トークンがなければ新規認証フロー（初回のみ手動が必要）
-        """
+    def exchange_code(self, code: str, state: str) -> dict:
+        """コールバックで受け取ったcodeをトークンに交換する"""
+        if not self.firestore:
+            raise ValueError("Firestore service not initialized")
+            
+        doc_ref = self.firestore.db.collection('oauth_states').document(state)
+        doc = doc_ref.get()
+        if not doc.exists:
+            raise ValueError("Invalid OAuth state")
+            
+        state_data = doc.to_dict()
+        client_config = {
+            "web": {
+                "client_id": state_data["client_id"],
+                "client_secret": state_data["client_secret"],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [state_data["redirect_uri"]]
+            }
+        }
+        
+        from google_auth_oauthlib.flow import Flow
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=YOUTUBE_SCOPES,
+            state=state,
+            redirect_uri=state_data["redirect_uri"]
+        )
+        
+        flow.fetch_token(code=code)
+        credentials = flow.credentials
+        
+        # 認証情報をユーザーDBに保存
+        user_id = state_data["user_id"]
+        cred_dict = {
+            "token": credentials.token,
+            "refresh_token": credentials.refresh_token,
+            "token_uri": credentials.token_uri,
+            "client_id": credentials.client_id,
+            "client_secret": credentials.client_secret,
+            "scopes": credentials.scopes
+        }
+        self.firestore.db.collection('users').document(user_id).set({
+            "youtube_creds": cred_dict
+        }, merge=True)
+        
+        # 不要になったstateを削除
+        doc_ref.delete()
+        
+        return {"success": True, "user_id": user_id}
+
+    def _get_authenticated_service(self, user_id: str):
+        """ユーザーIDに紐づく認証済みYouTube APIサービスを取得"""
         if self._youtube:
             return self._youtube
 
-        creds = None
-        token_path = Path(config.YOUTUBE_TOKEN_FILE)
+        if not self.firestore:
+            logger.warning("Firestore is not set, skipping YouTube auth.")
+            return None
 
-        # 保存済みトークンの読み込み
-        if token_path.exists():
-            with open(token_path, "r") as f:
-                token_data = json.load(f)
-            creds = Credentials.from_authorized_user_info(token_data, YOUTUBE_SCOPES)
+        doc = self.firestore.db.collection('users').document(user_id).get()
+        if not doc.exists or "youtube_creds" not in doc.to_dict():
+            logger.warning(f"YouTube credentials not found for user {user_id}")
+            return None
 
-        # トークンの更新が必要な場合
+        cred_data = doc.to_dict()["youtube_creds"]
+        creds = Credentials.from_authorized_user_info(cred_data, YOUTUBE_SCOPES)
+
         if creds and creds.expired and creds.refresh_token:
             logger.info("YouTubeトークンを更新中...")
             creds.refresh(Request())
-            # 更新されたトークンを保存
-            with open(token_path, "w") as f:
-                f.write(creds.to_json())
-
-        # トークンがない場合（初回セットアップ時）
-        if not creds or not creds.valid:
-            client_secrets = Path(config.YOUTUBE_CLIENT_SECRETS_FILE)
-            if not client_secrets.exists():
-                logger.warning(
-                    "YouTube Client Secretsファイルが見つかりません。"
-                    "YouTube投稿はスキップされます。"
-                )
-                return None
-
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(client_secrets), YOUTUBE_SCOPES
-            )
-            creds = flow.run_local_server(port=0)
-
-            # トークンを保存
-            with open(token_path, "w") as f:
-                f.write(creds.to_json())
-            logger.info("YouTube認証トークンを保存しました")
+            # 更新されたトークンを再保存
+            cred_data["token"] = creds.token
+            self.firestore.db.collection('users').document(user_id).set({
+                "youtube_creds": cred_data
+            }, merge=True)
 
         self._youtube = build("youtube", "v3", credentials=creds)
         return self._youtube
@@ -85,6 +151,7 @@ class YouTubeService:
         self,
         video_path: str,
         title: str,
+        user_id: str,
         description: str = "",
         tags: list[str] = None,
         category_id: str = "22",  # 22 = People & Blogs
@@ -96,6 +163,7 @@ class YouTubeService:
         Args:
             video_path: アップロードする動画ファイルのパス
             title: 動画タイトル
+            user_id: 認証用のユーザーID
             description: 動画の説明文
             tags: タグリスト
             category_id: YouTubeカテゴリーID
@@ -104,9 +172,9 @@ class YouTubeService:
         Returns:
             Optional[str]: アップロードされた動画のURL。失敗した場合はNone
         """
-        youtube = self._get_authenticated_service()
+        youtube = self._get_authenticated_service(user_id)
         if not youtube:
-            logger.warning("YouTube APIが利用できないため、投稿をスキップします")
+            logger.warning(f"YouTube APIが利用できないため、投稿をスキップします (user_id={user_id})")
             return None
 
         body = {

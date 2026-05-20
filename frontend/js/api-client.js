@@ -13,8 +13,14 @@ class ApiClient {
   /** モードA: 動画生成ジョブの発行 */
   async generateVideo(theme, style, duration, targetChannelId, scriptData = null, autoPost = false) {
     const geminiKey = window.settingsManager.get("geminiApiKey");
-    const voiceName = window.settingsManager.get("voiceName");
     const pexelsKey = window.settingsManager.get("pexelsApiKey") || "";
+    
+    // TTS 設定の取得
+    const ttsEngine = window.settingsManager.get("ttsEngine") || "edge";
+    const voiceName = window.settingsManager.get("voiceName");
+    const googleTtsKey = window.settingsManager.get("googleTtsKey") || "";
+    const elevenLabsKey = window.settingsManager.get("elevenLabsKey") || "";
+    const aivisKey = window.settingsManager.get("aivisKey") || "";
 
     if (!window.settingsManager.hasGeminiKey()) {
       throw new Error("Gemini APIキーが設定されていません。");
@@ -26,8 +32,12 @@ class ApiClient {
       duration_seconds: parseInt(duration),
       user_id: "user_123", // 本来は認証済みユーザーID
       gemini_api_key: geminiKey,
-      voice_name: voiceName,
       pexels_api_key: pexelsKey,
+      tts_engine: ttsEngine,
+      voice_name: voiceName,
+      google_tts_key: googleTtsKey,
+      elevenlabs_key: elevenLabsKey,
+      aivis_key: aivisKey,
       target_youtube_account: targetChannelId || null,
       script_data: scriptData,
       auto_post: autoPost

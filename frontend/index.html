@@ -325,32 +325,67 @@
             </div>
           </div>
 
-          <!-- YouTube 連携 (5アカウント) -->
+          <!-- YouTube 連携 (OAuth) -->
           <div class="glass-card">
-            <div class="card-header-icon"><span class="icon-youtube"></span> <h3>YouTube チャンネル連携</h3></div>
-            <p class="card-desc">最大5つのチャンネルを登録し、投稿先を切り替えることができます。</p>
+            <div class="card-header-icon"><span class="icon-youtube"></span> <h3>YouTube 連携 (OAuth)</h3></div>
+            <p class="card-desc">SaaS版として稼働させるため、Google Cloud Platformで取得したOAuth 2.0 クライアント認証情報を入力してください。</p>
             
-            <div class="guide-box">
-              <h4>📺 連携手順</h4>
-              <p>「アカウントを追加」ボタンを押し、Googleの認証画面で連携を許可してください。<br>※ 自動投稿するには、生成時に投稿先チャンネルを選択します。</p>
+            <div class="form-group" style="margin-top:1rem;">
+              <label class="form-label">Client ID</label>
+              <input type="text" id="setYoutubeClientId" class="form-input" placeholder="xxx.apps.googleusercontent.com">
             </div>
+            <div class="form-group">
+              <label class="form-label">Client Secret</label>
+              <input type="password" id="setYoutubeClientSecret" class="form-input" placeholder="GOCSPX-...">
+            </div>
+            
+            <button class="btn btn-primary" id="btnSaveYoutubeCreds" style="width: 100%; margin-bottom: 1.5rem;">
+              認証情報を保存
+            </button>
 
             <div class="youtube-accounts-list" id="ytAccountList">
               <!-- JSでアカウント一覧を描画 -->
             </div>
 
-            <button class="btn btn-primary" id="btnAddYoutube" style="width: 100%; margin-top: 1rem;">
-              + 新しいアカウントを追加連携
+            <button class="btn btn-outline" id="btnAddYoutube" style="width: 100%; margin-top: 1rem;">
+              + 新しいYouTubeチャンネルを認証する
             </button>
           </div>
 
-          <!-- 音声設定 -->
+          <!-- 音声設定 (複数TTS) -->
           <div class="glass-card">
-            <div class="card-header-icon"><span class="icon-audio"></span> <h3>ナレーション設定</h3></div>
-            <p class="card-desc">Edge TTS（完全無料）を使用します。</p>
+            <div class="card-header-icon"><span class="icon-audio"></span> <h3>ナレーション設定 (TTS)</h3></div>
+            <p class="card-desc">使用する音声合成エンジンと各種APIキーを設定します。</p>
             
             <div class="form-group">
-              <label class="form-label">デフォルト音声</label>
+              <label class="form-label">TTSエンジン</label>
+              <div class="custom-select-wrapper">
+                <select id="setTtsEngine" class="form-input form-select">
+                  <option value="edge">Edge TTS (完全無料)</option>
+                  <option value="google">Google Cloud TTS (有料/高品質)</option>
+                  <option value="elevenlabs">ElevenLabs (有料/超高品質)</option>
+                  <option value="aivis">AivisSpeech / Aivis Cloud (有料/高品質)</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="ttsKeyInputs">
+              <div class="form-group" id="groupGoogleTtsKey" style="display:none; margin-top:1rem;">
+                <label class="form-label">Google Cloud API キー</label>
+                <input type="password" id="setGoogleTtsKey" class="form-input" placeholder="AIzaSy...">
+              </div>
+              <div class="form-group" id="groupElevenLabsKey" style="display:none; margin-top:1rem;">
+                <label class="form-label">ElevenLabs API キー</label>
+                <input type="password" id="setElevenLabsKey" class="form-input" placeholder="sk_...">
+              </div>
+              <div class="form-group" id="groupAivisKey" style="display:none; margin-top:1rem;">
+                <label class="form-label">Aivis Cloud API キー</label>
+                <input type="password" id="setAivisKey" class="form-input" placeholder="API Key...">
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top:1rem;">
+              <label class="form-label">音声・キャラクター (Edge TTS用)</label>
               <div class="custom-select-wrapper">
                 <select id="setVoiceName" class="form-input form-select">
                   <option value="nanami">七海（女性・標準）</option>

@@ -57,9 +57,16 @@ class ModeARequest(BaseModel):
     duration_seconds: Optional[int] = Field(45, description="目標の動画長さ（秒）")
     user_id: str = Field(..., description="FirebaseユーザーID")
     gemini_api_key: str = Field("", description="ユーザーのGemini APIキー")
-    voice_name: str = Field("nanami", description="Edge TTSの音声名")
-    speaking_rate: float = Field(1.0, description="読み上げ速度")
     pexels_api_key: str = Field("", description="Pexels APIキー（フリー画像用）")
+    
+    # TTS Settings
+    tts_engine: str = Field("edge", description="使用するTTSエンジン")
+    voice_name: str = Field("nanami", description="音声名（Edge用など）")
+    speaking_rate: float = Field(1.0, description="読み上げ速度")
+    google_tts_key: str = Field("", description="Google Cloud TTS用APIキー")
+    elevenlabs_key: str = Field("", description="ElevenLabs APIキー")
+    aivis_key: str = Field("", description="Aivis Cloud APIキー")
+    
     script_data: Optional[dict] = Field(None, description="編集済みの台本データ（あれば生成をスキップ）")
     auto_post: bool = Field(False, description="完全自動投稿フラグ")
 
@@ -131,9 +138,13 @@ async def process_mode_a(request: ModeARequest, background_tasks: BackgroundTask
             duration=duration,
             user_id=request.user_id,
             gemini_api_key=request.gemini_api_key,
+            pexels_api_key=request.pexels_api_key,
+            tts_engine=request.tts_engine,
             voice_name=request.voice_name,
             speaking_rate=request.speaking_rate,
-            pexels_api_key=request.pexels_api_key,
+            google_tts_key=request.google_tts_key,
+            elevenlabs_key=request.elevenlabs_key,
+            aivis_key=request.aivis_key,
             script_data=request.script_data,
             auto_post=request.auto_post,
         )
@@ -309,19 +320,27 @@ async def run_mode_a_pipeline(
     duration: int,
     user_id: str,
     gemini_api_key: str,
-    voice_name: str,
-    speaking_rate: float,
     pexels_api_key: str = "",
+    tts_engine: str = "edge",
+    voice_name: str = "nanami",
+    speaking_rate: float = 1.0,
+    google_tts_key: str = "",
+    elevenlabs_key: str = "",
+    aivis_key: str = "",
     script_data: dict = None,
     auto_post: bool = False,
 ):
     """モードAの処理パイプライン全体を実行"""
     processor = ModeAProcessor(
         firestore, storage,
+        gemini_api_key=gemini_api_key,
+        pexels_api_key=pexels_api_key,
+        tts_engine=tts_engine,
         voice_name=voice_name,
         speaking_rate=speaking_rate,
-        gemini_api_key=gemini_api_key,
-        pexels_api_key=pexels_api_key
+        google_tts_key=google_tts_key,
+        elevenlabs_key=elevenlabs_key,
+        aivis_key=aivis_key
     )
     try:
         firestore.update_job(job_id, status="processing", progress=5, message="処理を開始しています...")
@@ -433,6 +452,7 @@ async def run_mode_b_pipeline(
         firestore.update_job(job_id, progress=95, message="YouTubeに投稿中...")
         youtube_url = youtube.upload_video(
             video_path=str(final_video_path),
+            user_id=user_id,
             title=f"自動編集動画 | KIMIDORI Movie Auto",
             description="自動編集（ジェットカット＋テロップ付与）された動画です。",
             tags=["自動編集", "ジェットカット", "テロップ"],
@@ -459,6 +479,51 @@ async def run_mode_b_pipeline(
         processor.cleanup(job_id)
 
 
+# --- YouTube OAuth API ---
+from pydantic import BaseModel
+from fastapi.responses import HTMLResponse
+from fastapi import HTTPException
+
+class YouTubeAuthRequest(BaseModel):
+    user_id: str
+    client_id: str
+    client_secret: str
+    redirect_uri: str = "http://localhost:8080/api/auth/youtube/callback"
+
+@app.post("/api/auth/youtube/login")
+async def youtube_login(req: YouTubeAuthRequest):
+    """SaaS設定画面から呼ばれる、OAuthの開始エンドポイント"""
+    try:
+        url = youtube.generate_auth_url(
+            client_id=req.client_id,
+            client_secret=req.client_secret,
+            redirect_uri=req.redirect_uri,
+            user_id=req.user_id
+        )
+        return {"auth_url": url}
+    except Exception as e:
+        logger.error(f"Failed to generate auth url: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/auth/youtube/callback")
+async def youtube_callback(code: str, state: str):
+    """Googleからのリダイレクトを受け取り、トークンを保存する"""
+    try:
+        res = youtube.exchange_code(code, state)
+        return HTMLResponse(content="""
+        <html><body>
+        <h2>YouTubeアカウントの連携が完了しました！</h2>
+        <p>このウィンドウを閉じて、アプリに戻ってください。</p>
+        <script>
+            window.opener.postMessage('youtube_auth_success', '*');
+            setTimeout(() => window.close(), 3000);
+        </script>
+        </body></html>
+        """)
+    except Exception as e:
+        logger.error(f"Callback error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 # =============================================================================
 # 起動時の初期化
 # =============================================================================
@@ -472,3 +537,4 @@ async def startup_event():
 
     # 一時ディレクトリの初期化
     config.TMP_DIR.mkdir(parents=True, exist_ok=True)
+
