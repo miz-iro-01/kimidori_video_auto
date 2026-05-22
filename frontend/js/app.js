@@ -179,11 +179,32 @@ class AppController {
 
     // 認証完了時のメッセージ受信
     window.addEventListener('message', (event) => {
+      // 新しい形式: { type: 'youtube_auth_success', channel: {...} }
+      if (event.data && event.data.type === 'youtube_auth_success') {
+        const channel = event.data.channel;
+        if (channel && channel.id) {
+          try {
+            window.settingsManager.addYoutubeAccount({
+              id: channel.id,
+              name: channel.name || '不明なチャンネル'
+            });
+          } catch (e) {
+            // 既に登録済みの場合は無視
+            console.log("Channel already registered:", e.message);
+          }
+        }
+        this.showToast(`YouTubeチャンネル「${channel?.name || ''}」の連携が完了しました！`, "success");
+        this.loadYouTubeChannels(); // バックエンドから最新のチャンネル一覧を取得
+      }
+      // 後方互換性: 旧形式の文字列メッセージにも対応
       if (event.data === 'youtube_auth_success') {
         this.showToast("YouTubeアカウントの連携が完了しました！", "success");
-        // 本来はここでYouTubeアカウント一覧をリロードする
+        this.loadYouTubeChannels();
       }
     });
+
+    // 初回読み込み時にバックエンドからチャンネル一覧を取得
+    this.loadYouTubeChannels();
   }
 
   // 設定状況をUIに反映
@@ -484,9 +505,73 @@ class AppController {
     }
   }
 
-  removeYouTube(id) {
+  async removeYouTube(id) {
+    try {
+      const userId = (() => {
+        if (firebase.auth().currentUser) return firebase.auth().currentUser.uid;
+        const mockUserStr = localStorage.getItem('kimidori_mock_user');
+        if (mockUserStr) {
+          try { return JSON.parse(mockUserStr).uid; } catch(e) {}
+        }
+        return "user_123";
+      })();
+
+      // バックエンドからも削除
+      await fetch(`${window.apiClient.baseUrl}/api/youtube/channels/${id}?user_id=${encodeURIComponent(userId)}`, {
+        method: "DELETE"
+      });
+    } catch (e) {
+      console.error("Failed to delete channel from backend:", e);
+    }
+
     window.settingsManager.removeYoutubeAccount(id);
     this.showToast("連携を解除しました", "success");
+  }
+
+  async loadYouTubeChannels() {
+    try {
+      const userId = (() => {
+        if (firebase.auth().currentUser) return firebase.auth().currentUser.uid;
+        const mockUserStr = localStorage.getItem('kimidori_mock_user');
+        if (mockUserStr) {
+          try { return JSON.parse(mockUserStr).uid; } catch(e) {}
+        }
+        return "user_123";
+      })();
+
+      const res = await fetch(`${window.apiClient.baseUrl}/api/youtube/channels?user_id=${encodeURIComponent(userId)}`);
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const channels = data.channels || [];
+
+      // ローカルのsettingsManagerと同期
+      const currentAccounts = window.settingsManager.getYouTubeAccounts();
+      channels.forEach(ch => {
+        if (!currentAccounts.find(a => a.id === ch.id)) {
+          try {
+            window.settingsManager.addYoutubeAccount({
+              id: ch.id,
+              name: ch.name || '不明'
+            });
+          } catch (e) {
+            // 重複や上限エラーは無視
+          }
+        }
+      });
+
+      // バックエンドに無いチャンネルをローカルからも削除（同期）
+      currentAccounts.forEach(acc => {
+        if (!channels.find(ch => ch.id === acc.id)) {
+          window.settingsManager.removeYoutubeAccount(acc.id);
+        }
+      });
+
+      this.renderSettings();
+      this.validateForms();
+    } catch (e) {
+      console.log("Failed to load YouTube channels from backend:", e);
+    }
   }
 
   // --- 認証機能 (Firebase Auth & ロール管理) ---

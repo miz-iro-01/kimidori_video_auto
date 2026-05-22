@@ -20,7 +20,10 @@ import config
 logger = logging.getLogger(__name__)
 
 # YouTube API のスコープ
-YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+YOUTUBE_SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly"
+]
 
 
 class YouTubeService:
@@ -68,7 +71,7 @@ class YouTubeService:
         return auth_url
 
     def exchange_code(self, code: str, state: str) -> dict:
-        """コールバックで受け取ったcodeをトークンに交換する"""
+        """コールバックで受け取ったcodeをトークンに交換し、チャンネル情報を取得する"""
         if not self.firestore:
             raise ValueError("Firestore service not initialized")
             
@@ -107,16 +110,62 @@ class YouTubeService:
             "token_uri": credentials.token_uri,
             "client_id": credentials.client_id,
             "client_secret": credentials.client_secret,
-            "scopes": credentials.scopes
+            "scopes": list(credentials.scopes) if credentials.scopes else list(YOUTUBE_SCOPES)
         }
         self.firestore.db.collection('users').document(user_id).set({
             "youtube_creds": cred_dict
         }, merge=True)
         
+        # チャンネル情報を取得して保存
+        channel_info = self._fetch_and_save_channel(credentials, user_id)
+        
         # 不要になったstateを削除
         doc_ref.delete()
         
-        return {"success": True, "user_id": user_id}
+        return {"success": True, "user_id": user_id, "channel": channel_info}
+
+    def _fetch_and_save_channel(self, credentials, user_id: str) -> dict:
+        """認証済みの認証情報を使ってチャンネル情報を取得し、Firestoreに保存する"""
+        try:
+            yt = build("youtube", "v3", credentials=credentials)
+            response = yt.channels().list(
+                part="snippet,statistics",
+                mine=True
+            ).execute()
+            
+            if not response.get("items"):
+                logger.warning(f"No YouTube channel found for user {user_id}")
+                return {}
+            
+            channel = response["items"][0]
+            channel_info = {
+                "id": channel["id"],
+                "name": channel["snippet"]["title"],
+                "thumbnail": channel["snippet"]["thumbnails"].get("default", {}).get("url", ""),
+                "subscriber_count": channel["statistics"].get("subscriberCount", "0"),
+            }
+            
+            # チャンネル情報をユーザーのサブコレクションに保存（重複回避はchannelIdをドキュメントIDに使用）
+            self.firestore.db.collection('users').document(user_id).collection('youtube_channels').document(channel_info["id"]).set(channel_info, merge=True)
+            
+            logger.info(f"YouTube channel saved: {channel_info['name']} (ID: {channel_info['id']}) for user {user_id}")
+            return channel_info
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch YouTube channel info: {e}")
+            return {}
+
+    def get_user_channels(self, user_id: str) -> list:
+        """ユーザーに紐づいた全YouTube チャンネル情報を取得する"""
+        if not self.firestore:
+            return []
+        try:
+            channels_ref = self.firestore.db.collection('users').document(user_id).collection('youtube_channels')
+            docs = channels_ref.stream()
+            return [doc.to_dict() for doc in docs]
+        except Exception as e:
+            logger.error(f"Failed to get user channels: {e}")
+            return []
 
     def _get_authenticated_service(self, user_id: str):
         """ユーザーIDに紐づく認証済みYouTube APIサービスを取得"""

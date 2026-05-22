@@ -4,6 +4,7 @@ Cloud Run 上で動作する動画処理APIサーバー
 """
 
 import asyncio
+import json
 import logging
 import traceback
 from datetime import datetime
@@ -514,22 +515,64 @@ async def youtube_login(req: YouTubeAuthRequest):
 
 @app.get("/api/auth/youtube/callback")
 async def youtube_callback(code: str, state: str):
-    """Googleからのリダイレクトを受け取り、トークンを保存する"""
+    """Googleからのリダイレクトを受け取り、トークンを保存してチャンネル情報を親ウィンドウに渡す"""
     try:
         res = youtube.exchange_code(code, state)
-        return HTMLResponse(content="""
-        <html><body>
-        <h2>YouTubeアカウントの連携が完了しました！</h2>
-        <p>このウィンドウを閉じて、アプリに戻ってください。</p>
+        channel = res.get("channel", {})
+        channel_json = json.dumps(channel, ensure_ascii=False) if channel else "{}"
+        
+        return HTMLResponse(content=f"""
+        <html><body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #0f0c1b; color: #fff; margin: 0; padding: 20px; text-align: center;">
+        <div style="background: rgba(57, 255, 20, 0.1); border: 1px solid rgba(57, 255, 20, 0.3); border-radius: 12px; padding: 2rem; max-width: 400px;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
+          <h2 style="color: #39ff14; margin-bottom: 0.5rem;">連携完了！</h2>
+          <p style="color: #a0aec0; font-size: 0.9rem;">YouTubeチャンネル「{channel.get('name', '不明')}」の連携が完了しました。</p>
+          <p style="color: #666; font-size: 0.8rem; margin-top: 1rem;">このウィンドウは自動的に閉じます...</p>
+        </div>
         <script>
-            window.opener.postMessage('youtube_auth_success', '*');
+            const channelData = {channel_json};
+            window.opener.postMessage({{
+                type: 'youtube_auth_success',
+                channel: channelData
+            }}, '*');
             setTimeout(() => window.close(), 3000);
         </script>
         </body></html>
         """)
     except Exception as e:
         logger.error(f"Callback error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        return HTMLResponse(content=f"""
+        <html><body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #0f0c1b; color: #fff; margin: 0; padding: 20px; text-align: center;">
+        <div style="background: rgba(255, 50, 50, 0.1); border: 1px solid rgba(255, 50, 50, 0.3); border-radius: 12px; padding: 2rem; max-width: 400px;">
+          <div style="font-size: 3rem; margin-bottom: 1rem;">❌</div>
+          <h2 style="color: #ff3232;">連携エラー</h2>
+          <p style="color: #a0aec0; font-size: 0.9rem;">{str(e)}</p>
+        </div>
+        </body></html>
+        """, status_code=400)
+
+
+@app.get("/api/youtube/channels")
+async def get_youtube_channels(user_id: str):
+    """ユーザーに紐づいたYouTubeチャンネル一覧を取得する"""
+    try:
+        channels = youtube.get_user_channels(user_id)
+        return {"channels": channels}
+    except Exception as e:
+        logger.error(f"Failed to get channels: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/youtube/channels/{channel_id}")
+async def delete_youtube_channel(channel_id: str, user_id: str):
+    """ユーザーの連携済みYouTubeチャンネルを解除する"""
+    try:
+        firestore.db.collection('users').document(user_id).collection('youtube_channels').document(channel_id).delete()
+        return {"success": True, "message": f"チャンネル {channel_id} の連携を解除しました"}
+    except Exception as e:
+        logger.error(f"Failed to delete channel: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # =============================================================================
 # 起動時の初期化
