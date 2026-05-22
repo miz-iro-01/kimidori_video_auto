@@ -504,7 +504,7 @@ async def youtube_login(req: YouTubeAuthRequest):
         url = youtube.generate_auth_url(
             client_id=client_id,
             client_secret=client_secret,
-            redirect_uri=redirect_uri or "http://localhost:8080/api/auth/youtube/callback",
+            redirect_uri=redirect_uri,
             user_id=req.user_id
         )
         return {"auth_url": url}
