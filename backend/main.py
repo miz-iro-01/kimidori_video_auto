@@ -44,7 +44,7 @@ app.add_middleware(
 # サービス初期化
 firestore = FirestoreService()
 storage = StorageService()
-youtube = YouTubeService()
+youtube = YouTubeService(firestore_service=firestore)
 
 
 # =============================================================================
@@ -486,18 +486,25 @@ from fastapi import HTTPException
 
 class YouTubeAuthRequest(BaseModel):
     user_id: str
-    client_id: str
-    client_secret: str
-    redirect_uri: str = "http://localhost:8080/api/auth/youtube/callback"
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    redirect_uri: Optional[str] = None
 
 @app.post("/api/auth/youtube/login")
 async def youtube_login(req: YouTubeAuthRequest):
     """SaaS設定画面から呼ばれる、OAuthの開始エンドポイント"""
     try:
+        client_id = req.client_id or config.YOUTUBE_CLIENT_ID
+        client_secret = req.client_secret or config.YOUTUBE_CLIENT_SECRET
+        redirect_uri = req.redirect_uri or config.YOUTUBE_REDIRECT_URI
+
+        if not client_id or not client_secret:
+            raise ValueError("YouTube OAuth Client ID or Client Secret is not configured.")
+
         url = youtube.generate_auth_url(
-            client_id=req.client_id,
-            client_secret=req.client_secret,
-            redirect_uri=req.redirect_uri,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri or "http://localhost:8080/api/auth/youtube/callback",
             user_id=req.user_id
         )
         return {"auth_url": url}

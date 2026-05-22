@@ -5,9 +5,9 @@
 
 class ApiClient {
   constructor() {
-    this.baseUrl = window.location.hostname === "localhost" 
-      ? "http://localhost:8080" 
-      : "https://api.your-saas-domain.com"; // 本番環境のURL
+    this.baseUrl = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+      ? `http://${window.location.hostname}:8080` 
+      : "https://kimidori-movie-auto-84265380422.asia-northeast1.run.app"; // 本番環境のURL
   }
 
   /** モードA: 動画生成ジョブの発行 */
@@ -30,7 +30,14 @@ class ApiClient {
       theme,
       style,
       duration_seconds: parseInt(duration),
-      user_id: "user_123", // 本来は認証済みユーザーID
+      user_id: (() => {
+        if (firebase.auth().currentUser) return firebase.auth().currentUser.uid;
+        const mockUserStr = localStorage.getItem('kimidori_mock_user');
+        if (mockUserStr) {
+          try { return JSON.parse(mockUserStr).uid; } catch(e) {}
+        }
+        return "user_123";
+      })(),
       gemini_api_key: geminiKey,
       pexels_api_key: pexelsKey,
       tts_engine: ttsEngine,

@@ -10,6 +10,7 @@ class AppController {
     this.initSettings();
     this.renderSettings();
     this.validateForms();
+    this.initAuth();
   }
 
   // --- ビュー（画面）切り替え ---
@@ -60,21 +61,7 @@ class AppController {
       });
     }
 
-    // --- YouTube OAuth Settings ---
-    const ytClientIdInput = document.getElementById('setYoutubeClientId');
-    const ytClientSecretInput = document.getElementById('setYoutubeClientSecret');
-    const saveYoutubeCredsBtn = document.getElementById('btnSaveYoutubeCreds');
-    
-    if (ytClientIdInput) ytClientIdInput.value = window.settingsManager.get('youtubeClientId') || "";
-    if (ytClientSecretInput) ytClientSecretInput.value = window.settingsManager.get('youtubeClientSecret') || "";
-    
-    if (saveYoutubeCredsBtn) {
-      saveYoutubeCredsBtn.addEventListener('click', () => {
-        window.settingsManager.set('youtubeClientId', ytClientIdInput.value.trim());
-        window.settingsManager.set('youtubeClientSecret', ytClientSecretInput.value.trim());
-        this.showToast("YouTube OAuth情報を保存しました", "success");
-      });
-    }
+
 
     // --- TTS Engine Settings ---
     const ttsEngineSelect = document.getElementById('setTtsEngine');
@@ -125,30 +112,67 @@ class AppController {
     const btnAddYoutube = document.getElementById('btnAddYoutube');
     if (btnAddYoutube) {
       btnAddYoutube.addEventListener('click', async () => {
-        const clientId = window.settingsManager.get('youtubeClientId');
-        const clientSecret = window.settingsManager.get('youtubeClientSecret');
-        
-        if (!clientId || !clientSecret) {
-          return this.showToast("先にClient IDとClient Secretを設定して保存してください。", "error");
+        // 管理者によってグローバル設定された認証情報を自動で取得
+        const clientId = window.settingsManager.get('globalYoutubeClientId') || window.settingsManager.get('youtubeClientId');
+        const clientSecret = window.settingsManager.get('globalYoutubeClientSecret') || window.settingsManager.get('youtubeClientSecret');
+
+        if (!clientId || !clientSecret || clientId.includes("dummy") || clientSecret.includes("dummy")) {
+          return this.showToast("Google OAuthの設定が未設定、またはデフォルトのダミー値です。右上「管理者パネル」から正しい Client ID と Client Secret を入力・保存してください。", "warning");
+        }
+
+        // 【ポップアップブロック対策】クリックの瞬間に即時でローディング状態のウィンドウを安全に開く
+        const authWindow = window.open("", "youtube_auth", "width=600,height=700");
+        if (authWindow) {
+          authWindow.document.write(`
+            <html><body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #0f0c1b; color: #fff; margin: 0; padding: 20px; text-align: center;">
+              <div style="border: 4px solid rgba(255,255,255,0.1); border-top-color: #39ff14; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+              <h3 style="font-weight: 500;">YouTube 認証ページへ転送中...</h3>
+              <p style="color: #a0aec0; font-size: 0.85rem;">安全に接続を確立しています。しばらくお待ちください。</p>
+              <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+            </body></html>
+          `);
+        } else {
+          return this.showToast("ポップアップがブロックされました。ブラウザの設定で許可してください。", "error");
         }
 
         try {
-          const res = await fetch("http://localhost:8080/api/auth/youtube/login", {
+          const reqBody = {
+            user_id: (() => {
+              if (firebase.auth().currentUser) return firebase.auth().currentUser.uid;
+              const mockUserStr = localStorage.getItem('kimidori_mock_user');
+              if (mockUserStr) {
+                try { return JSON.parse(mockUserStr).uid; } catch(e) {}
+              }
+              return "user_123";
+            })()
+          };
+
+          // 管理者設定のキーがあれば送信し、なければバックエンドのデフォルト環境変数設定に委ねる
+          if (clientId && clientSecret) {
+            reqBody.client_id = clientId;
+            reqBody.client_secret = clientSecret;
+          }
+
+          // 【ドメインバグの解決】window.apiClient.baseUrl を動的に使用して正しいAPIに通信する
+          const res = await fetch(`${window.apiClient.baseUrl}/api/auth/youtube/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              user_id: "user_123", // 本来はログイン中のユーザーID
-              client_id: clientId,
-              client_secret: clientSecret
-            })
+            body: JSON.stringify(reqBody)
           });
-          if (!res.ok) throw new Error("認証URLの取得に失敗しました");
+          
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.detail || "認証URLの取得に失敗しました");
+          }
           
           const data = await res.json();
-          // 認証ウィンドウを開く
-          window.open(data.auth_url, "youtube_auth", "width=600,height=700");
+          // 取得したYouTube OAuth認証URLへリダイレクト
+          authWindow.location.href = data.auth_url;
+
         } catch (e) {
-          this.showToast(e.message, "error");
+          if (authWindow) authWindow.close();
+          console.error("YouTube OAuth Init Error:", e);
+          this.showToast("接続エラー: バックエンドAPIサーバーが起動していないか、または設定が正しくありません。", "error");
         }
       });
     }
@@ -463,6 +487,303 @@ class AppController {
   removeYouTube(id) {
     window.settingsManager.removeYoutubeAccount(id);
     this.showToast("連携を解除しました", "success");
+  }
+
+  // --- 認証機能 (Firebase Auth & ロール管理) ---
+  initAuth() {
+    // ログイン / 新規作成タブ切り替え
+    const tabBtnLogin = document.getElementById('tabBtnLogin');
+    const tabBtnRegister = document.getElementById('tabBtnRegister');
+    const formLogin = document.getElementById('formLogin');
+    const formRegister = document.getElementById('formRegister');
+
+    if (tabBtnLogin && tabBtnRegister && formLogin && formRegister) {
+      tabBtnLogin.addEventListener('click', () => {
+        tabBtnLogin.classList.add('active');
+        tabBtnRegister.classList.remove('active');
+        formLogin.classList.add('active');
+        formRegister.classList.remove('active');
+      });
+
+      tabBtnRegister.addEventListener('click', () => {
+        tabBtnRegister.classList.add('active');
+        tabBtnLogin.classList.remove('active');
+        formRegister.classList.add('active');
+        formLogin.classList.remove('active');
+      });
+    }
+
+    // ログイン処理
+    formLogin?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      
+      // 管理者アカウント特別パスワード認証（モック／ローカル用フォールバック）
+      const isAdminCredentials = (email === 'sl0wmugi9@gmail.com' || email === 'oumaumauma32@gmail.com') && password === 'kimidori2026';
+      
+      try {
+        if (isAdminCredentials) {
+          // Firebase Authで一度試す（本番用アカウントがすでに登録されている場合のため）
+          try {
+            await firebase.auth().signInWithEmailAndPassword(email, password);
+            this.showToast("管理者としてログインしました！", "success");
+            return;
+          } catch (fbErr) {
+            console.warn("Firebase Auth failed, falling back to mock login:", fbErr);
+            // Firebaseが未初期化・設定不備の場合のモックログイン
+            const mockUser = {
+              uid: email === 'sl0wmugi9@gmail.com' ? 'admin_mugi_uid' : 'admin_ouma_uid',
+              email: email,
+              isMock: true
+            };
+            localStorage.setItem('kimidori_mock_user', JSON.stringify(mockUser));
+            this.showToast("管理者ログインしました（ローカルフォールバック）", "success");
+            this.updateAuthState(mockUser);
+            return;
+          }
+        }
+        
+        await firebase.auth().signInWithEmailAndPassword(email, password);
+        this.showToast("ログインしました！", "success");
+      } catch (err) {
+        console.error(err);
+        this.showToast("ログイン失敗: " + err.message, "error");
+      }
+    });
+
+    // 新規登録処理
+    formRegister?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('registerEmail').value.trim();
+      const password = document.getElementById('registerPassword').value;
+      
+      try {
+        await firebase.auth().createUserWithEmailAndPassword(email, password);
+        this.showToast("アカウントが作成され、ログインしました！", "success");
+      } catch (err) {
+        console.error(err);
+        this.showToast("登録失敗: " + err.message, "error");
+      }
+    });
+
+    // Google ログイン処理
+    document.getElementById('btnGoogleLogin')?.addEventListener('click', async () => {
+      try {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        await firebase.auth().signInWithPopup(provider);
+        this.showToast("Googleでログインしました！", "success");
+      } catch (err) {
+        console.error(err);
+        this.showToast("Googleログイン失敗: " + err.message, "error");
+      }
+    });
+
+    // ログアウト処理
+    document.getElementById('btnLogout')?.addEventListener('click', async () => {
+      try {
+        localStorage.removeItem('kimidori_mock_user');
+        await firebase.auth().signOut();
+        this.showToast("ログアウトしました", "success");
+      } catch (err) {
+        console.error(err);
+        this.showToast("ログアウト失敗: " + err.message, "error");
+      }
+    });
+
+    // 管理者向け設定保存処理
+    const btnAdminSave = document.getElementById('btnAdminSaveYoutubeCreds');
+    const adminClientIdInput = document.getElementById('adminYoutubeClientId');
+    const adminClientSecretInput = document.getElementById('adminYoutubeClientSecret');
+
+    if (btnAdminSave && adminClientIdInput && adminClientSecretInput) {
+      // 1. ローカルから即時復元 (初期表示の速度確保)
+      const cachedId = window.settingsManager.get('globalYoutubeClientId');
+      const cachedSecret = window.settingsManager.get('globalYoutubeClientSecret');
+
+      if (cachedId) {
+        adminClientIdInput.value = cachedId;
+      } else if (adminClientIdInput.value && !adminClientIdInput.value.includes('dummy')) {
+        // 初回ロード時、HTMLの初期プレバインド値を設定キャッシュにバインド
+        window.settingsManager.set('globalYoutubeClientId', adminClientIdInput.value);
+        window.settingsManager.set('youtubeClientId', adminClientIdInput.value);
+      } else {
+        adminClientIdInput.value = "";
+      }
+
+      if (cachedSecret) {
+        adminClientSecretInput.value = cachedSecret;
+      } else if (adminClientSecretInput.value && !adminClientSecretInput.value.includes('dummy')) {
+        // 初回ロード時、HTMLの初期プレバインド値を設定キャッシュにバインド
+        window.settingsManager.set('globalYoutubeClientSecret', adminClientSecretInput.value);
+        window.settingsManager.set('youtubeClientSecret', adminClientSecretInput.value);
+      } else {
+        adminClientSecretInput.value = "";
+      }
+
+      // 2. クラウド (Firestore) からの同期ロードを試みる
+      try {
+        if (typeof db !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+          db.collection('settings').doc('global_youtube').get().then(doc => {
+            if (doc.exists) {
+              const data = doc.data();
+              if (data.clientId) {
+                adminClientIdInput.value = data.clientId;
+                window.settingsManager.set('globalYoutubeClientId', data.clientId);
+                window.settingsManager.set('youtubeClientId', data.clientId);
+              }
+              if (data.clientSecret) {
+                adminClientSecretInput.value = data.clientSecret;
+                window.settingsManager.set('globalYoutubeClientSecret', data.clientSecret);
+                window.settingsManager.set('youtubeClientSecret', data.clientSecret);
+              }
+              console.log("☁️ クラウド (Firestore) からグローバルOAuth設定を取得しました");
+            }
+          }).catch(err => {
+            console.warn("Firestore からのグローバル設定取得に失敗しました:", err);
+          });
+        }
+      } catch (e) {
+        console.warn("Firestore 初期化エラー (ローカルデータを使用します):", e);
+      }
+
+      btnAdminSave.addEventListener('click', async () => {
+        const cId = adminClientIdInput.value.trim();
+        const cSec = adminClientSecretInput.value.trim();
+        
+        // まずローカルに保存
+        window.settingsManager.set('globalYoutubeClientId', cId);
+        window.settingsManager.set('globalYoutubeClientSecret', cSec);
+        window.settingsManager.set('youtubeClientId', cId);
+        window.settingsManager.set('youtubeClientSecret', cSec);
+        
+        // クラウド (Firestore) への同期保存を試みる
+        let savedToCloud = false;
+        try {
+          if (typeof db !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+            await db.collection('settings').doc('global_youtube').set({
+              clientId: cId,
+              clientSecret: cSec,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            savedToCloud = true;
+            console.log("☁️ クラウド (Firestore) にグローバルOAuth設定を保存しました");
+          }
+        } catch (err) {
+          console.error("Firestore へのグローバル設定同期に失敗しました:", err);
+        }
+
+        if (savedToCloud) {
+          this.showToast("クラウドにグローバル認証情報を同期・保存しました！", "success");
+        } else {
+          this.showToast("グローバル認証情報をローカルに保存しました", "info");
+        }
+      });
+    }
+
+    // 認証監視
+    firebase.auth().onAuthStateChanged(user => {
+      if (user) {
+        this.updateAuthState(user);
+      } else {
+        // Firebaseがログインしていない場合、ローカルのモックユーザーをチェック
+        const mockUserStr = localStorage.getItem('kimidori_mock_user');
+        if (mockUserStr) {
+          try {
+            const mockUser = JSON.parse(mockUserStr);
+            this.updateAuthState(mockUser);
+            return;
+          } catch (e) {
+            localStorage.removeItem('kimidori_mock_user');
+          }
+        }
+        this.updateAuthState(null);
+      }
+    });
+  }
+
+  // 統一的な認証状態反映ロジック
+  updateAuthState(user) {
+    const loginPage = document.getElementById('loginPage');
+    const currentUserDisplay = document.getElementById('currentUserDisplay');
+    const navAdminItem = document.getElementById('navAdminItem');
+
+    if (user) {
+      console.log("🔥 ログイン中ユーザー:", user.email);
+      if (loginPage) loginPage.classList.add('hidden');
+      if (currentUserDisplay) currentUserDisplay.textContent = `👑 ${user.email}`;
+
+      // 管理者判定: sl0wmugi9@gmail.com または oumaumauma32@gmail.com
+      const isAdmin = user.email === 'sl0wmugi9@gmail.com' || user.email === 'oumaumauma32@gmail.com';
+
+      if (isAdmin) {
+        if (navAdminItem) navAdminItem.style.display = 'flex';
+        this.loadAdminStats();
+      } else {
+        if (navAdminItem) navAdminItem.style.display = 'none';
+        // もし現在管理者ページにいた場合はダッシュボードへ強制遷移
+        const activeNav = document.querySelector('.nav-item.active');
+        if (activeNav && activeNav.dataset.target === 'admin') {
+          document.querySelector('.nav-item[data-target="dashboard"]').click();
+        }
+      }
+    } else {
+      console.log("🔑 未ログイン");
+      if (loginPage) loginPage.classList.remove('hidden');
+      if (currentUserDisplay) currentUserDisplay.textContent = "";
+      if (navAdminItem) navAdminItem.style.display = 'none';
+
+      // 未ログイン時はダッシュボードを表示しておく（UIリセット）
+      document.querySelectorAll('.view-section').forEach(sec => {
+        sec.classList.remove('active');
+      });
+      document.getElementById('view-dashboard')?.classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.querySelector('.nav-item[data-target="dashboard"]')?.classList.add('active');
+    }
+  }
+
+  // 管理者パネルの情報読み込み・モック表示
+  loadAdminStats() {
+    // モックデータ（プレミアム感を出すため）
+    const userCountEl = document.getElementById('adminUserCount');
+    const jobCountEl = document.getElementById('adminJobCount');
+    const userListBody = document.getElementById('adminUserListBody');
+    const serverUrlEl = document.getElementById('adminServerUrl');
+
+    if (serverUrlEl) {
+      serverUrlEl.textContent = window.apiClient ? window.apiClient.baseUrl : (
+        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+          ? `http://${window.location.hostname}:8080`
+          : "https://api.your-saas-domain.com"
+      );
+    }
+
+    if (userCountEl) userCountEl.textContent = "3";
+    if (jobCountEl) jobCountEl.textContent = "42";
+
+    if (userListBody) {
+      userListBody.innerHTML = `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 0.75rem 1rem; font-family: monospace;">sl0wmugi9@gmail.com_uid</td>
+          <td style="padding: 0.75rem 1rem;">sl0wmugi9@gmail.com</td>
+          <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary); font-weight: bold;">👑 共同管理者</span></td>
+          <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary);">● アクティブ</span></td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 0.75rem 1rem; font-family: monospace;">oumaumauma32@gmail.com_uid</td>
+          <td style="padding: 0.75rem 1rem;">oumaumauma32@gmail.com</td>
+          <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary); font-weight: bold;">👑 共同管理者</span></td>
+          <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary);">● アクティブ</span></td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 0.75rem 1rem; font-family: monospace;">user_demo_uid</td>
+          <td style="padding: 0.75rem 1rem;">user@example.com</td>
+          <td style="padding: 0.75rem 1rem;">一般ユーザー</td>
+          <td style="padding: 0.75rem 1rem;"><span style="color: var(--text-secondary);">● オフライン</span></td>
+        </tr>
+      `;
+    }
   }
 
   // --- トースト通知 ---

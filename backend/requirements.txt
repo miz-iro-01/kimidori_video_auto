@@ -22,19 +22,19 @@ youtube-transcript-api==0.6.2
 youtube-search-python==1.6.6
 
 # AI / 音声認識
-openai-whisper==20231117
+openai-whisper>=20231117
 google-generativeai==0.7.0
 
 # 音声合成（完全無料・APIキー不要）
 edge-tts==6.1.12
 
 # 動画処理
-moviepy==1.0.3
-Pillow==10.3.0
-numpy==1.26.4
+moviepy>=1.0.3
+Pillow>=10.3.0
+numpy>=1.26.4
 
 # ユーティリティ
-pydantic==2.7.0
+pydantic>=2.7.0
 python-dotenv==1.0.1
 httpx==0.27.0
 aiofiles==23.2.1

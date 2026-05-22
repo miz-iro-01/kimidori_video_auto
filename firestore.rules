@@ -9,5 +9,12 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if false;
     }
+
+    // システム設定: ログイン中のユーザーは読み取り可能、管理者のみ書き込み可能
+    match /settings/{document} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.token.email == 'sl0wmugi9@gmail.com' || request.auth.token.email == 'oumaumauma32@gmail.com');
+    }
   }
 }

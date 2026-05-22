@@ -10,8 +10,12 @@ from pathlib import Path
 # パス設定
 # =============================================================================
 BASE_DIR = Path(__file__).parent
-TMP_DIR = Path(os.getenv("TMP_DIR", "/app/tmp"))
-CACHE_DIR = Path(os.getenv("XDG_CACHE_HOME", "/app/cache"))
+if os.name == "nt":  # Windows
+    TMP_DIR = Path(os.getenv("TMP_DIR", BASE_DIR / "tmp"))
+    CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
+else:
+    TMP_DIR = Path(os.getenv("TMP_DIR", "/app/tmp"))
+    CACHE_DIR = Path(os.getenv("XDG_CACHE_HOME", "/app/cache"))
 
 # 一時ファイル用ディレクトリを確保
 TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -19,13 +23,13 @@ TMP_DIR.mkdir(parents=True, exist_ok=True)
 # =============================================================================
 # Firebase 設定
 # =============================================================================
-FIREBASE_STORAGE_BUCKET = os.getenv("FIREBASE_STORAGE_BUCKET", "your-project.appspot.com")
+FIREBASE_STORAGE_BUCKET = os.getenv("FIREBASE_STORAGE_BUCKET", "threads-auto-poster-9f85a.firebasestorage.app")
 FIRESTORE_COLLECTION = os.getenv("FIRESTORE_COLLECTION", "video_jobs")
 
 # =============================================================================
 # Google Cloud 設定
 # =============================================================================
-GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "your-project-id")
+GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "threads-auto-poster-9f85a")
 
 # =============================================================================
 # Gemini API 設定
@@ -38,6 +42,9 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 # =============================================================================
 YOUTUBE_CLIENT_SECRETS_FILE = os.getenv("YOUTUBE_CLIENT_SECRETS", "/app/client_secrets.json")
 YOUTUBE_TOKEN_FILE = os.getenv("YOUTUBE_TOKEN_FILE", "/app/youtube_token.json")
+YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID", "")
+YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET", "")
+YOUTUBE_REDIRECT_URI = os.getenv("YOUTUBE_REDIRECT_URI", "http://localhost:8080/api/auth/youtube/callback")
 
 # =============================================================================
 # Whisper 設定
@@ -64,7 +71,15 @@ SILENCE_MIN_DURATION = 0.5  # 無音と判定する最小持続時間（秒）
 SILENCE_PADDING = 0.1  # カット時の前後パディング（秒）
 
 # テロップ設定
-SUBTITLE_FONT = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
+import sys
+if sys.platform == "win32":
+    windows_font = Path("C:/Windows/Fonts/YuGothM.ttc")
+    if not windows_font.exists():
+        windows_font = Path("C:/Windows/Fonts/meiryo.ttc")
+    SUBTITLE_FONT = os.getenv("SUBTITLE_FONT", str(windows_font))
+else:
+    SUBTITLE_FONT = os.getenv("SUBTITLE_FONT", "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc")
+
 SUBTITLE_FONT_SIZE = 48
 SUBTITLE_COLOR = "white"
 SUBTITLE_OUTLINE_COLOR = "black"

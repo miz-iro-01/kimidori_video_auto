@@ -24,7 +24,22 @@ class SettingsManager {
   load() {
     try {
       const saved = localStorage.getItem(this.STORAGE_KEY);
-      return saved ? { ...this.defaults, ...JSON.parse(saved) } : { ...this.defaults };
+      const parsed = saved ? { ...this.defaults, ...JSON.parse(saved) } : { ...this.defaults };
+      
+      // ダミーの認証情報がLocalStorageに残っている場合は自動でクリアする
+      const dummyKeys = ['globalYoutubeClientId', 'globalYoutubeClientSecret', 'youtubeClientId', 'youtubeClientSecret'];
+      let hasDummy = false;
+      dummyKeys.forEach(k => {
+        if (parsed[k] && parsed[k].includes('dummy')) {
+          parsed[k] = "";
+          hasDummy = true;
+        }
+      });
+      if (hasDummy) {
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(parsed));
+      }
+      
+      return parsed;
     } catch {
       return { ...this.defaults };
     }

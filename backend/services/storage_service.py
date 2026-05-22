@@ -13,8 +13,26 @@ class StorageService:
     """Google Cloud Storage を使用したファイル管理"""
 
     def __init__(self):
-        self.client = gcs.Client()
-        self.bucket = self.client.bucket(config.FIREBASE_STORAGE_BUCKET)
+        self._client = None
+        self._bucket = None
+
+    @property
+    def client(self):
+        if self._client is None:
+            try:
+                self._client = gcs.Client()
+            except Exception as e:
+                logger.warning(f"⚠️ Storageクライアントの初期化に失敗しました。認証情報がない状態で動作しています。エラー詳細: {e}")
+                raise RuntimeError(
+                    "Google Cloud Storageの認証情報（Application Default Credentials）が設定されていません。"
+                ) from e
+        return self._client
+
+    @property
+    def bucket(self):
+        if self._bucket is None:
+            self._bucket = self.client.bucket(config.FIREBASE_STORAGE_BUCKET)
+        return self._bucket
 
     def upload_file(self, local_path: Path, destination_path: str) -> str:
         """

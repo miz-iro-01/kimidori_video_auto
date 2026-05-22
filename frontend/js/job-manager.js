@@ -12,7 +12,11 @@ class JobManager {
   /** モードA: 台本生成→動画作成ジョブを送信 */
   async submitModeA(theme, style, durationSeconds) {
     // 開発環境と本番環境のURL判別（本来は環境変数等で切り替え）
-    const apiUrl = window.location.hostname === "localhost" ? "http://localhost:8080" : "https://api.your-saas-domain.com";
+    const apiUrl = window.apiClient ? window.apiClient.baseUrl : (
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+        ? `http://${window.location.hostname}:8080`
+        : "https://api.your-saas-domain.com"
+    );
     const geminiKey = settingsManager.get("geminiApiKey");
     const voiceName = settingsManager.get("voiceName");
     const speakingRate = settingsManager.get("speakingRate");

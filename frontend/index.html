@@ -57,13 +57,23 @@
           </span>
           <span class="nav-label">API・連携設定</span>
         </button>
+        <button class="nav-item" data-target="admin" id="navAdminItem" style="display: none;">
+          <span class="nav-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          </span>
+          <span class="nav-label">管理者ダッシュボード</span>
+        </button>
       </nav>
 
-      <div class="sidebar-footer">
+      <div class="sidebar-footer" style="display: flex; flex-direction: column; gap: 1rem; padding: 1.5rem; border-top: 1px solid var(--border-color);">
         <div class="status-indicator">
           <div class="status-dot" id="systemStatusDot"></div>
           <span id="systemStatusText">システム待機中</span>
         </div>
+        <div id="currentUserDisplay" style="font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-top: 0.25rem;"></div>
+        <button class="btn btn-outline" id="btnLogout" style="width: 100%; padding: 0.5rem; font-size: 0.85rem;">
+          🚪 ログアウト
+        </button>
       </div>
     </aside>
 
@@ -328,27 +338,24 @@
           <!-- YouTube 連携 (OAuth) -->
           <div class="glass-card">
             <div class="card-header-icon"><span class="icon-youtube"></span> <h3>YouTube 連携 (OAuth)</h3></div>
-            <p class="card-desc">SaaS版として稼働させるため、Google Cloud Platformで取得したOAuth 2.0 クライアント認証情報を入力してください。</p>
+            <p class="card-desc">YouTubeへの自動投稿機能を使用するための連携設定を行います。</p>
             
-            <div class="form-group" style="margin-top:1rem;">
-              <label class="form-label">Client ID</label>
-              <input type="text" id="setYoutubeClientId" class="form-input" placeholder="xxx.apps.googleusercontent.com">
+            <!-- かんたん連携用の案内 -->
+            <div class="guide-box" id="ytNormalUserGuide" style="margin-bottom: 1rem; border-left: 3px solid var(--accent-primary); background: rgba(57, 255, 20, 0.03);">
+              <p style="font-size: 0.85rem; color: var(--text-primary); margin: 0; line-height: 1.4;">
+                ✨ <strong>かんたん連携が有効です</strong><br>
+                面倒なAPIキー等の取得や設定は一切不要です。下のボタンを押すだけで、ご自身のチャンネルを安全に連携・認証できます。
+              </p>
             </div>
-            <div class="form-group">
-              <label class="form-label">Client Secret</label>
-              <input type="password" id="setYoutubeClientSecret" class="form-input" placeholder="GOCSPX-...">
-            </div>
-            
-            <button class="btn btn-primary" id="btnSaveYoutubeCreds" style="width: 100%; margin-bottom: 1.5rem;">
-              認証情報を保存
-            </button>
+
+
 
             <div class="youtube-accounts-list" id="ytAccountList">
               <!-- JSでアカウント一覧を描画 -->
             </div>
 
-            <button class="btn btn-outline" id="btnAddYoutube" style="width: 100%; margin-top: 1rem;">
-              + 新しいYouTubeチャンネルを認証する
+            <button class="btn btn-primary" id="btnAddYoutube" style="width: 100%; margin-top: 1rem;">
+              新しいYouTubeチャンネルを認証する
             </button>
           </div>
 
@@ -401,7 +408,203 @@
         </div>
       </section>
 
+      <!-- ==================== 管理者ダッシュボード ==================== -->
+      <section class="view-section" id="view-admin">
+        <header class="section-header">
+          <h1 class="section-title">管理者ダッシュボード</h1>
+          <p class="section-subtitle">システム全体の利用状況監視とグローバル管理</p>
+        </header>
+
+        <div class="settings-grid">
+          <!-- システム利用状況カード -->
+          <div class="glass-card">
+            <div class="card-header-icon">📈 <h3>システム全体の利用状況</h3></div>
+            <p class="card-desc">全ユーザーのアクティビティと動画生成処理の要約です。</p>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+              <div class="glass-card" style="padding: 1.25rem; background: rgba(255,255,255,0.02); text-align: center;">
+                <span style="font-size: 0.85rem; color: var(--text-secondary);">登録済ユーザー数</span>
+                <div style="font-size: 2rem; font-weight: 700; color: var(--accent-primary); margin-top: 0.5rem;" id="adminUserCount">1</div>
+              </div>
+              <div class="glass-card" style="padding: 1.25rem; background: rgba(255,255,255,0.02); text-align: center;">
+                <span style="font-size: 0.85rem; color: var(--text-secondary);">累計生成ジョブ数</span>
+                <div style="font-size: 2rem; font-weight: 700; color: var(--accent-secondary); margin-top: 0.5rem;" id="adminJobCount">12</div>
+              </div>
+            </div>
+            
+            <div class="guide-box" style="margin-top: 1.5rem; background: rgba(0,0,0,0.15);">
+              <h4 style="color: var(--accent-primary);">⚡ アクティブサーバー情報</h4>
+              <p style="font-size: 0.85rem; line-height: 1.6; margin-top: 0.5rem;">
+                <strong>サーバーURL:</strong> <code id="adminServerUrl" style="background: rgba(0,0,0,0.3); padding: 0.2rem 0.4rem; border-radius: 4px;">http://localhost:8080</code><br>
+                <strong>Firestore接続:</strong> <span class="badge" style="background: var(--accent-primary); color: #000; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">接続中</span><br>
+                <strong>環境モード:</strong> <span class="badge" style="background: var(--accent-secondary); color: #fff; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">デベロッパー</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- グローバルシステム設定カード -->
+          <div class="glass-card">
+            <div class="card-header-icon">⚙️ <h3>グローバル YouTube OAuth 設定</h3></div>
+            <p class="card-desc">一般ユーザー向けの「かんたん連携」で使用されるシステムのデフォルトOAuth認証情報です。</p>
+            
+            <div class="guide-box" style="border-left: 3px solid var(--accent-secondary);">
+              <p style="font-size: 0.8rem; margin: 0; line-height: 1.4;">
+                ⚠️ <strong>注意:</strong> ここで設定する Client ID と Client Secret はサーバー全体のデフォルトとして使用されます。
+                一般ユーザーが「かんたん連携」を実行した際、この認証情報を用いて認証が行われます。
+              </p>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">グローバル Client ID</label>
+              <input type="text" id="adminYoutubeClientId" class="form-input" placeholder="xxx.apps.googleusercontent.com" value="">
+            </div>
+            <div class="form-group">
+              <label class="form-label">グローバル Client Secret</label>
+              <input type="password" id="adminYoutubeClientSecret" class="form-input" placeholder="GOCSPX-..." value="">
+            </div>
+            <button class="btn btn-primary" id="btnAdminSaveYoutubeCreds" style="width: 100%; margin-bottom: 1rem;">
+              グローバル設定を保存
+            </button>
+
+            <!-- プレミアム手順ガイド (アコーディオン) -->
+            <details class="guide-accordion" style="border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; background: rgba(255,255,255,0.01); transition: all 0.3s ease;">
+              <summary style="font-size: 0.85rem; font-weight: bold; cursor: pointer; color: var(--accent-secondary); display: flex; align-items: center; gap: 0.5rem; outline: none; list-style: none;">
+                🔑 <strong>本物のグローバル OAuth 認証キーを取得する手順（Google Cloud）</strong>
+              </summary>
+              <div style="font-size: 0.8rem; line-height: 1.5; color: var(--text-secondary); margin-top: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                <ol style="margin: 0; padding-left: 1.25rem;">
+                  <li style="margin-bottom: 0.5rem;"><strong>Google Cloud Console にアクセス:</strong><br>
+                    <a href="https://console.cloud.google.com/" target="_blank" style="color: var(--accent-primary); text-decoration: underline;">Google Cloud Console</a> にログインし、新しいプロジェクトを作成または既存のプロジェクトを選択します。
+                  </li>
+                  <li style="margin-bottom: 0.5rem;"><strong>YouTube API を有効化:</strong><br>
+                    「APIとサービス」 > 「ライブラリ」を開き、検索窓に「YouTube Data API v3」と入力して、これを<strong>有効化</strong>します。
+                  </li>
+                  <li style="margin-bottom: 0.5rem;"><strong>OAuth 同意画面の設定:</strong><br>
+                    「APIとサービス」 > 「OAuth 同意画面」を開き、User Type を「外部」に設定し、アプリ名や連絡先メールアドレスなどの必須項目を入力します。
+                  </li>
+                  <li style="margin-bottom: 0.5rem;"><strong>認証情報の作成 (OAuth クライアント ID):</strong><br>
+                    「APIとサービス」 > 「認証情報」を開き、「認証情報を作成」 > 「OAuth クライアント ID」をクリックします。
+                  </li>
+                  <li style="margin-bottom: 0.5rem;"><strong>アプリケーションタイプとリダイレクト URI:</strong><br>
+                    アプリケーションの種類を「ウェブ アプリケーション」に選択し、<strong>「承認済みのリダイレクト URI」</strong>に以下のURLを追加します：
+                    <code style="display: block; background: rgba(0,0,0,0.3); padding: 0.25rem 0.5rem; border-radius: 4px; color: var(--accent-primary); font-family: monospace; font-size: 0.75rem; margin-top: 0.25rem; word-break: break-all;">
+                      http://localhost:8080/api/auth/youtube/callback
+                    </code>
+                  </li>
+                  <li><strong>キーの取得と設定:</strong><br>
+                    作成完了後に表示される「クライアント ID」と「クライアント シークレット」をコピーし、上のフォームに貼り付けて保存してください。
+                  </li>
+                </ol>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <!-- 登録ユーザー一覧 -->
+        <div class="glass-card" style="margin-top: 2rem;">
+          <h3 class="card-title">👥 システム管理者用ユーザーリスト</h3>
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+              <thead>
+                <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-secondary);">
+                  <th style="padding: 0.75rem 1rem;">ユーザーID</th>
+                  <th style="padding: 0.75rem 1rem;">メールアドレス</th>
+                  <th style="padding: 0.75rem 1rem;">権限クラス</th>
+                  <th style="padding: 0.75rem 1rem;">ステータス</th>
+                </tr>
+              </thead>
+              <tbody id="adminUserListBody">
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                  <td style="padding: 0.75rem 1rem; font-family: monospace;">sl0wmugi9@gmail.com_uid</td>
+                  <td style="padding: 0.75rem 1rem;">sl0wmugi9@gmail.com</td>
+                  <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary); font-weight: bold;">👑 共同管理者</span></td>
+                  <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary);">● アクティブ</span></td>
+                </tr>
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                  <td style="padding: 0.75rem 1rem; font-family: monospace;">oumaumauma32@gmail.com_uid</td>
+                  <td style="padding: 0.75rem 1rem;">oumaumauma32@gmail.com</td>
+                  <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary); font-weight: bold;">👑 共同管理者</span></td>
+                  <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary);">● アクティブ</span></td>
+                </tr>
+                <tr style="border-bottom: 1px solid var(--border-color);">
+                  <td style="padding: 0.75rem 1rem; font-family: monospace;">user_demo_uid</td>
+                  <td style="padding: 0.75rem 1rem;">user@example.com</td>
+                  <td style="padding: 0.75rem 1rem;">一般ユーザー</td>
+                  <td style="padding: 0.75rem 1rem;"><span style="color: var(--text-secondary);">● オフライン</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
     </main>
+  </div>
+
+  <!-- ログインページ -->
+  <div class="login-page" id="loginPage">
+    <div class="login-mesh"></div>
+    <div class="login-glow login-glow-1"></div>
+    <div class="login-glow login-glow-2"></div>
+    
+    <div class="login-card glass-card">
+      <div class="login-header">
+        <img src="img/logo.png" alt="Logo" class="login-logo-image">
+        <h2 class="login-title">KIMIDORI YouTube Auto</h2>
+        <p class="login-subtitle">AI動画生成・自動投稿プラットフォーム</p>
+      </div>
+
+      <!-- タブ切り替え（ログイン / 新規登録） -->
+      <div class="login-tabs">
+        <button class="login-tab-btn active" id="tabBtnLogin">ログイン</button>
+        <button class="login-tab-btn" id="tabBtnRegister">新規作成</button>
+      </div>
+      
+      <!-- ログインフォーム -->
+      <form id="formLogin" class="auth-form active">
+        <div class="form-group">
+          <label class="form-label" for="loginEmail">メールアドレス</label>
+          <input type="email" id="loginEmail" class="form-input" placeholder="name@example.com" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="loginPassword">パスワード</label>
+          <input type="password" id="loginPassword" class="form-input" placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-large">
+          <span class="btn-text">ログイン</span>
+        </button>
+      </form>
+
+      <!-- 新規登録フォーム -->
+      <form id="formRegister" class="auth-form">
+        <div class="form-group">
+          <label class="form-label" for="registerEmail">メールアドレス</label>
+          <input type="email" id="registerEmail" class="form-input" placeholder="name@example.com" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="registerPassword">パスワード</label>
+          <input type="password" id="registerPassword" class="form-input" placeholder="最小6文字" minlength="6" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-large">
+          <span class="btn-text">アカウントを作成する</span>
+        </button>
+      </form>
+
+      <div class="login-divider">
+        <span>または</span>
+      </div>
+
+      <!-- Googleログインボタン -->
+      <button class="btn btn-outline btn-google" id="btnGoogleLogin">
+        <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+        </svg>
+        Google でログイン
+      </button>
+    </div>
   </div>
 
   <!-- トースト通知 -->
@@ -419,6 +622,13 @@
       </div>
     </div>
   </div>
+
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
 
   <script src="js/settings-manager.js"></script>
   <script src="js/api-client.js"></script>

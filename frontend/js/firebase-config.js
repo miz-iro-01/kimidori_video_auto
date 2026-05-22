@@ -4,12 +4,12 @@
  */
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef123456",
+  apiKey: "AIzaSyBLOVuFivURHnG7ohomZSLqO5P9vLWdOiI",
+  authDomain: "threads-auto-poster-9f85a.firebaseapp.com",
+  projectId: "threads-auto-poster-9f85a",
+  storageBucket: "threads-auto-poster-9f85a.firebasestorage.app",
+  messagingSenderId: "84265380422",
+  appId: "1:84265380422:web:2d6fe9e1dc167c9ac9f847",
 };
 
 // Firebase初期化
@@ -22,6 +22,6 @@ const storage = firebase.storage();
 
 // Cloud Run APIのベースURL
 // ※ デプロイ後に実際のCloud Run URLに変更してください
-const API_BASE_URL = "http://localhost:8080";
+const API_BASE_URL = "https://kimidori-movie-auto-84265380422.asia-northeast1.run.app";
 
 console.log("🔥 Firebase 初期化完了");
