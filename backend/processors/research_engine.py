@@ -55,13 +55,48 @@ class ResearchEngine:
             return []
 
     def fetch_transcript(self, video_id: str) -> Optional[str]:
-        """動画の字幕（トーク内容）を取得"""
+        """動画の字幕（トーク内容）を取得。手動/自動生成/翻訳/英語など多段階で取得を試みる"""
         try:
-            # 日本語を優先して字幕を取得
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['ja', 'en'])
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            # 多段階の取得フォールバック
+            transcript = None
+            
+            # 1. 日本語（手動）
+            try:
+                transcript = transcript_list.find_manually_created_transcript(['ja'])
+            except Exception:
+                pass
+                
+            # 2. 日本語（自動生成）
+            if not transcript:
+                try:
+                    transcript = transcript_list.find_generated_transcript(['ja'])
+                except Exception:
+                    pass
+            
+            # 3. 英語（手動または自動生成）
+            if not transcript:
+                try:
+                    transcript = transcript_list.find_transcript(['en'])
+                except Exception:
+                    pass
+                    
+            # 4. その他の言語があれば自動で日本語に翻訳する
+            if not transcript:
+                try:
+                    # 最初の字幕を何でもいいから取得
+                    raw_transcript = next(iter(transcript_list))
+                    transcript = raw_transcript.translate('ja')
+                except Exception:
+                    pass
+                    
+            if not transcript:
+                return None
+                
+            data = transcript.fetch()
             formatter = TextFormatter()
-            text = formatter.format_transcript(transcript_list)
-            # 長すぎる場合はカット（1000文字程度）
+            text = formatter.format_transcript(data)
             return text[:1000]
         except Exception as e:
             logger.warning(f"字幕取得失敗 ({video_id}): {e}")
@@ -78,12 +113,14 @@ class ResearchEngine:
 
         for v in videos:
             transcript = self.fetch_transcript(v["id"])
+            analyzed_data.append(v)
             if transcript:
-                analyzed_data.append(v)
                 combined_text += f"【タイトル】: {v['title']}\n【再生数】: {v['views']}\n【字幕内容】:\n{transcript}\n\n"
+            else:
+                combined_text += f"【タイトル】: {v['title']}\n【再生数】: {v['views']}\n【字幕内容】: （字幕を取得できませんでした。タイトルから動画内容を推測して分析してください）\n\n"
 
         if not combined_text:
-            return {"error": "動画はみつかりましたが、解析可能な字幕（トーク）がありませんでした。"}
+            return {"error": "動画情報の取得に失敗しました。別のキーワードを試してください。"}
 
         # Geminiによるトレンド解析
         prompt = f"""
