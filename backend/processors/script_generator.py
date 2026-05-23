@@ -97,10 +97,16 @@ class ScriptGenerator:
 """
 
         try:
-            response = self.model.generate_content(prompt)
+            generation_config = {
+                "response_mime_type": "application/json"
+            }
+            response = self.model.generate_content(
+                prompt,
+                generation_config=generation_config
+            )
             text = response.text.strip()
 
-            # JSONブロックを抽出（```json ... ``` で囲まれている場合に対応）
+            # JSONブロックを抽出（念のためのフォールバック処理）
             if "```json" in text:
                 text = text.split("```json")[1].split("```")[0].strip()
             elif "```" in text:

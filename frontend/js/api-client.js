@@ -67,7 +67,9 @@ class ApiClient {
   /** 台本プレビュー取得 */
   async getScriptPreview(theme, style, duration) {
     const geminiKey = window.settingsManager.get("geminiApiKey");
-    if (!window.settingsManager.hasGeminiKey()) return null;
+    if (!window.settingsManager.hasGeminiKey()) {
+      throw new Error("Gemini APIキーが設定されていません。");
+    }
 
     const res = await fetch(`${this.baseUrl}/api/preview/script`, {
       method: "POST",
@@ -77,10 +79,12 @@ class ApiClient {
       })
     });
     
-    if (res.ok) {
-      return await res.json();
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || `台本生成エラー (${res.status})`);
     }
-    return null;
+    
+    return await res.json();
   }
 
   /** トレンドリサーチの実行 */
