@@ -24,6 +24,7 @@ steps:
       - '--timeout=3600'
       - '--max-instances=5'
       - '--concurrency=1'
+      - '--no-cpu-throttling'
       - '--allow-unauthenticated'
       - '--set-secrets=GEMINI_API_KEY=gemini-api-key:latest,YOUTUBE_CLIENT_ID=youtube-client-id:latest,YOUTUBE_CLIENT_SECRET=youtube-client-secret:latest'
       - '--set-env-vars=GOOGLE_CLOUD_PROJECT=$PROJECT_ID,FIREBASE_STORAGE_BUCKET=${_BUCKET}'

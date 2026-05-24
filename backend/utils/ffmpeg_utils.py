@@ -49,7 +49,7 @@ def cut_and_concat_segments(video_path: Path, segments: list[dict], output_path:
     filter_complex = "".join(filter_parts) + f"{''.join(concat_inputs)}concat=n={len(segments)}:v=1:a=1[outv][outa]"
 
     cmd = [
-        "ffmpeg", "-y", "-i", str(video_path),
+        "ffmpeg", "-y", "-loglevel", "error", "-i", str(video_path),
         "-filter_complex", filter_complex,
         "-map", "[outv]", "-map", "[outa]",
         "-c:v", "libx264", "-preset", "medium", "-crf", "23",
@@ -71,7 +71,7 @@ def concat_video_clips(clip_paths: list[Path], output_path: Path) -> Path:
         for p in clip_paths:
             f.write(f"file '{str(p).replace(chr(92), '/')}'\n")
     cmd = [
-        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_file),
+        "ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(concat_file),
         "-c:v", "libx264", "-preset", "medium", "-crf", "23",
         "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(output_path),
     ]
@@ -100,7 +100,7 @@ def create_scene_clip(
         f":x=(w-text_w)/2:y=h*0.78[out]"
     )
     cmd = [
-        "ffmpeg", "-y", "-loop", "1", "-i", str(background_image),
+        "ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-i", str(background_image),
         "-i", str(audio_path), "-filter_complex", filter_complex,
         "-map", "[out]", "-map", "1:a",
         "-c:v", "libx264", "-preset", "medium", "-crf", "23",

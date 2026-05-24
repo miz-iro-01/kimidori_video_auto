@@ -206,7 +206,7 @@ class ModeAProcessor:
             fade_filter = f",fade=t=in:st=0:d=0.5,fade=t=out:st={max(0, scene_dur-0.5)}:d=0.5"
 
             cmd = [
-                "ffmpeg", "-y",
+                "ffmpeg", "-y", "-loglevel", "error",
                 "-loop", "1", "-i", str(image_paths[i]),
                 "-i", str(audio_paths[i]),
                 "-filter_complex",
@@ -223,7 +223,7 @@ class ModeAProcessor:
                 logger.error(f"シーン{i}生成エラー: {result.stderr[-300:]}")
                 # フォールバック: ケンバーンズなしで生成
                 cmd_fallback = [
-                    "ffmpeg", "-y", "-loop", "1", "-i", str(image_paths[i]),
+                    "ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-i", str(image_paths[i]),
                     "-i", str(audio_paths[i]),
                     "-vf", f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
                     "-c:v", "libx264", "-preset", "medium", "-crf", "23",
