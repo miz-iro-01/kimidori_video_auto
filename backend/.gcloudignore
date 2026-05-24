@@ -1,0 +1,33 @@
+# .gcloudignore - Cloud Build 送信時に除外するファイル
+.gcloudignore
+.git
+.gitignore
+
+# Python 仮想環境（不要）
+venv/
+.venv/
+env/
+
+# Python キャッシュ
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# 一時ファイル
+tmp/
+*.tmp
+*.log
+
+# テスト・開発用
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# OS ファイル
+.DS_Store
+Thumbs.db

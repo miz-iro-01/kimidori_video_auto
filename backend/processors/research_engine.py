@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from typing import List, Dict, Optional
 import google.generativeai as genai
 
@@ -138,7 +139,21 @@ class ResearchEngine:
 4. 【狙うべきターゲット・感情】: どんな悩みを持つ人に向けて、どんな感情（驚き、納得など）を引き起こすべきか。
 """
         try:
-            response = self.model.generate_content(prompt)
+            max_retries = 4
+            delay = 10
+            response = None
+            for attempt in range(max_retries):
+                try:
+                    response = await self.model.generate_content_async(prompt)
+                    break
+                except Exception as e:
+                    if "429" in str(e) and attempt < max_retries - 1:
+                        logger.warning(f"Gemini API limit exceeded (429), retrying in {delay}s... (Attempt {attempt+1}/{max_retries})")
+                        await asyncio.sleep(delay)
+                        delay *= 2
+                    else:
+                        raise
+                        
             return {
                 "success": True,
                 "keyword": keyword,
