@@ -26,7 +26,7 @@ openai-whisper>=20231117
 google-generativeai==0.7.0
 
 # 音声合成（完全無料・APIキー不要）
-edge-tts==6.1.12
+edge-tts==7.2.8
 
 # 動画処理
 moviepy>=1.0.3
