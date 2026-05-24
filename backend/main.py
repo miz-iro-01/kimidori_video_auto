@@ -388,7 +388,7 @@ async def run_mode_a_pipeline(
                 selected_bgm = None
                 if bgm_mode == "auto":
                     selected_bgm = await bgm_service.select_bgm_for_theme(
-                        theme, script_data, user_id, gemini_api_key
+                        theme, script_data, gemini_api_key
                     )
                 elif bgm_mode == "manual" and bgm_id:
                     selected_bgm = bgm_service.get_bgm(bgm_id)
@@ -642,7 +642,6 @@ async def upload_bgm(
         kw_list = [k.strip() for k in keywords.split(",") if k.strip()] if keywords else []
 
         result = bgm_service.register_bgm(
-            user_id=user_id,
             file_path=tmp_path,
             original_filename=file.filename,
             title=title,
@@ -662,10 +661,10 @@ async def upload_bgm(
 
 
 @app.get("/api/bgm/list")
-async def list_bgm(user_id: str):
-    """ユーザーの登録済みBGM一覧を取得"""
+async def list_bgm():
+    """登録済みBGM一覧（システム共通）を取得"""
     try:
-        bgm_list = bgm_service.list_bgm(user_id)
+        bgm_list = bgm_service.list_bgm()
         return {"bgm_tracks": bgm_list}
     except Exception as e:
         logger.error(f"BGM一覧取得失敗: {e}")
@@ -673,10 +672,10 @@ async def list_bgm(user_id: str):
 
 
 @app.delete("/api/bgm/{bgm_id}")
-async def delete_bgm(bgm_id: str, user_id: str):
+async def delete_bgm(bgm_id: str):
     """BGMを削除する"""
     try:
-        bgm_service.delete_bgm(bgm_id, user_id)
+        bgm_service.delete_bgm(bgm_id)
         return {"success": True, "message": f"BGM {bgm_id} を削除しました"}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -688,7 +687,6 @@ async def delete_bgm(bgm_id: str, user_id: str):
 
 
 class BGMUpdateRequest(BaseModel):
-    user_id: str
     title: Optional[str] = None
     description: Optional[str] = None
     keywords: Optional[list[str]] = None
@@ -706,7 +704,7 @@ async def update_bgm(bgm_id: str, req: BGMUpdateRequest):
         if req.keywords is not None:
             update_fields["keywords"] = req.keywords
 
-        result = bgm_service.update_bgm(bgm_id, req.user_id, **update_fields)
+        result = bgm_service.update_bgm(bgm_id, **update_fields)
         return {"success": True, "bgm": result}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

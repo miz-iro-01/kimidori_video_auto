@@ -127,7 +127,6 @@ class ApiClient {
   async uploadBGM(file, title, description, keywords) {
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("user_id", this._getUserId());
     formData.append("title", title);
     formData.append("description", description || "");
     formData.append("keywords", keywords || "");
@@ -147,8 +146,7 @@ class ApiClient {
 
   /** 登録済みBGM一覧を取得 */
   async listBGM() {
-    const userId = this._getUserId();
-    const res = await fetch(`${this.baseUrl}/api/bgm/list?user_id=${encodeURIComponent(userId)}`);
+    const res = await fetch(`${this.baseUrl}/api/bgm/list`);
 
     if (!res.ok) {
       const error = await res.json();
@@ -160,8 +158,7 @@ class ApiClient {
 
   /** BGMを削除 */
   async deleteBGM(bgmId) {
-    const userId = this._getUserId();
-    const res = await fetch(`${this.baseUrl}/api/bgm/${bgmId}?user_id=${encodeURIComponent(userId)}`, {
+    const res = await fetch(`${this.baseUrl}/api/bgm/${bgmId}`, {
       method: "DELETE",
     });
 
@@ -179,7 +176,6 @@ class ApiClient {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        user_id: this._getUserId(),
         ...updateData,
       }),
     });

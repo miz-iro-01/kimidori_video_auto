@@ -30,7 +30,6 @@ class BGMService:
 
     def register_bgm(
         self,
-        user_id: str,
         file_path: Path,
         original_filename: str,
         title: str,
@@ -41,7 +40,6 @@ class BGMService:
         BGM楽曲を登録する
 
         Args:
-            user_id: ユーザーID
             file_path: アップロードされた一時ファイルのパス
             original_filename: 元のファイル名
             title: 曲名
@@ -69,14 +67,14 @@ class BGMService:
             )
 
         # Firebase Storage にアップロード
-        storage_path = f"{self.STORAGE_PREFIX}/{user_id}/{bgm_id}{ext}"
+        storage_path = f"{self.STORAGE_PREFIX}/system/{bgm_id}{ext}"
         storage_url = self.storage.upload_file(file_path, storage_path)
 
         # Firestore にメタデータを保存
         now = datetime.utcnow().isoformat()
         bgm_doc = {
             "bgm_id": bgm_id,
-            "user_id": user_id,
+            "user_id": "system",
             "title": title,
             "description": description,
             "keywords": keywords or [],
@@ -93,11 +91,10 @@ class BGMService:
         logger.info(f"BGM登録完了: {bgm_id} — '{title}' ({ext}, {file_size / 1024:.0f}KB)")
         return bgm_doc
 
-    def list_bgm(self, user_id: str) -> list[dict]:
-        """ユーザーの登録済みBGM一覧を取得"""
+    def list_bgm(self) -> list[dict]:
+        """登録済みBGM一覧（システム全体）を取得"""
         docs = (
             self.firestore.db.collection(self.COLLECTION_NAME)
-            .where("user_id", "==", user_id)
             .stream()
         )
         results = [doc.to_dict() for doc in docs]
@@ -112,13 +109,11 @@ class BGMService:
             return doc.to_dict()
         return None
 
-    def update_bgm(self, bgm_id: str, user_id: str, **kwargs) -> dict:
+    def update_bgm(self, bgm_id: str, **kwargs) -> dict:
         """BGMメタデータを更新"""
         bgm = self.get_bgm(bgm_id)
         if not bgm:
             raise ValueError(f"BGMが見つかりません: {bgm_id}")
-        if bgm["user_id"] != user_id:
-            raise PermissionError("このBGMを更新する権限がありません")
 
         allowed_fields = {"title", "description", "keywords"}
         update_data = {k: v for k, v in kwargs.items() if k in allowed_fields}
@@ -129,13 +124,11 @@ class BGMService:
         logger.info(f"BGM更新: {bgm_id} — フィールド: {list(update_data.keys())}")
         return bgm
 
-    def delete_bgm(self, bgm_id: str, user_id: str) -> bool:
+    def delete_bgm(self, bgm_id: str) -> bool:
         """BGMを削除（Storage + Firestore）"""
         bgm = self.get_bgm(bgm_id)
         if not bgm:
             raise ValueError(f"BGMが見つかりません: {bgm_id}")
-        if bgm["user_id"] != user_id:
-            raise PermissionError("このBGMを削除する権限がありません")
 
         # Storage から削除
         try:
@@ -164,7 +157,6 @@ class BGMService:
         self,
         theme: str,
         script_data: dict,
-        user_id: str,
         gemini_api_key: str,
     ) -> Optional[dict]:
         """
@@ -173,13 +165,12 @@ class BGMService:
         Args:
             theme: 動画のテーマ
             script_data: 台本データ
-            user_id: ユーザーID
             gemini_api_key: Gemini APIキー
 
         Returns:
             選択されたBGM情報、またはNone（BGM未登録の場合）
         """
-        bgm_list = self.list_bgm(user_id)
+        bgm_list = self.list_bgm()
         if not bgm_list:
             logger.info("BGMが未登録のため、BGMなしで動画を生成します")
             return None
