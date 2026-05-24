@@ -26,7 +26,47 @@ class ScriptGenerator:
         if not key:
             raise ValueError("Gemini APIキーが設定されていません。設定画面でAPIキーを入力してください。")
         genai.configure(api_key=key)
-        self.model = genai.GenerativeModel(config.GEMINI_MODEL)
+        self.primary_model_name = config.GEMINI_MODEL
+        self.fallback_models = config.GEMINI_FALLBACK_MODELS
+
+    async def _try_generate(self, prompt: str, generation_config: dict) -> str:
+        """フォールバックモデルを含めてGemini APIを呼び出す"""
+        # まずプライマリモデルを先頭に、重複を除いたモデルリストを作成
+        models_to_try = [self.primary_model_name]
+        for m in self.fallback_models:
+            if m not in models_to_try:
+                models_to_try.append(m)
+
+        last_error = None
+        for model_name in models_to_try:
+            model = genai.GenerativeModel(model_name)
+            # 各モデルで最大2回リトライ
+            for attempt in range(2):
+                try:
+                    logger.info(f"Gemini API呼び出し: model={model_name} (attempt {attempt+1})")
+                    response = await model.generate_content_async(
+                        prompt,
+                        generation_config=generation_config
+                    )
+                    return response.text.strip()
+                except Exception as e:
+                    last_error = e
+                    if "429" in str(e):
+                        if attempt == 0:
+                            logger.warning(f"モデル {model_name} で429エラー、{10}秒後にリトライ...")
+                            await asyncio.sleep(10)
+                        else:
+                            logger.warning(f"モデル {model_name} のクォータ枯渇、次のモデルへフォールバック")
+                            break  # 次のモデルへ
+                    else:
+                        raise  # 429以外のエラーはそのままraise
+
+        # 全モデル試してもダメだった場合
+        raise Exception(
+            f"全てのGeminiモデル ({', '.join(models_to_try)}) でクォータ制限に達しました。"
+            f"しばらく時間をおいてから再試行するか、Google AI Studioで課金設定をご確認ください。"
+            f"\n最後のエラー: {last_error}"
+        )
 
     async def generate(
         self,
@@ -101,25 +141,7 @@ class ScriptGenerator:
             generation_config = {
                 "response_mime_type": "application/json"
             }
-            max_retries = 4
-            delay = 10
-            response = None
-            for attempt in range(max_retries):
-                try:
-                    response = await self.model.generate_content_async(
-                        prompt,
-                        generation_config=generation_config
-                    )
-                    break
-                except Exception as e:
-                    if "429" in str(e) and attempt < max_retries - 1:
-                        logger.warning(f"Gemini API limit exceeded (429), retrying in {delay}s... (Attempt {attempt+1}/{max_retries})")
-                        await asyncio.sleep(delay)
-                        delay *= 2
-                    else:
-                        raise
-            
-            text = response.text.strip()
+            text = await self._try_generate(prompt, generation_config)
 
             # JSONブロックを抽出（念のためのフォールバック処理）
             if "```json" in text:
@@ -147,3 +169,4 @@ class ScriptGenerator:
         except Exception as e:
             logger.error(f"台本生成に失敗: {e}")
             raise
+

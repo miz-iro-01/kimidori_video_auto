@@ -2,6 +2,7 @@ import logging
 import asyncio
 from typing import List, Dict, Optional
 import google.generativeai as genai
+import config
 
 # Keyless YouTube Tools
 from youtubesearchpython import VideosSearch
@@ -17,7 +18,35 @@ class ResearchEngine:
         if not gemini_api_key:
             raise ValueError("Gemini APIキーが設定されていません。")
         genai.configure(api_key=gemini_api_key)
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        self.fallback_models = config.GEMINI_FALLBACK_MODELS
+
+    async def _try_generate(self, prompt: str) -> str:
+        """フォールバックモデルを含めてGemini APIを呼び出す"""
+        last_error = None
+        for model_name in self.fallback_models:
+            model = genai.GenerativeModel(model_name)
+            for attempt in range(2):
+                try:
+                    logger.info(f"Gemini API呼び出し (research): model={model_name} (attempt {attempt+1})")
+                    response = await model.generate_content_async(prompt)
+                    return response.text.strip()
+                except Exception as e:
+                    last_error = e
+                    if "429" in str(e):
+                        if attempt == 0:
+                            logger.warning(f"モデル {model_name} で429エラー、10秒後にリトライ...")
+                            await asyncio.sleep(10)
+                        else:
+                            logger.warning(f"モデル {model_name} のクォータ枯渇、次のモデルへフォールバック")
+                            break
+                    else:
+                        raise
+
+        raise Exception(
+            f"全てのGeminiモデルでクォータ制限に達しました。"
+            f"しばらく時間をおいてから再試行してください。"
+            f"\n最後のエラー: {last_error}"
+        )
 
     def search_trending_shorts(self, keyword: str, limit: int = 5) -> List[Dict]:
         """キーワードに関連するショート動画を検索"""
@@ -139,26 +168,12 @@ class ResearchEngine:
 4. 【狙うべきターゲット・感情】: どんな悩みを持つ人に向けて、どんな感情（驚き、納得など）を引き起こすべきか。
 """
         try:
-            max_retries = 4
-            delay = 10
-            response = None
-            for attempt in range(max_retries):
-                try:
-                    response = await self.model.generate_content_async(prompt)
-                    break
-                except Exception as e:
-                    if "429" in str(e) and attempt < max_retries - 1:
-                        logger.warning(f"Gemini API limit exceeded (429), retrying in {delay}s... (Attempt {attempt+1}/{max_retries})")
-                        await asyncio.sleep(delay)
-                        delay *= 2
-                    else:
-                        raise
-                        
+            analysis_text = await self._try_generate(prompt)
             return {
                 "success": True,
                 "keyword": keyword,
                 "analyzed_videos": analyzed_data,
-                "analysis_result": response.text.strip()
+                "analysis_result": analysis_text
             }
         except Exception as e:
             logger.error(f"Gemini解析エラー: {e}")
