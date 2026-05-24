@@ -276,6 +276,7 @@ class AppController {
       document.querySelectorAll('.wizard-step').forEach(el => el.style.display = 'none');
       document.getElementById(`step${stepNum}`).style.display = 'block';
     };
+    this.showStep = showStep;
 
     // STEP 1: リサーチ開始
     document.getElementById('btnRunResearch')?.addEventListener('click', async () => {
@@ -295,12 +296,12 @@ class AppController {
         document.getElementById('execPanelA').style.display = 'block';
         document.getElementById('videoResultPanel').style.display = 'none';
         document.getElementById('execTitleA').textContent = "完全自動でリサーチから動画生成、投稿まで実行中...";
-        this.simulateProgress('A');
         
         try {
           // script_data=null, auto_post=true でリクエスト
-          await window.apiClient.generateVideo(theme, "informative", 45, target, null, true);
+          const res = await window.apiClient.generateVideo(theme, "informative", 45, target, null, true);
           this.showToast("完全自動投稿タスクが開始されました！", "success");
+          this.startJobPolling(res.job_id, 'A');
         } catch(e) {
           this.showToast(e.message, "error");
           showStep(1);
@@ -372,7 +373,7 @@ class AppController {
 
       try {
         // 編集済みのscript_dataを渡して動画生成
-        await window.apiClient.generateVideo(
+        const res = await window.apiClient.generateVideo(
           this.wizardState.theme, 
           this.wizardState.style, 
           this.wizardState.duration, 
@@ -381,14 +382,7 @@ class AppController {
           false
         );
         this.showToast("動画の生成リクエストを送信しました！", "success");
-        
-        // 実際にはFirestore等のリスナーで完了検知するが、今回はモックとして完了画面へ切り替え
-        setTimeout(() => {
-          document.getElementById('execPanelA').style.display = 'none';
-          document.getElementById('videoResultPanel').style.display = 'block';
-          // デモ用に適当な動画URLをセット（実際はstorageのURLが入る）
-          document.getElementById('finalVideoPlayer').src = "https://www.w3schools.com/html/mov_bbb.mp4";
-        }, 8000);
+        this.startJobPolling(res.job_id, 'A');
 
       } catch (err) {
         this.showToast(err.message, "error");
@@ -466,6 +460,70 @@ class AppController {
         }
       });
     }
+  }
+
+  startJobPolling(jobId, mode) {
+    const bar = document.getElementById(`execBar${mode}`);
+    const title = document.getElementById(`execTitle${mode}`);
+    const panel = document.getElementById(`execPanel${mode}`);
+    const resultPanel = document.getElementById('videoResultPanel');
+    const player = document.getElementById('finalVideoPlayer');
+    const downloadBtn = document.getElementById('btnDownloadVideo');
+
+    if (!bar || !title) return;
+
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+    }
+
+    const apiUrl = window.apiClient.baseUrl;
+
+    this.pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/jobs/${jobId}`);
+        if (!res.ok) throw new Error(`ステータス取得エラー: ${res.status}`);
+        const job = await res.json();
+
+        // UIを更新
+        bar.style.width = `${job.progress}%`;
+        title.textContent = `${job.message} (${job.progress}%)`;
+
+        if (job.status === "completed") {
+          clearInterval(this.pollInterval);
+          this.pollInterval = null;
+
+          if (panel) panel.style.display = 'none';
+          if (resultPanel) resultPanel.style.display = 'block';
+
+          // 完成動画のURLを設定
+          const videoUrl = job.storage_url || `${apiUrl}/api/download/${jobId}`;
+          if (player) {
+            player.src = videoUrl;
+            player.load();
+          }
+
+          if (downloadBtn) {
+            downloadBtn.href = videoUrl;
+          }
+
+          this.showToast("動画の生成が完了しました！", "success");
+        } else if (job.status === "failed") {
+          clearInterval(this.pollInterval);
+          this.pollInterval = null;
+
+          if (panel) panel.style.display = 'none';
+          this.showToast(`動画生成に失敗: ${job.message}`, "error");
+
+          // 失敗した場合は入力画面に戻す
+          const isAuto = document.getElementById('checkAutoMode')?.checked;
+          if (this.showStep) {
+            this.showStep(isAuto ? 1 : 3);
+          }
+        }
+      } catch (err) {
+        console.error("ポーリング中にエラーが発生しました:", err);
+      }
+    }, 4000); // 4秒間隔
   }
 
   simulateProgress(mode) {
