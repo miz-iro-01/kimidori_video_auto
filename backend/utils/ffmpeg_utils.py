@@ -114,3 +114,112 @@ def create_scene_clip(
     if result.returncode != 0:
         raise RuntimeError(f"シーンクリップ生成失敗: {result.stderr[-200:]}")
     return output_path
+
+
+def get_audio_duration(audio_path: Path) -> float:
+    """音声ファイルの長さ（秒）を取得"""
+    cmd = [
+        "ffprobe", "-v", "quiet", "-print_format", "json",
+        "-show_format", str(audio_path),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    if result.returncode != 0:
+        raise RuntimeError(f"音声情報取得に失敗: {result.stderr}")
+    data = json.loads(result.stdout)
+    return float(data.get("format", {}).get("duration", 0))
+
+
+def mix_bgm_to_video(
+    video_path: Path,
+    bgm_path: Path,
+    output_path: Path,
+    bgm_volume: float = 0.15,
+    fade_in: float = 1.0,
+    fade_out: float = 2.0,
+) -> Path:
+    """
+    動画にBGMをミックスする
+
+    Args:
+        video_path: 入力動画（ナレーション音声付き）
+        bgm_path: BGM音源ファイル
+        output_path: 出力動画パス
+        bgm_volume: BGMの音量レベル（0.0〜1.0、デフォルト0.15 = かなり控えめ）
+        fade_in: BGMのフェードイン時間（秒）
+        fade_out: BGMのフェードアウト時間（秒）
+
+    Returns:
+        Path: 出力動画のパス
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 動画の長さを取得
+    video_info = get_video_info(video_path)
+    video_duration = video_info["duration"]
+
+    if video_duration <= 0:
+        logger.warning("動画の長さが0秒以下のため、BGMミキシングをスキップします")
+        return video_path
+
+    # フェードアウト開始位置
+    fade_out_start = max(0, video_duration - fade_out)
+
+    # BGM音声フィルター:
+    # 1. BGMをループ再生して動画の長さに合わせる（-stream_loop -1 で無限ループ）
+    # 2. BGMの音量を調整
+    # 3. フェードイン/アウトを適用
+    # 4. 動画の長さに合わせてトリミング
+    # 5. ナレーション音声とミックス
+    bgm_filter = (
+        f"[1:a]aloop=loop=-1:size=2e+09,atrim=0:{video_duration},"
+        f"volume={bgm_volume},"
+        f"afade=t=in:st=0:d={fade_in},"
+        f"afade=t=out:st={fade_out_start}:d={fade_out}[bgm];"
+        f"[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+    )
+
+    cmd = [
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-i", str(video_path),
+        "-stream_loop", "-1", "-i", str(bgm_path),
+        "-filter_complex", bgm_filter,
+        "-map", "0:v", "-map", "[aout]",
+        "-c:v", "copy",
+        "-c:a", "aac", "-b:a", "192k",
+        "-shortest",
+        str(output_path),
+    ]
+
+    logger.info(
+        f"BGMミキシング実行: volume={bgm_volume}, "
+        f"fade_in={fade_in}s, fade_out={fade_out}s, "
+        f"video_duration={video_duration:.1f}s"
+    )
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if result.returncode != 0:
+        logger.error(f"BGMミキシング失敗: {result.stderr[-300:]}")
+        # フォールバック: aloop なしで単純なミキシングを試行
+        bgm_filter_simple = (
+            f"[1:a]volume={bgm_volume},"
+            f"afade=t=in:st=0:d={fade_in},"
+            f"afade=t=out:st={fade_out_start}:d={fade_out}[bgm];"
+            f"[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+        )
+        cmd_fallback = [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-i", str(video_path),
+            "-i", str(bgm_path),
+            "-filter_complex", bgm_filter_simple,
+            "-map", "0:v", "-map", "[aout]",
+            "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "192k",
+            "-shortest",
+            str(output_path),
+        ]
+        result2 = subprocess.run(cmd_fallback, capture_output=True, text=True, timeout=300)
+        if result2.returncode != 0:
+            logger.error(f"BGMミキシング（フォールバック）も失敗: {result2.stderr[-300:]}")
+            raise RuntimeError(f"BGMミキシングに失敗しました: {result2.stderr[-200:]}")
+
+    logger.info(f"BGMミキシング完了: {output_path}")
+    return output_path

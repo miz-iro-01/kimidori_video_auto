@@ -19,6 +19,7 @@ import config
 from services.firestore_service import FirestoreService
 from services.storage_service import StorageService
 from services.youtube_service import YouTubeService
+from services.bgm_service import BGMService
 from processors.mode_a import ModeAProcessor
 from processors.mode_b import ModeBProcessor
 
@@ -46,6 +47,7 @@ app.add_middleware(
 firestore = FirestoreService()
 storage = StorageService()
 youtube = YouTubeService(firestore_service=firestore)
+bgm_service = BGMService(firestore_service=firestore, storage_service=storage)
 
 
 # =============================================================================
@@ -67,6 +69,11 @@ class ModeARequest(BaseModel):
     google_tts_key: str = Field("", description="Google Cloud TTS用APIキー")
     elevenlabs_key: str = Field("", description="ElevenLabs APIキー")
     aivis_key: str = Field("", description="Aivis Cloud APIキー")
+    
+    # BGM Settings
+    bgm_mode: str = Field("none", description="BGMモード: auto(自動選曲), manual(手動選択), none(BGMなし)")
+    bgm_id: Optional[str] = Field(None, description="手動選択時のBGM ID")
+    bgm_volume: float = Field(0.15, description="BGM音量 (0.0〜1.0)")
     
     script_data: Optional[dict] = Field(None, description="編集済みの台本データ（あれば生成をスキップ）")
     auto_post: bool = Field(False, description="完全自動投稿フラグ")
@@ -148,6 +155,9 @@ async def process_mode_a(request: ModeARequest, background_tasks: BackgroundTask
             aivis_key=request.aivis_key,
             script_data=request.script_data,
             auto_post=request.auto_post,
+            bgm_mode=request.bgm_mode,
+            bgm_id=request.bgm_id,
+            bgm_volume=request.bgm_volume,
         )
 
         logger.info(f"モードAジョブ開始: {job_id} テーマ='{request.theme}' 自動投稿={request.auto_post}")
@@ -330,6 +340,9 @@ async def run_mode_a_pipeline(
     aivis_key: str = "",
     script_data: dict = None,
     auto_post: bool = False,
+    bgm_mode: str = "none",
+    bgm_id: str = None,
+    bgm_volume: float = 0.15,
 ):
     """モードAの処理パイプライン全体を実行"""
     processor = ModeAProcessor(
@@ -362,11 +375,37 @@ async def run_mode_a_pipeline(
         firestore.update_job(job_id, progress=50, message="画像素材を生成中...")
         image_paths = await processor.generate_visuals(script_data, job_id)
 
-        # 4. 動画合成 (70%)
-        firestore.update_job(job_id, progress=70, message="動画を合成中...")
+        # 4. 動画合成 (65%)
+        firestore.update_job(job_id, progress=65, message="動画を合成中...")
         video_path = await processor.compose_video(
             script_data, audio_path, image_paths, job_id, duration
         )
+
+        # 4.5. BGMミキシング (75%)
+        if bgm_mode != "none":
+            firestore.update_job(job_id, progress=75, message="BGMを選曲・ミキシング中...")
+            try:
+                selected_bgm = None
+                if bgm_mode == "auto":
+                    selected_bgm = await bgm_service.select_bgm_for_theme(
+                        theme, script_data, user_id, gemini_api_key
+                    )
+                elif bgm_mode == "manual" and bgm_id:
+                    selected_bgm = bgm_service.get_bgm(bgm_id)
+
+                if selected_bgm:
+                    job_dir = config.TMP_DIR / job_id
+                    bgm_file = bgm_service.download_bgm(selected_bgm["bgm_id"], job_dir)
+                    from utils.ffmpeg_utils import mix_bgm_to_video
+                    video_with_bgm = job_dir / "final_with_bgm.mp4"
+                    mix_bgm_to_video(video_path, bgm_file, video_with_bgm, bgm_volume=bgm_volume)
+                    video_path = video_with_bgm
+                    firestore.update_job(job_id, progress=80, message=f"BGM '{selected_bgm['title']}' をミックスしました")
+                else:
+                    firestore.update_job(job_id, progress=80, message="BGMが見つからないため、BGMなしで続行します")
+            except Exception as e:
+                logger.warning(f"BGMミキシングに失敗しました（BGMなしで続行）: {e}")
+                firestore.update_job(job_id, progress=80, message=f"BGMミキシングをスキップ: {str(e)[:50]}")
 
         # 5. Cloud Storageにアップロード (85%)
         firestore.update_job(job_id, progress=85, message="動画をアップロード中...")
@@ -571,6 +610,110 @@ async def delete_youtube_channel(channel_id: str, user_id: str):
         return {"success": True, "message": f"チャンネル {channel_id} の連携を解除しました"}
     except Exception as e:
         logger.error(f"Failed to delete channel: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# BGM管理 API
+# =============================================================================
+from fastapi import UploadFile, File, Form
+
+
+@app.post("/api/bgm/upload")
+async def upload_bgm(
+    file: UploadFile = File(...),
+    user_id: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(""),
+    keywords: str = Form(""),
+):
+    """BGM楽曲をアップロードして登録する"""
+    try:
+        # 一時ファイルに保存
+        tmp_dir = config.TMP_DIR / "bgm_uploads"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_path = tmp_dir / file.filename
+
+        with open(tmp_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+
+        # キーワードをリストに変換（カンマ区切り）
+        kw_list = [k.strip() for k in keywords.split(",") if k.strip()] if keywords else []
+
+        result = bgm_service.register_bgm(
+            user_id=user_id,
+            file_path=tmp_path,
+            original_filename=file.filename,
+            title=title,
+            description=description,
+            keywords=kw_list,
+        )
+
+        # 一時ファイルを削除
+        tmp_path.unlink(missing_ok=True)
+
+        return {"success": True, "bgm": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"BGMアップロード失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"BGMアップロードに失敗しました: {str(e)}")
+
+
+@app.get("/api/bgm/list")
+async def list_bgm(user_id: str):
+    """ユーザーの登録済みBGM一覧を取得"""
+    try:
+        bgm_list = bgm_service.list_bgm(user_id)
+        return {"bgm_tracks": bgm_list}
+    except Exception as e:
+        logger.error(f"BGM一覧取得失敗: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/bgm/{bgm_id}")
+async def delete_bgm(bgm_id: str, user_id: str):
+    """BGMを削除する"""
+    try:
+        bgm_service.delete_bgm(bgm_id, user_id)
+        return {"success": True, "message": f"BGM {bgm_id} を削除しました"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"BGM削除失敗: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class BGMUpdateRequest(BaseModel):
+    user_id: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    keywords: Optional[list[str]] = None
+
+
+@app.put("/api/bgm/{bgm_id}")
+async def update_bgm(bgm_id: str, req: BGMUpdateRequest):
+    """BGMメタデータを更新する"""
+    try:
+        update_fields = {}
+        if req.title is not None:
+            update_fields["title"] = req.title
+        if req.description is not None:
+            update_fields["description"] = req.description
+        if req.keywords is not None:
+            update_fields["keywords"] = req.keywords
+
+        result = bgm_service.update_bgm(bgm_id, req.user_id, **update_fields)
+        return {"success": True, "bgm": result}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"BGM更新失敗: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

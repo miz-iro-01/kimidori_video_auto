@@ -299,7 +299,7 @@ class AppController {
         
         try {
           // script_data=null, auto_post=true でリクエスト
-          const res = await window.apiClient.generateVideo(theme, "informative", 45, target, null, true);
+          const res = await window.apiClient.generateVideo(theme, "informative", 45, target, null, true, this._getBgmOptions());
           this.showToast("完全自動投稿タスクが開始されました！", "success");
           this.startJobPolling(res.job_id, 'A');
         } catch(e) {
@@ -379,7 +379,8 @@ class AppController {
           this.wizardState.duration, 
           this.wizardState.target,
           this.wizardState.scriptData,
-          false
+          false,
+          this._getBgmOptions()
         );
         this.showToast("動画の生成リクエストを送信しました！", "success");
         this.startJobPolling(res.job_id, 'A');
@@ -941,8 +942,221 @@ class AppController {
       setTimeout(() => toast.remove(), 300);
     }, 4000);
   }
+
+  // --- BGM管理 ---
+  _getBgmOptions() {
+    const mode = document.getElementById('bgmModeSelect')?.value || 'none';
+    const bgmId = document.getElementById('bgmTrackSelect')?.value || null;
+    const volume = (parseInt(document.getElementById('bgmVolumeSlider')?.value || '15')) / 100;
+    return { mode, bgmId, volume };
+  }
+
+  initBGMManager() {
+    // BGMアップロードゾーン
+    const uploadZone = document.getElementById('bgmUploadZone');
+    const fileInput = document.getElementById('bgmFileInput');
+    const uploadBtn = document.getElementById('btnUploadBGM');
+    const fileNameDisplay = document.getElementById('bgmFileName');
+    let selectedFile = null;
+
+    if (!uploadZone) return;
+
+    uploadZone.addEventListener('click', () => fileInput?.click());
+    uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        selectedFile = e.dataTransfer.files[0];
+        fileNameDisplay.textContent = `選択済み: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(1)}MB)`;
+        uploadBtn.disabled = false;
+      }
+    });
+
+    fileInput?.addEventListener('change', () => {
+      if (fileInput.files.length > 0) {
+        selectedFile = fileInput.files[0];
+        fileNameDisplay.textContent = `選択済み: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(1)}MB)`;
+        uploadBtn.disabled = false;
+      }
+    });
+
+    // アップロードボタン
+    uploadBtn?.addEventListener('click', async () => {
+      const title = document.getElementById('bgmTitle')?.value.trim();
+      const description = document.getElementById('bgmDescription')?.value.trim();
+      const keywords = document.getElementById('bgmKeywords')?.value.trim();
+
+      if (!selectedFile) return this.showToast('音源ファイルを選択してください', 'error');
+      if (!title) return this.showToast('曲名を入力してください', 'error');
+
+      uploadBtn.disabled = true;
+      uploadBtn.innerHTML = '<span class="btn-text">アップロード中...</span>';
+
+      try {
+        await window.apiClient.uploadBGM(selectedFile, title, description, keywords);
+        this.showToast(`BGM「${title}」を登録しました！`, 'success');
+
+        // フォームリセット
+        selectedFile = null;
+        fileInput.value = '';
+        fileNameDisplay.textContent = '';
+        document.getElementById('bgmTitle').value = '';
+        document.getElementById('bgmDescription').value = '';
+        document.getElementById('bgmKeywords').value = '';
+
+        // 一覧を更新
+        this.loadBGMList();
+      } catch (err) {
+        this.showToast('BGMアップロード失敗: ' + err.message, 'error');
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<span class="btn-text">BGMを登録する</span>';
+      }
+    });
+
+    // BGMモード切替
+    const bgmModeSelect = document.getElementById('bgmModeSelect');
+    bgmModeSelect?.addEventListener('change', () => {
+      const manualSection = document.getElementById('bgmManualSelect');
+      if (manualSection) {
+        manualSection.style.display = bgmModeSelect.value === 'manual' ? 'block' : 'none';
+      }
+      if (bgmModeSelect.value === 'manual') {
+        this.loadBGMSelectOptions();
+      }
+    });
+
+    // BGMトラック選択時のプレビュー
+    const bgmTrackSelect = document.getElementById('bgmTrackSelect');
+    bgmTrackSelect?.addEventListener('change', () => {
+      const previewContainer = document.getElementById('bgmPreviewContainer');
+      const previewAudio = document.getElementById('bgmPreviewAudio');
+      const selectedOption = bgmTrackSelect.options[bgmTrackSelect.selectedIndex];
+      if (selectedOption && selectedOption.dataset.url) {
+        previewAudio.src = selectedOption.dataset.url;
+        previewContainer.style.display = 'block';
+      } else {
+        previewContainer.style.display = 'none';
+      }
+    });
+
+    // 音量スライダー
+    const volumeSlider = document.getElementById('bgmVolumeSlider');
+    const volumeLabel = document.getElementById('bgmVolumeLabel');
+    volumeSlider?.addEventListener('input', () => {
+      volumeLabel.textContent = `${volumeSlider.value}%`;
+    });
+
+    // 初回読み込み
+    this.loadBGMList();
+  }
+
+  async loadBGMList() {
+    const container = document.getElementById('bgmTrackList');
+    if (!container) return;
+
+    try {
+      const data = await window.apiClient.listBGM();
+      const tracks = data.bgm_tracks || [];
+
+      if (tracks.length === 0) {
+        container.innerHTML = `<div class="empty-state" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+          🎵 BGMが未登録です。左のフォームから楽曲を登録してください。
+        </div>`;
+        return;
+      }
+
+      container.innerHTML = tracks.map(t => `
+        <div class="glass-card" style="padding: 1rem; margin-bottom: 0.75rem; border: 1px solid var(--border-color);" data-bgm-id="${t.bgm_id}">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">🎵 ${this._escapeHtml(t.title)}</div>
+              <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.4;">${this._escapeHtml(t.description || '説明なし')}</div>
+              ${t.keywords && t.keywords.length > 0 ? `<div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">${t.keywords.map(k => `<span style="background: rgba(57, 255, 20, 0.1); color: var(--accent-primary); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.7rem;">${this._escapeHtml(k)}</span>`).join('')}</div>` : ''}
+              <div style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.35rem;">
+                ${t.original_filename} • ${(t.file_size / 1024 / 1024).toFixed(1)}MB
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; flex-shrink: 0;">
+              <button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="window.appController.playBGMPreview('${t.storage_url}')">
+                ▶ 試聴
+              </button>
+              <button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; border-color: rgba(255,80,80,0.3); color: #ff5050;" onclick="window.appController.deleteBGMTrack('${t.bgm_id}', '${this._escapeHtml(t.title)}')">
+                🗑 削除
+              </button>
+            </div>
+          </div>
+          <audio class="bgm-audio-player" style="width: 100%; margin-top: 0.5rem; display: none; height: 32px;" controls></audio>
+        </div>
+      `).join('');
+    } catch (err) {
+      container.innerHTML = `<div style="padding: 1rem; color: #ff5050; font-size: 0.85rem;">BGM一覧の取得に失敗しました: ${err.message}</div>`;
+    }
+  }
+
+  async loadBGMSelectOptions() {
+    const select = document.getElementById('bgmTrackSelect');
+    if (!select) return;
+
+    try {
+      const data = await window.apiClient.listBGM();
+      const tracks = data.bgm_tracks || [];
+      select.innerHTML = '<option value="">-- 登録済みBGMを選択 --</option>';
+      tracks.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.bgm_id;
+        opt.textContent = `🎵 ${t.title} — ${t.description || '説明なし'}`;
+        opt.dataset.url = t.storage_url;
+        select.appendChild(opt);
+      });
+    } catch (err) {
+      console.error('BGM候補の取得に失敗:', err);
+    }
+  }
+
+  playBGMPreview(url) {
+    // 既存の再生を停止
+    document.querySelectorAll('.bgm-audio-player').forEach(p => { p.pause(); p.style.display = 'none'; });
+    // 対象カードのプレイヤーを表示・再生
+    const cards = document.querySelectorAll('[data-bgm-id]');
+    cards.forEach(card => {
+      const player = card.querySelector('.bgm-audio-player');
+      if (player) {
+        player.src = url;
+        player.style.display = 'block';
+        player.play().catch(() => {});
+      }
+    });
+    // 全カードではなく最初にurlと一致するカードだけ再生するように修正
+    // 簡易実装: 新しいAudioを使用
+    if (this._bgmPreviewAudio) this._bgmPreviewAudio.pause();
+    this._bgmPreviewAudio = new Audio(url);
+    this._bgmPreviewAudio.play().catch(() => {});
+  }
+
+  async deleteBGMTrack(bgmId, title) {
+    if (!confirm(`BGM「${title}」を削除しますか？この操作は取り消せません。`)) return;
+
+    try {
+      await window.apiClient.deleteBGM(bgmId);
+      this.showToast(`BGM「${title}」を削除しました`, 'success');
+      this.loadBGMList();
+    } catch (err) {
+      this.showToast('BGM削除に失敗: ' + err.message, 'error');
+    }
+  }
+
+  _escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   window.appController = new AppController();
+  // BGM管理の初期化（DOMロード後に実行）
+  setTimeout(() => window.appController.initBGMManager(), 500);
 });

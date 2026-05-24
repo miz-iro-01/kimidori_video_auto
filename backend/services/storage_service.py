@@ -72,3 +72,22 @@ class StorageService:
 
         logger.info(f"ダウンロード完了: {storage_path} → {local_path}")
         return local_path
+
+    def delete_file(self, storage_path: str) -> bool:
+        """
+        Cloud Storage上のファイルを削除
+
+        Args:
+            storage_path: Storage上のファイルパス
+
+        Returns:
+            bool: 削除が成功したかどうか
+        """
+        try:
+            blob = self.bucket.blob(storage_path)
+            blob.delete()
+            logger.info(f"削除完了: {storage_path}")
+            return True
+        except Exception as e:
+            logger.warning(f"ファイル削除に失敗: {storage_path} — {e}")
+            return False
