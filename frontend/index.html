@@ -544,6 +544,59 @@
           </div>
         </div>
 
+        <!-- システムBGM管理 (管理者専用) -->
+        <div class="glass-card" style="margin-top: 2rem;">
+          <div class="card-header-icon"><span style="font-size: 1.2rem;">🎵</span> <h3>システムBGM管理 (グローバル)</h3></div>
+          <p class="card-desc">システム全体で使用されるBGM楽曲を登録・管理します。一般ユーザーの動画生成時にここで登録されたBGMが適用されます。</p>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1rem;">
+            <!-- BGMアップロード -->
+            <div>
+              <h4 style="color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 0.95rem;">📤 新規BGMの登録</h4>
+              <div class="guide-box" style="margin-bottom: 1rem; border-left: 3px solid var(--accent-secondary); padding: 0.75rem;">
+                <p style="font-size: 0.75rem; margin: 0; line-height: 1.5;">
+                  💡 <strong>TuneCoreとの連携について</strong><br>
+                  ここにTuneCoreにアップロード済みの音源を登録することで、一般ユーザーの動画に使用された際に楽曲収益を得ることができます。
+                </p>
+              </div>
+              
+              <div class="upload-zone" id="bgmUploadZone" style="min-height: 80px; padding: 1rem;">
+                <div class="upload-icon" style="font-size: 1.5rem;">🎵</div>
+                <h3 style="font-size: 0.9rem;">音源ファイルをドロップ</h3>
+                <p style="font-size: 0.75rem;">MP3, WAV等（最大50MB）</p>
+                <input type="file" id="bgmFileInput" accept="audio/*" hidden>
+              </div>
+              <div id="bgmFileName" class="selected-file-name" style="margin-top: 0.5rem;"></div>
+
+              <div class="form-group" style="margin-top: 1rem;">
+                <label class="form-label">曲名 *</label>
+                <input type="text" id="bgmTitle" class="form-input" placeholder="例：夕暮れのメロディー">
+              </div>
+              <div class="form-group">
+                <label class="form-label">曲の説明・雰囲気</label>
+                <textarea id="bgmDescription" class="form-input form-textarea" rows="3" placeholder="AI自動選曲用の説明"></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">キーワード（カンマ区切り）</label>
+                <input type="text" id="bgmKeywords" class="form-input" placeholder="例：ピアノ, 穏やか">
+              </div>
+              <button class="btn btn-primary" id="btnUploadBGM" style="width: 100%;" disabled>
+                <span class="btn-text">システムBGMとして登録</span>
+              </button>
+            </div>
+
+            <!-- BGM一覧 -->
+            <div>
+              <h4 style="color: var(--accent-secondary); margin-bottom: 0.5rem; font-size: 0.95rem;">📋 登録済みBGM一覧</h4>
+              <div id="bgmTrackList" style="margin-top: 0; max-height: 600px; overflow-y: auto;">
+                <div class="empty-state" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                  🎵 BGMが未登録です。
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 登録ユーザー一覧 -->
         <div class="glass-card" style="margin-top: 2rem;">
           <h3 class="card-title">👥 システム管理者用ユーザーリスト</h3>
