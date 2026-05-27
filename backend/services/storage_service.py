@@ -48,32 +48,12 @@ class StorageService:
         blob = self.bucket.blob(destination_path)
         blob.upload_from_filename(str(local_path))
 
-        # 署名付きURLを生成（7日間有効）
-        from datetime import timedelta
-        try:
-            # ローカル環境など（秘密鍵を持つサービスアカウントJSON）の場合は通常通り生成可能
-            url = blob.generate_signed_url(expiration=timedelta(days=7))
-        except Exception as e:
-            # Cloud Run などのコンピュート環境では秘密鍵がないため、IAM APIを利用して署名する
-            import google.auth
-            from google.auth.iam import Signer
-            from google.auth.transport.requests import Request
-            
-            credentials, project = google.auth.default()
-            credentials.refresh(Request())
-            
-            sa_email = f"{project}-compute@developer.gserviceaccount.com"
-            signer = Signer(Request(), credentials, sa_email)
-            
-            url = blob.generate_signed_url(
-                version="v4",
-                expiration=timedelta(days=7),
-                service_account_email=sa_email,
-                signer=signer
-            )
-
+        # 署名付きURLの生成はCloud Run環境の認証エラーを避けるため行わず、
+        # 代わりにバックエンドのダウンロードAPIのURLまたはオブジェクトのパスを返す
         logger.info(f"アップロード完了: {destination_path}")
-        return url
+        
+        # storage上のパスをそのまま返す。ダウンローダーAPIがこれをハンドリングする
+        return destination_path
 
     def download_file(self, storage_path: str, local_path: Path) -> Path:
         """

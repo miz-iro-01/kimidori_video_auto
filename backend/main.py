@@ -301,8 +301,8 @@ async def run_research(request: ResearchRequest):
 # =============================================================================
 @app.get("/api/download/{job_id}")
 async def download_video(job_id: str):
-    """完成動画のダウンロードURL（署名付き）を返す"""
-    from fastapi.responses import RedirectResponse
+    """完成動画のバイナリを直接ストリーミングで返す"""
+    from fastapi.responses import RedirectResponse, StreamingResponse
     try:
         job = firestore.get_job(job_id)
         if not job:
@@ -310,14 +310,35 @@ async def download_video(job_id: str):
         if job.get("status") != "completed":
             raise HTTPException(status_code=400, detail="動画がまだ完成していません")
 
-        storage_url = job.get("storage_url")
-        if storage_url:
-            return RedirectResponse(url=storage_url)
+        storage_path = job.get("storage_url")
+        if not storage_path:
+            raise HTTPException(status_code=404, detail="動画ファイルが見つかりません")
 
-        raise HTTPException(status_code=404, detail="動画ファイルが見つかりません")
+        # 古いジョブで署名付きURLが保存されている場合の互換性
+        if storage_path.startswith("http"):
+            return RedirectResponse(url=storage_path)
+
+        blob = storage.bucket.blob(storage_path)
+        if not blob.exists():
+            raise HTTPException(status_code=404, detail="Storage上にファイルが見つかりません")
+
+        def iterfile():
+            # 1MB チャンクでストリーミング
+            with blob.open("rb") as f:
+                while chunk := f.read(1024 * 1024):
+                    yield chunk
+
+        return StreamingResponse(
+            iterfile(),
+            media_type="video/mp4",
+            headers={
+                "Content-Disposition": f"attachment; filename=kimidori_video_{job_id}.mp4"
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"ダウンロードエラー: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
