@@ -50,7 +50,27 @@ class StorageService:
 
         # 署名付きURLを生成（7日間有効）
         from datetime import timedelta
-        url = blob.generate_signed_url(expiration=timedelta(days=7))
+        try:
+            # ローカル環境など（秘密鍵を持つサービスアカウントJSON）の場合は通常通り生成可能
+            url = blob.generate_signed_url(expiration=timedelta(days=7))
+        except Exception as e:
+            # Cloud Run などのコンピュート環境では秘密鍵がないため、IAM APIを利用して署名する
+            import google.auth
+            from google.auth.iam import Signer
+            from google.auth.transport.requests import Request
+            
+            credentials, project = google.auth.default()
+            credentials.refresh(Request())
+            
+            sa_email = f"{project}-compute@developer.gserviceaccount.com"
+            signer = Signer(Request(), credentials, sa_email)
+            
+            url = blob.generate_signed_url(
+                version="v4",
+                expiration=timedelta(days=7),
+                service_account_email=sa_email,
+                signer=signer
+            )
 
         logger.info(f"アップロード完了: {destination_path}")
         return url
