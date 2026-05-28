@@ -496,8 +496,8 @@ class AppController {
           if (panel) panel.style.display = 'none';
           if (resultPanel) resultPanel.style.display = 'block';
 
-          // 完成動画のURLを設定
-          const videoUrl = job.storage_url || `${apiUrl}/api/download/${jobId}`;
+          // 完成動画のURLを設定（バックエンドのダウンロードAPIを使用）
+          const videoUrl = `${apiUrl}/api/download/${jobId}`;
           if (player) {
             player.src = videoUrl;
             player.load();

@@ -101,6 +101,7 @@ class JobStatusResponse(BaseModel):
     progress: int = 0
     message: str = ""
     youtube_url: Optional[str] = None
+    storage_url: Optional[str] = None
     created_at: Optional[str] = None
 
 
@@ -238,6 +239,7 @@ async def get_job_status(job_id: str):
             progress=job.get("progress", 0),
             message=job.get("message", ""),
             youtube_url=job.get("youtube_url"),
+            storage_url=job.get("storage_url"),
             created_at=job.get("created_at"),
         )
     except HTTPException:
@@ -440,6 +442,7 @@ async def run_mode_a_pipeline(
         youtube_url = youtube.upload_video(
             video_path=str(video_path),
             title=f"{theme} | KIMIDORI Movie Auto",
+            user_id=user_id,
             description=f"テーマ「{theme}」から自動生成された動画です。\n\n{script_data.get('description', '')}",
             tags=script_data.get("tags", ["自動生成", "AI"]),
             privacy_status="private",  # 非公開で投稿
