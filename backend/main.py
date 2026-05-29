@@ -396,12 +396,12 @@ async def run_mode_a_pipeline(
 
         # 3. 画像素材生成 (50%)
         firestore.update_job(job_id, progress=50, message="画像素材を生成中...")
-        image_paths = await processor.generate_visuals(script_data, job_id)
+        image_paths, text_paths = await processor.generate_visuals(script_data, job_id)
 
         # 4. 動画合成 (65%)
         firestore.update_job(job_id, progress=65, message="動画を合成中...")
         video_path = await processor.compose_video(
-            script_data, audio_path, image_paths, job_id, duration
+            script_data, audio_path, image_paths, text_paths, job_id, duration
         )
 
         # 4.5. BGMミキシング (75%)

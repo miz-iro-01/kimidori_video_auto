@@ -51,12 +51,13 @@ class ModeAProcessor:
         job_dir = self._get_job_dir(job_id)
         return await self.tts.synthesize_all_scenes(script_data["scenes"], job_dir)
 
-    async def generate_visuals(self, script_data: dict, job_id: str) -> list[Path]:
-        """グラデーション背景＋テロップ付き画像を生成"""
+    async def generate_visuals(self, script_data: dict, job_id: str) -> tuple[list[Path], list[Path]]:
+        \"\"\"グラデーション背景画像と、テロップ透過画像を別々に生成\"\"\"
         job_dir = self._get_job_dir(job_id)
         image_dir = job_dir / "images"
         image_dir.mkdir(parents=True, exist_ok=True)
         image_paths = []
+        text_paths = []
 
         # シーンごとに異なるグラデーション
         palettes = [
@@ -104,7 +105,7 @@ class ModeAProcessor:
                                 img_res = client.get(img_url)
                                 if img_res.status_code == 200:
                                     # Pexels画像を読み込み
-                                    downloaded = Image.open(httpx.AsyncClient()._get_async_response_content(img_res) if False else __import__('io').BytesIO(img_res.content))
+                                    downloaded = Image.open(__import__('io').BytesIO(img_res.content))
                                     downloaded = downloaded.convert("RGB")
                                     # アスペクト比を保持してリサイズ＆クロップ
                                     downloaded_ratio = downloaded.width / downloaded.height
@@ -149,37 +150,48 @@ class ModeAProcessor:
                     )
                 bg_image.paste(Image.alpha_composite(bg_image.convert("RGBA"), overlay).convert("RGB"))
 
-            # テロップテキスト描画
+            bg_image.save(img_path, "PNG", quality=95)
+            image_paths.append(img_path)
+
+            # --- テロップテキスト用透過画像の生成 ---
             text = scene.get("text_overlay", "")
             if text:
                 import textwrap
-                draw = ImageDraw.Draw(bg_image)
+                # リテラルの「\n」を実際の改行に変換
+                text = text.replace("\\n", "\n")
                 
                 # テキストに改行がない場合は、文字数で折り返す
-                if "\\n" not in text:
-                    # 日本語テキストの折り返しのため、全角文字を考慮して大体15〜20文字で折り返し
-                    text = "\\n".join(textwrap.wrap(text, width=18))
+                if "\n" not in text:
+                    # 日本語テキストの折り返しのため、全角文字を考慮して大体18文字で折り返し
+                    text = "\n".join(textwrap.wrap(text, width=18))
+                
+                # 動画サイズと同じ透明画像を作成
+                text_image = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(text_image)
                 
                 # テキストの中央・下部配置
                 bbox = draw.multiline_textbbox((0, 0), text, font=font, align="center")
                 tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                tx = (BIG_W - tw) // 2
-                ty = int(BIG_H * 0.75) - th // 2 # 画面下部に配置
+                tx = (W - tw) // 2
+                ty = int(H * 0.75) - th // 2 # 画面下部に配置
 
                 # アウトライン
                 for ox in range(-3, 4):
                     for oy in range(-3, 4):
-                        draw.multiline_text((tx + ox, ty + oy), text, fill=(0, 0, 0), font=font, align="center")
-                draw.multiline_text((tx, ty), text, fill=(255, 255, 255), font=font, align="center")
+                        draw.multiline_text((tx + ox, ty + oy), text, fill=(0, 0, 0, 255), font=font, align="center")
+                draw.multiline_text((tx, ty), text, fill=(255, 255, 255, 255), font=font, align="center")
 
-            bg_image.save(img_path, "PNG", quality=95)
-            image_paths.append(img_path)
+                text_img_path = image_dir / f"text_{i:03d}.png"
+                text_image.save(text_img_path, "PNG")
+                text_paths.append(text_img_path)
+            else:
+                text_paths.append(None)
 
         logger.info(f"画像素材 {len(image_paths)}枚 生成完了（ケンバーンズ対応）")
-        return image_paths
+        return image_paths, text_paths
 
-    async def compose_video(self, script_data, audio_paths, image_paths, job_id, duration):
-        """ケンバーンズ効果＋フェードトランジション付きで動画を合成"""
+    async def compose_video(self, script_data, audio_paths, image_paths, text_paths, job_id, duration):
+        """ケンバーンズ効果＋フェードトランジション＋透過テキストレイヤー付きで動画を合成"""
         job_dir = self._get_job_dir(job_id)
         clips_dir = job_dir / "clips"
         clips_dir.mkdir(parents=True, exist_ok=True)
@@ -217,18 +229,35 @@ class ModeAProcessor:
             kb = kb_effects[i % len(kb_effects)].format(dur=frames, w=W, h=H)
             fade_filter = f",fade=t=in:st=0:d=0.5,fade=t=out:st={max(0, scene_dur-0.5)}:d=0.5"
 
-            cmd = [
-                "ffmpeg", "-y", "-loglevel", "error",
-                "-loop", "1", "-i", str(image_paths[i]),
-                "-i", str(audio_paths[i]),
-                "-filter_complex",
-                f"[0:v]{kb}{fade_filter},format=yuv420p[v]",
-                "-map", "[v]", "-map", "1:a",
-                "-c:v", "libx264", "-preset", "medium", "-crf", "23",
-                "-c:a", "aac", "-b:a", "128k",
-                "-shortest", "-t", str(scene_dur),
-                str(clip_path),
-            ]
+            if text_paths and i < len(text_paths) and text_paths[i]:
+                # テキストレイヤーがある場合
+                cmd = [
+                    "ffmpeg", "-y", "-loglevel", "error",
+                    "-loop", "1", "-i", str(image_paths[i]),
+                    "-loop", "1", "-i", str(text_paths[i]),
+                    "-i", str(audio_paths[i]),
+                    "-filter_complex",
+                    f"[0:v]{kb}[bg]; [bg][1:v]overlay=0:0{fade_filter},format=yuv420p[v]",
+                    "-map", "[v]", "-map", "2:a",
+                    "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+                    "-c:a", "aac", "-b:a", "128k",
+                    "-shortest", "-t", str(scene_dur),
+                    str(clip_path),
+                ]
+            else:
+                # テキストレイヤーがない場合
+                cmd = [
+                    "ffmpeg", "-y", "-loglevel", "error",
+                    "-loop", "1", "-i", str(image_paths[i]),
+                    "-i", str(audio_paths[i]),
+                    "-filter_complex",
+                    f"[0:v]{kb}{fade_filter},format=yuv420p[v]",
+                    "-map", "[v]", "-map", "1:a",
+                    "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+                    "-c:a", "aac", "-b:a", "128k",
+                    "-shortest", "-t", str(scene_dur),
+                    str(clip_path),
+                ]
 
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
             if result.returncode != 0:
