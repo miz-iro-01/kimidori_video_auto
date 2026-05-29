@@ -122,7 +122,7 @@ class ScriptGenerator:
             "narration": "このシーンのナレーションテキスト",
             "visual_description": "このシーンで表示すべきビジュアルの説明",
             "search_query": "このシーンに合う背景画像を探すための英単語（1〜2語。例: business, sunset, technology, happy person）",
-            "text_overlay": "画面に大きく表示するキーワードやテロップ（短く）",
+            "text_overlay": "画面にテロップとして表示するテキスト（ナレーションとほぼ同じ内容で、音声なしでも内容が理解できるようにすること。必要に応じて改行 '\\n' を入れる）",
             "duration_seconds": 5
         }}
     ]
@@ -131,7 +131,7 @@ class ScriptGenerator:
 ルール:
 - シーンは5〜8個程度
 - 各シーンのナレーションは自然な日本語で
-- text_overlay は各シーン5〜15文字程度の短いキーワード
+- text_overlay はナレーションの内容をそのまま、あるいは視聴者が読みやすいように整えたテロップテキストにすること。絶対に「シーン1」などの文字は含めないこと。
 - search_query はPexels等のフリー素材サイトで検索できる一般的な英語のキーワードにすること
 - 全シーンの duration_seconds の合計が {duration_seconds} 秒程度になるようにする
 - 冒頭は視聴者の注意を引くフック、最後はまとめで締める

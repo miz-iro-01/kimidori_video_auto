@@ -469,7 +469,7 @@ class AppController {
     const panel = document.getElementById(`execPanel${mode}`);
     const resultPanel = document.getElementById('videoResultPanel');
     const player = document.getElementById('finalVideoPlayer');
-    const downloadBtn = document.getElementById('btnDownloadVideo');
+    const downloadBtn = document.getElementById('btnDownloadFinal');
 
     if (!bar || !title) return;
 

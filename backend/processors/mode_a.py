@@ -152,22 +152,25 @@ class ModeAProcessor:
             # テロップテキスト描画
             text = scene.get("text_overlay", "")
             if text:
+                import textwrap
                 draw = ImageDraw.Draw(bg_image)
-                # テキストの中央配置
-                bbox = draw.textbbox((0, 0), text, font=font)
+                
+                # テキストに改行がない場合は、文字数で折り返す
+                if "\\n" not in text:
+                    # 日本語テキストの折り返しのため、全角文字を考慮して大体15〜20文字で折り返し
+                    text = "\\n".join(textwrap.wrap(text, width=18))
+                
+                # テキストの中央・下部配置
+                bbox = draw.multiline_textbbox((0, 0), text, font=font, align="center")
                 tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
                 tx = (BIG_W - tw) // 2
-                ty = int(BIG_H * 0.42)
+                ty = int(BIG_H * 0.75) - th // 2 # 画面下部に配置
 
                 # アウトライン
                 for ox in range(-3, 4):
                     for oy in range(-3, 4):
-                        draw.text((tx + ox, ty + oy), text, fill=(0, 0, 0), font=font)
-                draw.text((tx, ty), text, fill=(255, 255, 255), font=font)
-
-                # シーン番号
-                num_text = f"SCENE {scene.get('scene_number', i+1)}"
-                draw.text((BIG_W // 2 - 60, ty - 60), num_text, fill=palette[2], font=font_small)
+                        draw.multiline_text((tx + ox, ty + oy), text, fill=(0, 0, 0), font=font, align="center")
+                draw.multiline_text((tx, ty), text, fill=(255, 255, 255), font=font, align="center")
 
             bg_image.save(img_path, "PNG", quality=95)
             image_paths.append(img_path)
@@ -198,8 +201,17 @@ class ModeAProcessor:
                 break
 
             clip_path = clips_dir / f"clip_{i:03d}.mp4"
-            scene_dur = scene.get("duration_seconds", 5)
-            frames = scene_dur * 30  # 30fps
+            
+            # ぶつ切りを防ぐため、実際の音声の長さ（＋少しの余白）をシーンの長さに設定
+            from utils.whisper_utils import get_audio_duration
+            try:
+                # 最後に少し余韻（0.5秒）を持たせてカットを防ぐ
+                scene_dur = get_audio_duration(audio_paths[i]) + 0.5
+            except Exception as e:
+                logger.warning(f"音声長さ取得エラー, デフォルトを使用: {e}")
+                scene_dur = scene.get("duration_seconds", 5)
+
+            frames = int(scene_dur * 30)  # 30fps
 
             # ケンバーンズフィルター
             kb = kb_effects[i % len(kb_effects)].format(dur=frames, w=W, h=H)
