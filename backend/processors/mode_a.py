@@ -163,11 +163,16 @@ class ModeAProcessor:
                 # リテラルの「\n」を実際の改行に変換
                 text = text.replace("\\n", "\n")
                 
-                # テキストに改行がない場合は、文字数で折り返す（日本語なので単純スライス）
-                if "\n" not in text:
-                    max_chars = 14  # 1080px幅・72pxフォントの場合、安全に収まるのは14文字程度
-                    wrapped_lines = [text[j:j+max_chars] for j in range(0, len(text), max_chars)]
-                    text = "\n".join(wrapped_lines)
+                # AIが改行を入れている場合でも、長すぎる行は強制的に指定文字数で折り返す
+                max_chars = 13  # 1行の最大文字数（安全マージン込み）
+                final_lines = []
+                for line in text.split("\n"):
+                    if len(line) > max_chars:
+                        wrapped = [line[j:j+max_chars] for j in range(0, len(line), max_chars)]
+                        final_lines.extend(wrapped)
+                    else:
+                        final_lines.append(line)
+                text = "\n".join(final_lines)
                 
                 # 動画サイズと同じ透明画像を作成
                 text_image = Image.new("RGBA", (W, H), (0, 0, 0, 0))
