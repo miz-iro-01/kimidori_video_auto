@@ -164,7 +164,7 @@ class ModeAProcessor:
                 text = text.replace("\\n", "\n")
                 
                 # AIが改行を入れている場合でも、長すぎる行は強制的に指定文字数で折り返す
-                max_chars = 13  # 1行の最大文字数（安全マージン込み）
+                max_chars = 15  # 1行の最大文字数（AIの自然な改行を優先しつつ、画面外にはみ出さない限界値）
                 final_lines = []
                 for line in text.split("\n"):
                     if len(line) > max_chars:

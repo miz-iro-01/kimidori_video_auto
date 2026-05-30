@@ -126,7 +126,7 @@ class ScriptGenerator:
             "narration": "このシーンのナレーションテキスト",
             "visual_description": "このシーンで表示すべきビジュアルの説明",
             "search_query": "このシーンに合う背景画像を探すための英単語（1〜2語。例: business, sunset, technology, happy person）",
-            "text_overlay": "画面にテロップとして表示するテキスト（ナレーションとほぼ同じ内容で、音声なしでも内容が理解できるようにすること。必要に応じて改行 '\\n' を入れる）",
+            "text_overlay": "画面にテロップとして表示するテキスト（必ず1行あたり13文字以内に収まるように、単語の途中で切れない自然な文節で改行 '\\n' を入れること）",
             "duration_seconds": 5
         }}
     ]
