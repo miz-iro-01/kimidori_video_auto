@@ -158,14 +158,16 @@ class ModeAProcessor:
             # --- テロップテキスト用透過画像の生成 ---
             text = scene.get("text_overlay", "")
             if text:
-                import textwrap
+                # ユーザー指定の句読点ルールを強制適用
+                text = text.replace("」。", "」")
                 # リテラルの「\n」を実際の改行に変換
                 text = text.replace("\\n", "\n")
                 
-                # テキストに改行がない場合は、文字数で折り返す
+                # テキストに改行がない場合は、文字数で折り返す（日本語なので単純スライス）
                 if "\n" not in text:
-                    # 日本語テキストの折り返しのため、全角文字を考慮して大体18文字で折り返し
-                    text = "\n".join(textwrap.wrap(text, width=18))
+                    max_chars = 14  # 1080px幅・72pxフォントの場合、安全に収まるのは14文字程度
+                    wrapped_lines = [text[j:j+max_chars] for j in range(0, len(text), max_chars)]
+                    text = "\n".join(wrapped_lines)
                 
                 # 動画サイズと同じ透明画像を作成
                 text_image = Image.new("RGBA", (W, H), (0, 0, 0, 0))
