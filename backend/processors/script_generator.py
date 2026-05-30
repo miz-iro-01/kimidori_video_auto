@@ -103,6 +103,9 @@ class ScriptGenerator:
         """
         # 1文字あたり約0.15秒（日本語の読み上げ速度）で概算
         total_chars = int(duration_seconds / 0.15)
+        
+        import uuid
+        seed = str(uuid.uuid4())
 
         prompt = f"""あなたはYouTubeショート動画の台本作家です。
 以下のテーマで、{duration_seconds}秒程度のショート動画の台本をJSON形式で出力してください。
@@ -110,6 +113,7 @@ class ScriptGenerator:
 【テーマ】: {theme}
 【スタイル】: {style}
 【目標の長さ】: {duration_seconds}秒（ナレーション合計で約{total_chars}文字）
+【バリエーションID】: {seed}
 
 以下のJSON形式で出力してください（JSON以外のテキストは含めないでください）:
 {{
@@ -135,6 +139,7 @@ class ScriptGenerator:
 - search_query はPexels等のフリー素材サイトで検索できる一般的な英語のキーワードにすること
 - 全シーンの duration_seconds の合計が {duration_seconds} 秒程度になるようにする
 - 冒頭は視聴者の注意を引くフック、最後はまとめで締める
+- 【重要】毎日投稿できるように、同じテーマでも毎回異なる切り口、異なる具体例、異なる構成を使用して、全く新しい内容の台本を作成してください（バリエーションIDを参考にランダム性を高めてください）。
 """
 
         try:

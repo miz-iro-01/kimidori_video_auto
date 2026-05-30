@@ -52,7 +52,7 @@ class ModeAProcessor:
         return await self.tts.synthesize_all_scenes(script_data["scenes"], job_dir)
 
     async def generate_visuals(self, script_data: dict, job_id: str) -> tuple[list[Path], list[Path]]:
-        \"\"\"グラデーション背景画像と、テロップ透過画像を別々に生成\"\"\"
+        """グラデーション背景画像と、テロップ透過画像を別々に生成"""
         job_dir = self._get_job_dir(job_id)
         image_dir = job_dir / "images"
         image_dir.mkdir(parents=True, exist_ok=True)
@@ -96,12 +96,14 @@ class ModeAProcessor:
                         res = client.get(
                             "https://api.pexels.com/v1/search",
                             headers={"Authorization": self.pexels_api_key},
-                            params={"query": query, "per_page": 1, "orientation": "portrait"}
+                            params={"query": query, "per_page": 15, "orientation": "portrait"}
                         )
                         if res.status_code == 200:
                             data = res.json()
                             if data.get("photos") and len(data["photos"]) > 0:
-                                img_url = data["photos"][0]["src"]["large2x"]
+                                import random
+                                photo = random.choice(data["photos"])
+                                img_url = photo["src"]["large2x"]
                                 img_res = client.get(img_url)
                                 if img_res.status_code == 200:
                                     # Pexels画像を読み込み
@@ -202,10 +204,14 @@ class ModeAProcessor:
 
         # ケンバーンズ効果のパターン（ズームイン/アウト + パン方向）
         kb_effects = [
-            "zoompan=z='min(zoom+0.0015,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={dur}:s={w}x{h}:fps=30",
-            "zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.0015))':x='iw/2-(iw/zoom/2)':y='ih/4-(ih/zoom/4)':d={dur}:s={w}x{h}:fps=30",
-            "zoompan=z='min(zoom+0.001,1.2)':x='iw/4-(iw/zoom/4)':y='ih/2-(ih/zoom/2)':d={dur}:s={w}x{h}:fps=30",
-            "zoompan=z='if(lte(zoom,1.0),1.25,max(1.001,zoom-0.001))':x='iw*3/4-(iw/zoom*3/4)':y='ih/2-(ih/zoom/2)':d={dur}:s={w}x{h}:fps=30",
+            # ズームイン（中央）
+            "zoompan=z='zoom+0.001':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={dur}:s={w}x{h}:fps=30",
+            # ズームアウト（上部から）
+            "zoompan=z='if(lte(zoom,1.0),1.5,zoom-0.001)':x='iw/2-(iw/zoom/2)':y='ih/4-(ih/zoom/4)':d={dur}:s={w}x{h}:fps=30",
+            # ズームイン（左から右）
+            "zoompan=z='zoom+0.0008':x='iw/4-(iw/zoom/4)':y='ih/2-(ih/zoom/2)':d={dur}:s={w}x{h}:fps=30",
+            # ズームアウト（右から左）
+            "zoompan=z='if(lte(zoom,1.0),1.4,zoom-0.0008)':x='iw*3/4-(iw/zoom*3/4)':y='ih/2-(ih/zoom/2)':d={dur}:s={w}x{h}:fps=30",
         ]
 
         for i, scene in enumerate(scenes):
