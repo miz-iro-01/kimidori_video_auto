@@ -258,6 +258,53 @@ async def list_jobs(user_id: str, limit: int = 20):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class PublishRequest(BaseModel):
+    user_id: str
+    title: str = "自動生成動画 | KIMIDORI Movie Auto"
+    description: str = "手動アップロードされた動画です。"
+    tags: list[str] = ["自動生成", "AI"]
+
+
+@app.post("/api/jobs/{job_id}/publish")
+async def publish_job_manual(job_id: str, req: PublishRequest):
+    """完了済みの動画をYouTubeに手動でアップロードする"""
+    try:
+        job = firestore.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="ジョブが見つかりません")
+        if job.get("status") != "completed":
+            raise HTTPException(status_code=400, detail="動画がまだ完成していません")
+            
+        storage_url = job.get("storage_url")
+        if not storage_url:
+            raise HTTPException(status_code=404, detail="動画ファイルが見つかりません")
+
+        # ローカルにダウンロードしてからアップロード
+        tmp_video_path = config.TMP_DIR / f"upload_{job_id}.mp4"
+        storage.download_file(storage_url, tmp_video_path)
+
+        youtube_url = youtube.upload_video(
+            video_path=str(tmp_video_path),
+            title=req.title,
+            user_id=req.user_id,
+            description=req.description,
+            tags=req.tags,
+            privacy_status="private"  # 初期設定は非公開
+        )
+
+        if not youtube_url:
+            raise HTTPException(status_code=500, detail="YouTube APIが利用できないか、認証されていません。")
+
+        # ジョブを更新
+        firestore.update_job(job_id, youtube_url=youtube_url)
+        tmp_video_path.unlink(missing_ok=True)
+
+        return {"success": True, "youtube_url": youtube_url}
+    except Exception as e:
+        logger.error(f"手動アップロード失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"YouTubeアップロードに失敗しました: {str(e)}")
+
+
 # =============================================================================
 # 台本プレビュー（動画生成前に台本だけ確認）
 # =============================================================================
@@ -438,15 +485,19 @@ async def run_mode_a_pipeline(
         )
 
         # 6. YouTubeに投稿 (95%)
-        firestore.update_job(job_id, progress=95, message="YouTubeに投稿中...")
-        youtube_url = youtube.upload_video(
-            video_path=str(video_path),
-            title=f"{theme} | KIMIDORI Movie Auto",
-            user_id=user_id,
-            description=f"テーマ「{theme}」から自動生成された動画です。\n\n{script_data.get('description', '')}",
-            tags=script_data.get("tags", ["自動生成", "AI"]),
-            privacy_status="private",  # 非公開で投稿
-        )
+        youtube_url = None
+        if auto_post:
+            firestore.update_job(job_id, progress=95, message="YouTubeに投稿中...")
+            youtube_url = youtube.upload_video(
+                video_path=str(video_path),
+                title=f"{theme} | KIMIDORI Movie Auto",
+                user_id=user_id,
+                description=f"テーマ「{theme}」から自動生成された動画です。\n\n{script_data.get('description', '')}",
+                tags=script_data.get("tags", ["自動生成", "AI"]),
+                privacy_status="private",  # 非公開で投稿
+            )
+        else:
+            firestore.update_job(job_id, progress=95, message="動画生成完了（投稿は手動）")
 
         # 7. 完了 (100%)
         firestore.update_job(

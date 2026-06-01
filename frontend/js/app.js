@@ -383,6 +383,7 @@ class AppController {
           this._getBgmOptions()
         );
         this.showToast("動画の生成リクエストを送信しました！", "success");
+        this.currentJobId = res.job_id;
         this.startJobPolling(res.job_id, 'A');
 
       } catch (err) {
@@ -392,9 +393,48 @@ class AppController {
     });
 
     // 投稿ボタン（手動モード時の最終ステップ）
-    document.getElementById('btnPostToYouTube')?.addEventListener('click', () => {
-      this.showToast("YouTubeへの投稿処理を開始しました！", "success");
-      // 実際にはバックエンドの投稿APIを叩く
+    document.getElementById('btnPostToYouTube')?.addEventListener('click', async () => {
+      if (!this.currentJobId) {
+        return this.showToast("ジョブIDが見つかりません。", "error");
+      }
+      this.showToast("YouTubeへの投稿処理を開始しました！少々お待ちください...", "success");
+      
+      try {
+        const btn = document.getElementById('btnPostToYouTube');
+        btn.disabled = true;
+        btn.innerHTML = `<span style="display:inline-block; animation: spin 1s linear infinite;">⏳</span> 投稿中...`;
+
+        const userId = (() => {
+          if (firebase.auth().currentUser) return firebase.auth().currentUser.uid;
+          const mockUserStr = localStorage.getItem('kimidori_mock_user');
+          if (mockUserStr) {
+            try { return JSON.parse(mockUserStr).uid; } catch(e) {}
+          }
+          return "user_123";
+        })();
+
+        const res = await fetch(`${window.apiClient.baseUrl}/api/jobs/${this.currentJobId}/publish`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "投稿に失敗しました");
+
+        this.showToast("YouTubeへの投稿が完了しました！", "success");
+        btn.innerHTML = `<span class="icon-youtube"></span> 投稿完了！`;
+        btn.style.backgroundColor = "#2a8a2a";
+
+        // 新しいタブでYouTubeを開く
+        if (data.youtube_url) {
+          window.open(data.youtube_url, "_blank");
+        }
+      } catch (err) {
+        this.showToast(err.message, "error");
+        document.getElementById('btnPostToYouTube').disabled = false;
+        document.getElementById('btnPostToYouTube').innerHTML = `<span class="icon-youtube"></span> YouTubeに投稿する`;
+      }
     });
 
     // Modal Close

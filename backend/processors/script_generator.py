@@ -140,12 +140,14 @@ class ScriptGenerator:
 - search_query はPexels等のフリー素材サイトで検索できる一般的な英語のキーワードにすること
 - 全シーンの duration_seconds の合計が {duration_seconds} 秒程度になるようにする
 - 冒頭は視聴者の注意を引くフック、最後はまとめで締める
-- 【重要】毎日投稿できるように、同じテーマでも毎回異なる切り口、異なる具体例、異なる構成を使用して、全く新しい内容の台本を作成してください（バリエーションIDを参考にランダム性を高めてください）。
+- 【重要】毎日投稿できるように、同じテーマでも毎回全く異なる切り口、異なる具体例、異なる構成を使用して、全く新しい内容の台本を作成してください（バリエーションIDを参考にランダム性を高めてください）。
+- 【重要】過去のありふれたアイデア（例：人の頭の上に数字が見える、寿命が見える等のよくある話）は絶対に避けてください。誰も聞いたことがないような、全く新しい独自の架空のエピソードを創作してください。
 """
 
         try:
             generation_config = {
-                "response_mime_type": "application/json"
+                "response_mime_type": "application/json",
+                "temperature": 1.5,
             }
             text = await self._try_generate(prompt, generation_config)
 
