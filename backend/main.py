@@ -429,12 +429,25 @@ async def run_mode_a_pipeline(
     try:
         firestore.update_job(job_id, status="processing", progress=5, message="処理を開始しています...")
 
+        # 0.5 完全自動モードの場合はバックエンドでリサーチを実行
+        actual_theme = theme
+        if auto_post and not script_data:
+            firestore.update_job(job_id, progress=8, message="トレンドをリサーチ中...")
+            try:
+                from processors.research_engine import ResearchEngine
+                engine = ResearchEngine(gemini_api_key=gemini_api_key)
+                res = await engine.analyze_trend(theme)
+                if "analysis_result" in res:
+                    actual_theme = f"以下のリサーチ戦略に基づいて動画を作って：\n\n{res['analysis_result']}\n\nテーマ: {theme}"
+            except Exception as e:
+                logger.warning(f"自動リサーチに失敗しました（スキップします）: {e}")
+
         # 1. 台本生成 (script_dataがあればスキップ)
         if script_data:
             firestore.update_job(job_id, progress=20, message="提供された台本を読み込み中...")
         else:
             firestore.update_job(job_id, progress=10, message="Geminiで台本を生成中...")
-            script_data = await processor.generate_script(theme, style, duration)
+            script_data = await processor.generate_script(actual_theme, style, duration)
             firestore.update_job(job_id, progress=30, message="台本生成完了")
 
         # 2. 音声合成 (30%)
