@@ -536,6 +536,14 @@ class AppController {
           if (panel) panel.style.display = 'none';
           if (resultPanel) resultPanel.style.display = 'block';
 
+          // リサーチ戦略が保存されていれば表示（完全自動モードの証拠）
+          const researchPanel = document.getElementById('appliedResearchPanel');
+          const researchText = document.getElementById('appliedResearchText');
+          if (researchPanel && researchText && job.research_strategy) {
+            researchPanel.style.display = 'block';
+            researchText.textContent = job.research_strategy;
+          }
+
           // 完成動画のURLを設定（バックエンドのダウンロードAPIを使用）
           const videoUrl = `${apiUrl}/api/download/${jobId}`;
           if (player) {

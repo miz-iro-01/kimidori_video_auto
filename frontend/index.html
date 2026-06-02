@@ -248,6 +248,12 @@
 
               <div id="videoResultPanel" style="display: none; text-align: center;">
                 <video id="finalVideoPlayer" controls style="width: 100%; max-width: 400px; border-radius: var(--radius-md); margin-bottom: 1.5rem; border: 2px solid var(--border-highlight);"></video>
+                
+                <div id="appliedResearchPanel" style="display: none; background: var(--bg-card); border-left: 4px solid var(--accent-primary); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem; text-align: left; font-size: 0.9rem;">
+                  <h4 style="margin-top: 0; margin-bottom: 0.5rem; color: var(--accent-primary);">💡 自動適用されたリサーチ戦略</h4>
+                  <pre id="appliedResearchText" style="white-space: pre-wrap; color: var(--text-secondary); margin: 0; font-family: inherit; line-height: 1.5;"></pre>
+                </div>
+
                 <div class="action-footer" style="justify-content: center; display: flex; gap: 1rem;">
                   <a href="#" class="btn btn-outline" id="btnDownloadFinal" download>ダウンロード</a>
                   <button class="btn btn-primary" id="btnPostToYouTube">

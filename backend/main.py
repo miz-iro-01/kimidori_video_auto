@@ -103,6 +103,7 @@ class JobStatusResponse(BaseModel):
     youtube_url: Optional[str] = None
     storage_url: Optional[str] = None
     created_at: Optional[str] = None
+    research_strategy: Optional[str] = None
 
 
 # =============================================================================
@@ -241,6 +242,7 @@ async def get_job_status(job_id: str):
             youtube_url=job.get("youtube_url"),
             storage_url=job.get("storage_url"),
             created_at=job.get("created_at"),
+            research_strategy=job.get("research_strategy")
         )
     except HTTPException:
         raise
@@ -439,6 +441,8 @@ async def run_mode_a_pipeline(
                 res = await engine.analyze_trend(theme)
                 if "analysis_result" in res:
                     actual_theme = f"以下のリサーチ戦略に基づいて動画を作って：\n\n{res['analysis_result']}\n\nテーマ: {theme}"
+                    # フロントエンドでリサーチ結果を確認できるようにジョブに保存
+                    firestore.update_job(job_id, research_strategy=res['analysis_result'])
             except Exception as e:
                 logger.warning(f"自動リサーチに失敗しました（スキップします）: {e}")
 
