@@ -49,32 +49,22 @@ class ResearchEngine:
         )
 
     def search_trending_shorts(self, keyword: str, limit: int = 5) -> List[Dict]:
-        """キーワードに関連するショート動画を検索"""
+        """キーワードに関連する動画を検索"""
         logger.info(f"リサーチ開始: キーワード '{keyword}'")
         try:
-            # YouTubeでの検索（"shorts" キーワードを付与してショート動画を狙う）
+            # YouTubeでの検索（"shorts" キーワードを付与してショート動画を優先的に狙う）
             search_query = f"{keyword} #shorts"
-            videos_search = VideosSearch(search_query, limit=limit * 2)
+            videos_search = VideosSearch(search_query, limit=limit)
             results = videos_search.result()
             
             videos = []
             for video in results.get('result', []):
-                # ざっくりとショート動画（60秒以内）かを判定
-                duration_str = video.get('duration', '0:00')
-                if duration_str:
-                    parts = duration_str.split(':')
-                    if len(parts) == 2:
-                        try:
-                            seconds = int(parts[0]) * 60 + int(parts[1])
-                            if seconds <= 90:  # 余裕を持って90秒以内
-                                videos.append({
-                                    "id": video.get("id"),
-                                    "title": video.get("title"),
-                                    "views": video.get("viewCount", {}).get("text", "N/A"),
-                                    "link": video.get("link")
-                                })
-                        except ValueError:
-                            pass
+                videos.append({
+                    "id": video.get("id"),
+                    "title": video.get("title"),
+                    "views": video.get("viewCount", {}).get("text", "N/A"),
+                    "link": video.get("link")
+                })
                 
                 if len(videos) >= limit:
                     break
