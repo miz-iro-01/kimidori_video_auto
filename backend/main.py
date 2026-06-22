@@ -92,6 +92,7 @@ class ResearchRequest(BaseModel):
     """トレンドリサーチリクエスト"""
     keyword: str = Field(..., description="リサーチしたいキーワード")
     gemini_api_key: str = Field(..., description="ユーザーのGemini APIキー")
+    user_id: Optional[str] = Field(None, description="ユーザーID")
 
 
 class JobStatusResponse(BaseModel):
@@ -335,8 +336,8 @@ async def run_research(request: ResearchRequest):
     """指定キーワードで伸びているショート動画を検索し、構成を分析する"""
     try:
         from processors.research_engine import ResearchEngine
-        engine = ResearchEngine(gemini_api_key=request.gemini_api_key)
-        result = await engine.analyze_trend(request.keyword)
+        engine = ResearchEngine(gemini_api_key=request.gemini_api_key, firestore_service=firestore)
+        result = await engine.analyze_trend(request.keyword, user_id=request.user_id)
         
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])

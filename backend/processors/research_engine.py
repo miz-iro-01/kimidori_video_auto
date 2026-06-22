@@ -14,11 +14,12 @@ logger = logging.getLogger(__name__)
 class ResearchEngine:
     """最新トレンドのリサーチとライバル動画の解析を行うエンジン"""
 
-    def __init__(self, gemini_api_key: str):
+    def __init__(self, gemini_api_key: str, firestore_service=None):
         if not gemini_api_key:
             raise ValueError("Gemini APIキーが設定されていません。")
         genai.configure(api_key=gemini_api_key)
         self.fallback_models = config.GEMINI_FALLBACK_MODELS
+        self.firestore = firestore_service
 
     async def _try_generate(self, prompt: str) -> str:
         """フォールバックモデルを含めてGemini APIを呼び出す"""
@@ -48,16 +49,48 @@ class ResearchEngine:
             f"\n最後のエラー: {last_error}"
         )
 
-    def search_trending_shorts(self, keyword: str, limit: int = 5) -> List[Dict]:
+    def search_trending_shorts(self, keyword: str, limit: int = 5, user_id: str = None) -> List[Dict]:
         """キーワードに関連する動画を検索"""
         logger.info(f"リサーチ開始: キーワード '{keyword}'")
+        videos = []
+        
+        # 1. ユーザーのYouTube連携があれば公式APIを試す
+        if self.firestore and user_id:
+            try:
+                from services.youtube_service import YouTubeService
+                yt_service = YouTubeService(self.firestore)
+                youtube_client = yt_service._get_authenticated_service(user_id)
+                
+                if youtube_client:
+                    logger.info("公式YouTube APIを使用して検索します...")
+                    search_response = youtube_client.search().list(
+                        q=f"{keyword} #shorts",
+                        part="snippet",
+                        maxResults=limit,
+                        type="video"
+                    ).execute()
+                    
+                    for item in search_response.get("items", []):
+                        videos.append({
+                            "id": item["id"]["videoId"],
+                            "title": item["snippet"]["title"],
+                            "views": "N/A",
+                            "link": f"https://www.youtube.com/watch?v={item['id']['videoId']}"
+                        })
+                    
+                    if videos:
+                        return videos
+            except Exception as e:
+                logger.warning(f"公式YouTube API検索失敗: {e}")
+
+        # 2. 公式APIが使えない、または失敗した場合はフォールバック
+        logger.info("非公式スクレイピング(VideosSearch)で検索します...")
         try:
             # YouTubeでの検索（"shorts" キーワードを付与してショート動画を優先的に狙う）
             search_query = f"{keyword} #shorts"
             videos_search = VideosSearch(search_query, limit=limit)
             results = videos_search.result()
             
-            videos = []
             for video in results.get('result', []):
                 videos.append({
                     "id": video.get("id"),
@@ -72,7 +105,7 @@ class ResearchEngine:
             return videos
         except Exception as e:
             logger.error(f"YouTube検索エラー: {e}")
-            return []
+            return videos
 
     def fetch_transcript(self, video_id: str) -> Optional[str]:
         """動画の字幕（トーク内容）を取得。手動/自動生成/翻訳/英語など多段階で取得を試みる"""
@@ -122,11 +155,32 @@ class ResearchEngine:
             logger.warning(f"字幕取得失敗 ({video_id}): {e}")
             return None
 
-    async def analyze_trend(self, keyword: str) -> Dict:
+    async def analyze_trend(self, keyword: str, user_id: str = None) -> Dict:
         """指定したキーワードで伸びている動画を分析し、最適な構成を提案する"""
-        videos = self.search_trending_shorts(keyword, limit=3)
+        videos = self.search_trending_shorts(keyword, limit=3, user_id=user_id)
         if not videos:
-            return {"error": "関連するショート動画が見つかりませんでした。別のキーワードを試してください。"}
+            logger.warning("YouTubeから動画情報を取得できませんでした。Gemini内部知識フォールバックを実行します。")
+            prompt = f"""
+あなたはプロのYouTubeショート動画コンサルタントです。
+現在、キーワード「{keyword}」でバズる動画を作成するための具体的な戦略を提案してください。
+（※現在YouTubeの検索APIが一時的に制限されているため、あなたの内部知識から「このキーワードでよく伸びる動画の傾向」を推測してください。）
+
+以下のフォーマットに沿って分析結果をまとめてください。
+1. 【トレンドの傾向】: なぜこれらの動画が伸びているのか？（テーマ性、切り口など）
+2. 【最強のフック（冒頭1〜3秒）の提案】: 視聴者を逃さないための冒頭のセリフ案を3つ。
+3. 【推奨される台本の構成】: 例（フック→共感→解決策→オチ）など。
+4. 【狙うべきターゲット・感情】: どんな悩みを持つ人に向けて、どんな感情（驚き、納得など）を引き起こすべきか。
+"""
+            try:
+                analysis_text = await self._try_generate(prompt)
+                return {
+                    "success": True,
+                    "keyword": keyword,
+                    "analyzed_videos": [],
+                    "analysis_result": f"【※YouTube検索制限時のため、AI内部知識による推測リサーチ】\n\n{analysis_text}"
+                }
+            except Exception as e:
+                return {"error": "リサーチ処理が完全に失敗しました。しばらく時間をおいて再試行してください。"}
 
         analyzed_data = []
         combined_text = ""

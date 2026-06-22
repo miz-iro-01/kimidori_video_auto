@@ -100,7 +100,11 @@ class ApiClient {
     const res = await fetch(`${this.baseUrl}/api/research`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keyword, gemini_api_key: geminiKey })
+      body: JSON.stringify({ 
+        keyword, 
+        gemini_api_key: geminiKey,
+        user_id: this._getUserId()
+      })
     });
 
     if (!res.ok) {
