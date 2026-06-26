@@ -128,9 +128,9 @@ class ScriptGenerator:
             "search_query": "このシーンに合う背景画像を探すための英単語（1〜2語。例: business, sunset, technology, happy person）",
             "text_overlay": "画面にテロップとして表示するテキスト（必ず narration と『一言一句全く同じ文章』にしてください。要約や省略は禁止です。ただし、1行あたり13文字以内に収まるように、単語の途中で切れない自然な文節で改行 '\\n' を入れること）",
             "duration_seconds": 5
-        }
+        }}
     ]
-}
+}}
 
 ルール:
 - シーンは5〜8個程度
