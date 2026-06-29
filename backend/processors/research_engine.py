@@ -29,19 +29,20 @@ class ResearchEngine:
             for attempt in range(2):
                 try:
                     logger.info(f"Gemini API呼び出し (research): model={model_name} (attempt {attempt+1})")
-                    response = await model.generate_content_async(prompt)
+                    response = await asyncio.wait_for(model.generate_content_async(prompt), timeout=35.0)
                     return response.text.strip()
                 except Exception as e:
                     last_error = e
                     if "429" in str(e):
                         if attempt == 0:
-                            logger.warning(f"モデル {model_name} で429エラー、10秒後にリトライ...")
-                            await asyncio.sleep(10)
+                            logger.warning(f"モデル {model_name} で429エラー、5秒後にリトライ...")
+                            await asyncio.sleep(5)
                         else:
                             logger.warning(f"モデル {model_name} のクォータ枯渇、次のモデルへフォールバック")
                             break
                     else:
-                        raise
+                        logger.warning(f"モデル {model_name} でエラー ({e})、次のモデルへフォールバックします。")
+                        break
 
         raise Exception(
             f"全てのGeminiモデルでクォータ制限に達しました。"

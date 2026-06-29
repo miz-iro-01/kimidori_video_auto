@@ -44,22 +44,26 @@ class ScriptGenerator:
             for attempt in range(2):
                 try:
                     logger.info(f"Gemini API呼び出し: model={model_name} (attempt {attempt+1})")
-                    response = await model.generate_content_async(
-                        prompt,
-                        generation_config=generation_config
+                    response = await asyncio.wait_for(
+                        model.generate_content_async(
+                            prompt,
+                            generation_config=generation_config
+                        ),
+                        timeout=35.0
                     )
                     return response.text.strip()
                 except Exception as e:
                     last_error = e
                     if "429" in str(e):
                         if attempt == 0:
-                            logger.warning(f"モデル {model_name} で429エラー、{10}秒後にリトライ...")
-                            await asyncio.sleep(10)
+                            logger.warning(f"モデル {model_name} で429エラー、5秒後にリトライ...")
+                            await asyncio.sleep(5)
                         else:
                             logger.warning(f"モデル {model_name} のクォータ枯渇、次のモデルへフォールバック")
                             break  # 次のモデルへ
                     else:
-                        raise  # 429以外のエラーはそのままraise
+                        logger.warning(f"モデル {model_name} でエラー ({e})、次のモデルへフォールバックします。")
+                        break  # 次のモデルへ
 
         # 全モデル試してもダメだった場合
         raise Exception(
