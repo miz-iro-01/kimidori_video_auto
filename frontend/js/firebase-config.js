@@ -22,6 +22,6 @@ const storage = firebase.storage();
 
 // Cloud Run APIのベースURL
 // ※ デプロイ後に実際のCloud Run URLに変更してください
-const API_BASE_URL = "https://kimidori-movie-auto-84265380422.asia-northeast1.run.app";
+const API_BASE_URL = "https://kimidori-movie-auto-ey3qvn3ruq-an.a.run.app";
 
 console.log("🔥 Firebase 初期化完了");
