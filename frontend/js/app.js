@@ -7,6 +7,7 @@ class AppController {
   constructor() {
     this.initViews();
     this.initForms();
+    this.initMangaForm();
     this.initSettings();
     this.renderSettings();
     this.validateForms();
@@ -26,8 +27,13 @@ class AppController {
         const target = item.dataset.target;
         document.querySelectorAll('.view-section').forEach(sec => {
           sec.classList.remove('active');
+          sec.style.display = 'none';
         });
-        document.getElementById(`view-${target}`).classList.add('active');
+        const targetSec = document.getElementById(`view-${target}`);
+        if (targetSec) {
+          targetSec.classList.add('active');
+          targetSec.style.display = 'block';
+        }
       });
     });
   }
@@ -42,8 +48,8 @@ class AppController {
     
     saveKeyBtn.addEventListener('click', () => {
       const val = keyInput.value.trim();
-      if(val && !val.startsWith("AIza")) {
-        this.showToast("有効なGemini APIキーを入力してください（AIza...で始まります）", "error");
+      if(val && val.length < 10) {
+        this.showToast("有効なGemini APIキーを入力してください", "error");
         return;
       }
       window.settingsManager.set('geminiApiKey', val);
@@ -1200,6 +1206,120 @@ class AppController {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  // --- 長尺・長尺漫画動画作成フォーム制御 ---
+  initMangaForm() {
+    const btnRunScript = document.getElementById('btnRunMangaScript');
+    const btnGenVideo = document.getElementById('btnGenerateMangaVideo');
+    const scriptArea = document.getElementById('mangaScriptArea');
+    const lockNotice = document.getElementById('mangaLockNotice');
+
+    // 画面切替時に権限チェック
+    const checkPermissions = async () => {
+      try {
+        const res = await window.apiClient.getUserPermissions("manga_long_video_create");
+        if (!res.access_info?.allowed) {
+          if (lockNotice) lockNotice.style.display = 'block';
+          if (btnRunScript) btnRunScript.disabled = true;
+        } else {
+          if (lockNotice) lockNotice.style.display = 'none';
+          if (btnRunScript) btnRunScript.disabled = false;
+        }
+      } catch (e) {
+        console.log("Permission check failed:", e.message);
+      }
+    };
+
+    const mangaNavBtn = document.querySelector('.nav-item[data-target="manga"]');
+    if (mangaNavBtn) {
+      mangaNavBtn.addEventListener('click', checkPermissions);
+    }
+
+    // 1. コマ割り・シナリオJSON生成
+    if (btnRunScript) {
+      btnRunScript.addEventListener('click', async () => {
+        const text = document.getElementById('inputMangaOriginalText').value.trim();
+        const duration = document.getElementById('inputMangaDuration').value;
+
+        if (!text) return this.showToast("原案・ストーリーテキストを入力してください", "error");
+
+        this.showToast("コマ割り・シナリオJSONを生成中...", "info");
+        btnRunScript.disabled = true;
+
+        try {
+          const res = await window.apiClient.generateMangaScript(text, duration);
+          if (res.success && res.script) {
+            document.getElementById('inputMangaScriptJson').value = JSON.stringify(res.script, null, 2);
+            scriptArea.style.display = 'block';
+            this.showToast("シナリオデータが生成されました！内容を確認してください", "success");
+          }
+        } catch (err) {
+          this.showToast("シナリオ生成失敗: " + err.message, "error");
+        } finally {
+          btnRunScript.disabled = false;
+        }
+      });
+    }
+
+    // 2. 動画一括合成
+    if (btnGenVideo) {
+      btnGenVideo.addEventListener('click', async () => {
+        const jsonStr = document.getElementById('inputMangaScriptJson').value.trim();
+        if (!jsonStr) return this.showToast("シナリオデータがありません", "error");
+
+        let scriptData;
+        try {
+          scriptData = JSON.parse(jsonStr);
+        } catch (e) {
+          return this.showToast("シナリオJSONの形式が正しくありません: " + e.message, "error");
+        }
+
+        const ttsEngine = window.settingsManager.get('ttsEngine') || 'edge';
+        const voiceName = window.settingsManager.get('voiceName') || 'nanami';
+
+        this.showToast("長尺漫画動画の生成を開始しました", "info");
+        btnGenVideo.disabled = true;
+
+        try {
+          const res = await window.apiClient.generateMangaVideo(scriptData, ttsEngine, voiceName);
+          const progressArea = document.getElementById('mangaProgressArea');
+          const statusTitle = document.getElementById('mangaProgressStatusTitle');
+          const progressFill = document.getElementById('mangaProgressFill');
+          const progressMsg = document.getElementById('mangaProgressMessage');
+          const videoResult = document.getElementById('mangaVideoResult');
+          const videoPreview = document.getElementById('mangaVideoPreview');
+
+          progressArea.style.display = 'block';
+
+          this.startJobPolling(res.job_id, 'MANGA', {
+            onProgress: (job) => {
+              statusTitle.textContent = job.message || "動画生成中...";
+              progressFill.style.width = `${job.progress || 10}%`;
+              progressMsg.textContent = `進捗: ${job.progress}%`;
+            },
+            onComplete: (job) => {
+              statusTitle.textContent = "✨ 長尺漫画動画が完成しました！";
+              progressFill.style.width = "100%";
+              progressMsg.textContent = "生成完了";
+              if (job.video_path) {
+                videoResult.style.display = 'block';
+                videoPreview.src = `${window.apiClient.baseUrl}/api/video/download?path=${encodeURIComponent(job.video_path)}`;
+              }
+              btnGenVideo.disabled = false;
+            },
+            onError: (err) => {
+              statusTitle.textContent = "❌ 生成失敗";
+              progressMsg.textContent = err;
+              btnGenVideo.disabled = false;
+            }
+          });
+        } catch (err) {
+          this.showToast("動画生成失敗: " + err.message, "error");
+          btnGenVideo.disabled = false;
+        }
+      });
+    }
   }
 }
 

@@ -16,12 +16,19 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 import config
+from fastapi.staticfiles import StaticFiles
 from services.firestore_service import FirestoreService
 from services.storage_service import StorageService
 from services.youtube_service import YouTubeService
 from services.bgm_service import BGMService
+from services.user_permission_manager import UserPermissionManager, PlanType, FeatureName
 from processors.mode_a import ModeAProcessor
 from processors.mode_b import ModeBProcessor
+from processors.manga_script_generator import MangaScriptGenerator
+from processors.batch_asset_generator import BatchAssetGenerator
+from processors.manga_video_composer import MangaVideoComposer
+from utils.key_manager import KeyManager
+from typing import Optional, List, Dict, Union
 
 # ロガー設定
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -48,6 +55,10 @@ firestore = FirestoreService()
 storage = StorageService()
 youtube = YouTubeService(firestore_service=firestore)
 bgm_service = BGMService(firestore_service=firestore, storage_service=storage)
+permission_manager = UserPermissionManager(firestore_service=firestore)
+
+
+
 
 
 # =============================================================================
@@ -105,6 +116,85 @@ class JobStatusResponse(BaseModel):
     storage_url: Optional[str] = None
     created_at: Optional[str] = None
     research_strategy: Optional[str] = None
+
+
+class MangaScriptRequest(BaseModel):
+    """長尺漫画シナリオ生成リクエスト"""
+    original_text: str = Field(..., description="原案・エピソードテキスト")
+    target_length_minutes: int = Field(3, description="目標動画長さ（分）")
+    gemini_api_keys: Union[List[str], str] = Field(..., description="ユーザーのGemini APIキー（配列またはカンマ区切り）")
+    user_id: str = Field(..., description="FirebaseユーザーID")
+
+
+class MangaVideoGenerateRequest(BaseModel):
+    """長尺漫画動画生成リクエスト"""
+    script_data: dict = Field(..., description="生成されたシナリオJSON")
+    user_id: str = Field(..., description="FirebaseユーザーID")
+    gemini_api_keys: Union[List[str], str] = Field("", description="Gemini APIキー")
+    tts_engine: str = Field("edge", description="TTSエンジン")
+    voice_name: str = Field("nanami", description="声色名")
+    bgm_map: Dict[str, str] = Field({}, description="タグ別BGMファイルマッピング")
+    auto_post: bool = Field(False, description="完全自動投稿フラグ")
+
+
+class UserPlanUpdateRequest(BaseModel):
+    user_id: str
+    plan: str
+    expire_date: Optional[str] = None
+
+
+async def run_manga_video_job(
+    job_id: str,
+    script_data: dict,
+    user_id: str,
+    tts_engine: str,
+    voice_name: str,
+    bgm_map: dict,
+    watermark_required: bool
+):
+    """長尺漫画動画のバックグラウンド合成タスク"""
+    try:
+        job_dir = config.TMP_DIR / job_id
+        job_dir.mkdir(parents=True, exist_ok=True)
+
+        firestore.update_job(job_id, {"progress": 25, "message": "画像・ナレーション音声をバッチ生成中..."})
+
+        # Step 3 バッチアセット生成
+        batch_gen = BatchAssetGenerator()
+        scene_assets = await batch_gen.generate_batch_assets(
+            script_data=script_data,
+            output_dir=job_dir / "assets",
+            tts_engine=tts_engine,
+            voice_name=voice_name
+        )
+
+        firestore.update_job(job_id, {"progress": 65, "message": "0.3秒演出切り替え・マルチBGMクロスフェード合成中..."})
+
+        # Step 4 動画合成
+        composer = MangaVideoComposer()
+        output_mp4 = job_dir / "manga_video_final.mp4"
+        composer.compose_manga_video(
+            scene_assets=scene_assets,
+            bgm_map=bgm_map,
+            output_video_path=output_mp4,
+            work_dir=job_dir / "work",
+            is_paid_member=not watermark_required
+        )
+
+        firestore.update_job(job_id, {
+            "status": "COMPLETED",
+            "progress": 100,
+            "message": "長尺漫画動画の作成が完了しました！",
+            "video_path": str(output_mp4)
+        })
+    except Exception as e:
+        logger.error(f"Manga video job {job_id} failed: {e}")
+        firestore.update_job(job_id, {
+            "status": "FAILED",
+            "progress": 0,
+            "message": f"動画生成エラー: {str(e)}"
+        })
+
 
 
 # =============================================================================
@@ -809,6 +899,73 @@ async def update_bgm(bgm_id: str, req: BGMUpdateRequest):
 
 
 # =============================================================================
+# ユーザー権限・プラン＆長尺漫画動画作成 API エンドポイント
+# =============================================================================
+@app.get("/api/user/permissions")
+async def get_user_permissions(user_id: str, feature: Optional[str] = None):
+    """ユーザーのプラン情報および指定機能の権限情報を取得"""
+    plan_info = permission_manager.get_user_plan(user_id)
+    if feature:
+        access_info = permission_manager.check_feature_access(user_id, feature)
+        return {"plan_info": plan_info, "access_info": access_info}
+    return {"plan_info": plan_info}
+
+
+@app.post("/api/user/plan")
+async def update_user_plan_endpoint(req: UserPlanUpdateRequest):
+    """ユーザーの会員プランを更新する（デモ・テスト用）"""
+    success = permission_manager.update_user_plan(req.user_id, req.plan, req.expire_date)
+    return {"success": success}
+
+
+@app.post("/api/manga/script")
+async def generate_manga_script_endpoint(req: MangaScriptRequest):
+    """長尺漫画動画のシナリオ・コマ割りJSONを生成する"""
+    access = permission_manager.check_feature_access(req.user_id, FeatureName.MANGA_LONG_VIDEO_CREATE)
+    if not access["allowed"]:
+        raise HTTPException(status_code=403, detail=access["reason"])
+
+    try:
+        km = KeyManager(req.gemini_api_keys)
+        generator = MangaScriptGenerator(key_manager=km)
+        script = await generator.generate_manga_script_async(
+            original_text=req.original_text,
+            target_length_minutes=req.target_length_minutes
+        )
+        return {"success": True, "script": script}
+    except Exception as e:
+        logger.error(f"Manga script generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/manga/generate")
+async def generate_manga_video_endpoint(req: MangaVideoGenerateRequest, background_tasks: BackgroundTasks):
+    """長尺漫画動画生成ジョブを発行する"""
+    access = permission_manager.check_feature_access(req.user_id, FeatureName.MANGA_LONG_VIDEO_CREATE)
+    if not access["allowed"]:
+        raise HTTPException(status_code=403, detail=access["reason"])
+
+    job_id = str(uuid.uuid4())
+    job_data = {
+        "job_id": job_id,
+        "user_id": req.user_id,
+        "mode": "MANGA_LONG",
+        "status": "PROCESSING",
+        "progress": 5,
+        "message": "長尺漫画動画生成ジョブを開始しました...",
+        "created_at": datetime.now().isoformat()
+    }
+    firestore.create_job(job_id, job_data)
+
+    background_tasks.add_task(
+        run_manga_video_job,
+        job_id, req.script_data, req.user_id, req.tts_engine, req.voice_name, req.bgm_map, access["watermark_required"]
+    )
+    return {"job_id": job_id, "status": "PROCESSING"}
+
+
+
+# =============================================================================
 # 起動時の初期化
 # =============================================================================
 @app.on_event("startup")
@@ -821,4 +978,11 @@ async def startup_event():
 
     # 一時ディレクトリの初期化
     config.TMP_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# フロントエンド静的ファイルの配信マウント (http://localhost:8080/ でWeb UIを直接表示)
+frontend_dir = config.BASE_DIR.parent / "frontend"
+if frontend_dir.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+
 

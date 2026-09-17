@@ -191,7 +191,78 @@ class ApiClient {
 
     return await res.json();
   }
+
+  /** ユーザーの会員プランおよび機能権限の取得 */
+  async getUserPermissions(feature = null) {
+    const userId = this._getUserId();
+    let url = `${this.baseUrl}/api/user/permissions?user_id=${encodeURIComponent(userId)}`;
+    if (feature) {
+      url += `&feature=${encodeURIComponent(feature)}`;
+    }
+    const res = await fetch(url);
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "権限情報の取得に失敗しました。");
+    }
+    return await res.json();
+  }
+
+  /** 長尺漫画動画のシナリオ・コマ割りJSONの生成 */
+  async generateMangaScript(originalText, targetLengthMinutes = 3) {
+    const geminiKey = window.settingsManager.get("geminiApiKey");
+    if (!geminiKey) {
+      throw new Error("Gemini APIキーが設定されていません。");
+    }
+
+    const payload = {
+      original_text: originalText,
+      target_length_minutes: parseInt(targetLengthMinutes),
+      gemini_api_keys: geminiKey,
+      user_id: this._getUserId()
+    };
+
+    const res = await fetch(`${this.baseUrl}/api/manga/script`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `漫画シナリオ生成エラー (${res.status})`);
+    }
+
+    return await res.json();
+  }
+
+  /** 長尺漫画動画の生成ジョブの発行 */
+  async generateMangaVideo(scriptData, ttsEngine = "edge", voiceName = "nanami", bgmMap = {}) {
+    const geminiKey = window.settingsManager.get("geminiApiKey");
+
+    const payload = {
+      script_data: scriptData,
+      user_id: this._getUserId(),
+      gemini_api_keys: geminiKey || "",
+      tts_engine: ttsEngine,
+      voice_name: voiceName,
+      bgm_map: bgmMap
+    };
+
+    const res = await fetch(`${this.baseUrl}/api/manga/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `漫画動画生成エラー (${res.status})`);
+    }
+
+    return await res.json();
+  }
 }
 
 window.apiClient = new ApiClient();
+
 

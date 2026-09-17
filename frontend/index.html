@@ -45,6 +45,10 @@
           </span>
           <span class="nav-label">動画作成 (ウィザード)</span>
         </button>
+        <button class="nav-item" data-target="manga">
+          <span class="nav-icon">📖</span>
+          <span class="nav-label">長尺・漫画動画 (Pro)</span>
+        </button>
         <button class="nav-item" data-target="edit">
           <span class="nav-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
@@ -267,6 +271,66 @@
         </div>
       </section>
 
+      <!-- ==================== 長尺・長尺漫画動画作成 ==================== -->
+      <section class="view-section" id="view-manga" style="display: none;">
+        <header class="section-header">
+          <h1 class="section-title">長尺・漫画動画プロジェクト (Pro)</h1>
+          <p class="section-subtitle">原案テキストからコマ割り・ナレーション・0.3秒演出切り替え・感情別マルチBGMクロスフェード動画を全自動合成します。</p>
+        </header>
+
+        <div class="glass-card main-form-card">
+          <div id="mangaLockNotice" class="guide-box" style="display: none; margin-bottom: 1.5rem; border-left: 4px solid var(--accent-secondary); background: rgba(255, 100, 100, 0.08);">
+            <p style="margin: 0; color: #ff6b6b; font-weight: 600;">
+              🔒 有料サブスク会員限定機能
+            </p>
+            <p style="margin: 0.5rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">
+              長尺漫画動画作成機能は有料サブスク会員（Proプラン）専用です。無料会員様はショート動画・一般長尺動画作成をご利用いただけます。
+            </p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">原案・ストーリーテキスト（小説・スカッと話・エピソード等）</label>
+            <textarea id="inputMangaOriginalText" class="form-input form-textarea" rows="6" placeholder="例: 10年ぶりに再会した幼馴染の葵。しかし彼女には誰にも言えない秘密があった..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">目標動画長（分）</label>
+            <div class="custom-select-wrapper">
+              <select id="inputMangaDuration" class="form-input form-select">
+                <option value="3" selected>3分（標準）</option>
+                <option value="5">5分（長尺ドラマ）</option>
+                <option value="10">10分（超長尺）</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="action-footer">
+            <button class="btn btn-primary btn-large" id="btnRunMangaScript">1. コマ割り・演出シナリオを生成</button>
+          </div>
+        </div>
+
+        <!-- シナリオ確認＆動画生成エリア -->
+        <div id="mangaScriptArea" class="glass-card main-form-card" style="display: none; margin-top: 1.5rem;">
+          <h3>生成されたコマ割り・BGM演出データ (JSON)</h3>
+          <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">必要に応じてナレーションやbgm_tagを直接編集可能です。</p>
+          <textarea id="inputMangaScriptJson" class="form-input form-textarea" rows="12" style="font-family: monospace; font-size: 0.85rem;"></textarea>
+          
+          <div class="action-footer" style="margin-top: 1.5rem;">
+            <button class="btn btn-primary btn-large" id="btnGenerateMangaVideo">2. このシナリオで長尺動画を一括合成</button>
+          </div>
+        </div>
+
+        <!-- ジョブ進行表示パネル -->
+        <div id="mangaProgressArea" class="glass-card main-form-card" style="display: none; margin-top: 1.5rem; text-align: center;">
+          <h3 id="mangaProgressStatusTitle">動画を生成中...</h3>
+          <div class="premium-progress-bar" style="margin: 1.5rem 0;"><div id="mangaProgressFill" class="premium-progress-fill" style="width: 5%;"></div></div>
+          <p id="mangaProgressMessage" style="color: var(--text-secondary);">素材を準備中...</p>
+          <div id="mangaVideoResult" style="display: none; margin-top: 1.5rem;">
+            <video id="mangaVideoPreview" controls style="max-width: 100%; max-height: 450px; border-radius: 8px;"></video>
+          </div>
+        </div>
+      </section>
+
       <!-- ==================== 既存動画編集 (モードB) ==================== -->
       <section class="view-section" id="view-edit">
         <header class="section-header">
@@ -356,7 +420,7 @@
             <div class="form-group">
               <label class="form-label">APIキー</label>
               <div class="input-action-wrapper">
-                <input type="password" id="setGeminiKey" class="form-input" placeholder="AIzaSy...">
+                <input type="password" id="setGeminiKey" class="form-input" placeholder="API Key (AIza... または AQ.A...)">
                 <button class="btn btn-outline" id="btnSaveGemini">保存</button>
               </div>
             </div>
