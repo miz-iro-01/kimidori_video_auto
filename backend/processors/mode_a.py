@@ -76,8 +76,8 @@ class ModeAProcessor:
         BIG_W, BIG_H = int(W * 1.3), int(H * 1.3)
 
         try:
-            font = ImageFont.truetype(config.SUBTITLE_FONT, 72)
-            font_small = ImageFont.truetype(config.SUBTITLE_FONT, 42)
+            font = ImageFont.truetype(config.SUBTITLE_FONT, 62)
+            font_small = ImageFont.truetype(config.SUBTITLE_FONT, 40)
         except Exception:
             font = ImageFont.load_default()
             font_small = font
@@ -155,43 +155,32 @@ class ModeAProcessor:
             bg_image.save(img_path, "PNG", quality=95)
             image_paths.append(img_path)
 
-            # --- テロップテキスト用透過画像の生成（1シーン内を3分割してテンポよく表示） ---
-            text = scene.get("text_overlay", "")
+            # --- テロップテキスト用透過画像の生成（1画面あたり最大3行・1行14文字以内・1〜3枚に最適分割） ---
+            text = scene.get("text_overlay") or scene.get("narration") or ""
             if text:
-                # ユーザー指定の句読点ルールを強制適用
-                text = text.replace("」。", "」").replace("\\n", " ").strip()
-                
-                # テキストを2〜3つのパートに分割
-                parts = self._split_text_into_parts(text, max_parts=3)
+                cards = self.split_text_into_cards(text, max_lines_per_card=3, max_chars_per_line=14)
                 scene_text_paths = []
 
-                for part_idx, part_text in enumerate(parts):
-                    # 各パート内で1行あたり最大14文字で折り返し
-                    max_chars = 14
-                    final_lines = []
-                    for line in part_text.split("\n"):
-                        if len(line) > max_chars:
-                            wrapped = [line[j:j+max_chars] for j in range(0, len(line), max_chars)]
-                            final_lines.extend(wrapped)
-                        else:
-                            final_lines.append(line)
-                    wrapped_text = "\n".join(final_lines)
-
-                    # 動画サイズと同じ透明画像を作成
+                for part_idx, card_text in enumerate(cards):
                     text_image = Image.new("RGBA", (W, H), (0, 0, 0, 0))
                     draw = ImageDraw.Draw(text_image)
 
-                    # テキストの中央・下部配置
-                    bbox = draw.multiline_textbbox((0, 0), wrapped_text, font=font, align="center")
+                    # テキストの中央・下部配置（余白と行間を最適化）
+                    bbox = draw.multiline_textbbox((0, 0), card_text, font=font, align="center", spacing=12, stroke_width=5)
                     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
                     tx = (W - tw) // 2
-                    ty = int(H * 0.76) - th // 2  # 画面下部に配置
+                    ty = int(H * 0.76) - th // 2
 
-                    # 太いアウトライン（縁取り）＋白文字
-                    for ox in range(-4, 5):
-                        for oy in range(-4, 5):
-                            draw.multiline_text((tx + ox, ty + oy), wrapped_text, fill=(0, 0, 0, 255), font=font, align="center")
-                    draw.multiline_text((tx, ty), wrapped_text, fill=(255, 255, 255, 255), font=font, align="center")
+                    # 滑らかな太めのアウトライン＋白文字
+                    draw.multiline_text(
+                        (tx, ty), card_text,
+                        fill=(255, 255, 255, 255),
+                        font=font,
+                        align="center",
+                        spacing=12,
+                        stroke_width=5,
+                        stroke_fill=(0, 0, 0, 255)
+                    )
 
                     text_img_path = image_dir / f"text_{i:03d}_part{part_idx}.png"
                     text_image.save(text_img_path, "PNG")
@@ -201,66 +190,159 @@ class ModeAProcessor:
             else:
                 text_paths.append([])
 
-        logger.info(f"画像素材 {len(image_paths)}枚 生成完了（ケンバーンズ＆テロップ3分割対応）")
+        logger.info(f"画像素材 {len(image_paths)}枚 生成完了（ケンバーンズ＆テロップ最大3行・最適分割対応）")
         return image_paths, text_paths
 
-    def _split_text_into_parts(self, text: str, max_parts: int = 3) -> list[str]:
-        """ナレーションテキストを2〜3つのパートに自然に小分け分割する"""
+    START_PROHIBITED = set('、。，．・？！?!」』）)]｝}”’ー〜～ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ')
+    END_PROHIBITED = set('「『（([｛{“‘')
+    PARTICLES_2 = [
+        'について', 'として', 'によって', 'けれど', 'だけど', 'だから', 
+        'しかし', 'そして', 'ながら', 'ように', 'ために', 'すると', 
+        'なので', 'から', 'まで', 'より', 'ので', 'のに', 'ても', 'たら'
+    ]
+    PARTICLES_1 = ['は', 'が', 'を', 'に', 'へ', 'で', 'と', 'て', 'も']
+
+    @classmethod
+    def clean_japanese_text(cls, text: str) -> str:
+        """テキストの余分な改行や変な記号を正規化し、行頭の孤立記号を除去"""
         import re
-        clean = text.strip()
-        if len(clean) <= 16:
+        t = text.replace('\\n', ' ').replace('\r', ' ').replace('\n', ' ')
+        t = re.sub(r'\s+', ' ', t).strip()
+        t = re.sub(r'」[。、.]+', '」', t)
+        # 行頭の孤立した閉じ括弧や句読点を完全に除去
+        t = re.sub(r'^[」』）)\s。、？！?!]+', '', t)
+        t = re.sub(r'[「『（(\s]+$', '', t)
+        return t
+
+    @classmethod
+    def find_natural_split_points(cls, text: str) -> dict[int, int]:
+        points = {}
+        n = len(text)
+        for i in range(1, n):
+            if text[i] in cls.START_PROHIBITED:
+                continue
+            if text[i-1] in cls.END_PROHIBITED:
+                continue
+
+            score = 1
+            if text[i-1] in '。！？!?':
+                score = 100
+            elif text[i-1] in '、,':
+                score = 80
+            elif text[i-1] in '」』）':
+                score = 75
+            else:
+                matched = False
+                for p in cls.PARTICLES_2:
+                    plen = len(p)
+                    if i >= plen and text[i-plen:i] == p:
+                        score = 45
+                        matched = True
+                        break
+                if not matched:
+                    for p in cls.PARTICLES_1:
+                        if text[i-1] == p and i >= 2 and text[i-2] not in cls.START_PROHIBITED:
+                            score = 25
+                            break
+            points[i] = score
+        return points
+
+    @classmethod
+    def wrap_single_card(cls, text: str, max_chars: int = 14) -> list[str]:
+        """1枚のカード用テキストを、最大14文字・禁則処理遵守・自然な文節で改行する"""
+        clean = cls.clean_japanese_text(text)
+        if not clean:
+            return []
+        if len(clean) <= max_chars:
             return [clean]
 
-        # 1. 句読点（。！？）で分割
-        sentences = [s.strip() for s in re.split(r'([。！？!?]+)', clean) if s.strip()]
-        merged = []
-        k = 0
-        while k < len(sentences):
-            s = sentences[k]
-            if k + 1 < len(sentences) and re.match(r'^[。！？!?]+$', sentences[k+1]):
-                s += sentences[k+1]
-                k += 2
-            else:
-                k += 1
-            if s.strip():
-                merged.append(s.strip())
+        points = cls.find_natural_split_points(clean)
+        lines = []
+        curr = clean
 
-        if 2 <= len(merged) <= max_parts:
-            return merged
-        elif len(merged) > max_parts:
-            # 均等にmax_parts個へ結合
-            res = []
-            c_size = (len(merged) + max_parts - 1) // max_parts
-            for j in range(0, len(merged), c_size):
-                res.append(" ".join(merged[j:j+c_size]))
-            return res[:max_parts]
+        while len(curr) > max_chars:
+            search_max = min(len(curr), max_chars)
+            best_pt = -1
+            best_score = -1
 
-        # 2. 読点（、）で分割
-        phrases = [p.strip() for p in re.split(r'([、,]+)', clean) if p.strip()]
-        if len(phrases) >= 3:
-            p_merged = []
-            m = 0
-            while m < len(phrases):
-                ph = phrases[m]
-                if m + 1 < len(phrases) and re.match(r'^[、,]+$', phrases[m+1]):
-                    ph += phrases[m+1]
-                    m += 2
+            for pt in range(search_max, 2, -1):
+                if pt in points:
+                    balance_bonus = 10 - abs(pt - int(search_max * 0.75))
+                    total_score = points[pt] + balance_bonus
+                    if total_score > best_score:
+                        best_score = total_score
+                        best_pt = pt
+
+            if best_pt == -1:
+                for pt in range(search_max, 2, -1):
+                    if curr[pt] not in cls.START_PROHIBITED and curr[pt-1] not in cls.END_PROHIBITED:
+                        best_pt = pt
+                        break
+                if best_pt == -1:
+                    best_pt = search_max
+
+            line = curr[:best_pt].strip()
+            if line:
+                lines.append(line)
+            curr = curr[best_pt:].strip()
+            points = cls.find_natural_split_points(curr)
+
+        if curr:
+            if len(curr) <= 2 and lines:
+                prev = lines.pop()
+                combined = prev + curr
+                if len(combined) <= max_chars:
+                    lines.append(combined)
                 else:
-                    m += 1
-                p_merged.append(ph)
-            if 2 <= len(p_merged) <= max_parts:
-                return p_merged
+                    sub_pts = cls.find_natural_split_points(combined)
+                    mid = len(combined) // 2
+                    best_m = -1
+                    best_s = -1
+                    for pt in range(min(len(combined), max_chars), 2, -1):
+                        if pt in sub_pts and len(combined) - pt <= max_chars:
+                            s = sub_pts[pt] - abs(pt - mid) * 2
+                            if s > best_s:
+                                best_s = s
+                                best_m = pt
+                    if best_m != -1:
+                        lines.append(combined[:best_m].strip())
+                        lines.append(combined[best_m:].strip())
+                    else:
+                        lines.append(combined[:mid].strip())
+                        lines.append(combined[mid:].strip())
+            else:
+                lines.append(curr)
 
-        # 3. 文字数による均等2〜3分割
-        tot = len(clean)
-        if tot <= 32:
-            mid = tot // 2
-            # スペース等があればそこで区切る
-            return [clean[:mid], clean[mid:]]
-        else:
-            p1 = tot // 3
-            p2 = (tot * 2) // 3
-            return [clean[:p1], clean[p1:p2], clean[p2:]]
+        return lines
+
+    @classmethod
+    def split_text_into_cards(cls, text: str, max_lines_per_card: int = 3, max_chars_per_line: int = 14) -> list[str]:
+        """
+        1シーンのテキストを、1画面あたり最大3行（各行最大14文字）に厳密に収まるように
+        1〜3枚の字幕カードに最適分割する。
+        """
+        clean = cls.clean_japanese_text(text)
+        if not clean:
+            return []
+
+        all_lines = cls.wrap_single_card(clean, max_chars=max_chars_per_line)
+        if len(all_lines) <= max_lines_per_card:
+            return ["\n".join(all_lines)]
+
+        if len(all_lines) <= 6:
+            n = len(all_lines)
+            mid = (n + 1) // 2
+            card1 = "\n".join(all_lines[:mid])
+            card2 = "\n".join(all_lines[mid:])
+            return [card1, card2]
+
+        n = len(all_lines)
+        p1 = (n + 2) // 3
+        p2 = p1 + ((n - p1 + 1) // 2)
+        card1 = "\n".join(all_lines[:p1])
+        card2 = "\n".join(all_lines[p1:p2])
+        card3 = "\n".join(all_lines[p2:min(p2 + max_lines_per_card, n)])
+        return [card1, card2, card3]
 
     async def compose_video(self, script_data, audio_paths, image_paths, text_paths, job_id, duration):
         """ケンバーンズ効果＋フェードトランジション＋3分割テロップ時間差オーバーレイ付きで動画を合成"""
@@ -326,8 +408,9 @@ class ModeAProcessor:
                 cmd.extend([
                     "-filter_complex", filter_str,
                     "-map", "[v]", "-map", f"{audio_input_idx}:a",
-                    "-c:v", "libx264", "-preset", "medium", "-crf", "23",
-                    "-c:a", "aac", "-b:a", "128k",
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+                    "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30",
+                    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
                     "-shortest", "-t", str(scene_dur),
                     str(clip_path)
                 ])
@@ -339,8 +422,9 @@ class ModeAProcessor:
                     "-i", str(audio_paths[i]),
                     "-filter_complex", f"[0:v]{kb}{fade_filter},format=yuv420p[v]",
                     "-map", "[v]", "-map", "1:a",
-                    "-c:v", "libx264", "-preset", "medium", "-crf", "23",
-                    "-c:a", "aac", "-b:a", "128k",
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+                    "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30",
+                    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
                     "-shortest", "-t", str(scene_dur),
                     str(clip_path),
                 ]
@@ -353,8 +437,9 @@ class ModeAProcessor:
                     "ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-i", str(image_paths[i]),
                     "-i", str(audio_paths[i]),
                     "-vf", f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
-                    "-c:v", "libx264", "-preset", "medium", "-crf", "23",
-                    "-c:a", "aac", "-b:a", "128k", "-shortest", "-t", str(scene_dur),
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+                    "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30",
+                    "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-shortest", "-t", str(scene_dur),
                     str(clip_path),
                 ]
                 subprocess.run(cmd_fallback, capture_output=True, text=True, timeout=120)

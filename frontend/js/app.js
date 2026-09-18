@@ -677,7 +677,7 @@ class AppController {
           }
 
           if (downloadBtn && mode === 'A') {
-            downloadBtn.href = videoUrl;
+            downloadBtn.href = `${videoUrl}?download=1`;
           }
 
           if (options?.onComplete) {

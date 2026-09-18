@@ -72,7 +72,8 @@ def concat_video_clips(clip_paths: list[Path], output_path: Path) -> Path:
             f.write(f"file '{str(p).replace(chr(92), '/')}'\n")
     cmd = [
         "ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(concat_file),
-        "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+        "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30",
         "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(output_path),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
@@ -186,6 +187,7 @@ def mix_bgm_to_video(
         "-map", "0:v", "-map", "[aout]",
         "-c:v", "copy",
         "-c:a", "aac", "-b:a", "192k",
+        "-movflags", "+faststart",
         "-shortest",
         str(output_path),
     ]
@@ -213,6 +215,7 @@ def mix_bgm_to_video(
             "-map", "0:v", "-map", "[aout]",
             "-c:v", "copy",
             "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart",
             "-shortest",
             str(output_path),
         ]

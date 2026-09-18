@@ -442,9 +442,13 @@ async def run_research(request: ResearchRequest):
 # 動画ダウンロード
 # =============================================================================
 @app.get("/api/download/{job_id}")
-async def download_video(job_id: str):
-    """完成動画のバイナリを直接ストリーミングで返す"""
-    from fastapi.responses import RedirectResponse, StreamingResponse
+async def download_video(job_id: str, download: int = 0):
+    """
+    完成動画を高速・スムーズにストリーミング配信する。
+    HTML5 <video> プレイヤーの Range リクエスト (206 Partial Content) に完全対応し、
+    カクつきのない滑らかなプレビュー再生を実現。
+    """
+    from fastapi.responses import FileResponse, RedirectResponse
     try:
         job = firestore.get_job(job_id)
         if not job:
@@ -456,31 +460,80 @@ async def download_video(job_id: str):
         if not storage_path:
             raise HTTPException(status_code=404, detail="動画ファイルが見つかりません")
 
-        # 古いジョブで署名付きURLが保存されている場合の互換性
-        if storage_path.startswith("http"):
-            return RedirectResponse(url=storage_path)
+        # 1. ローカルの一時ディレクトリにファイルが残っているかチェック (同一インスタンスでの即時プレビュー)
+        local_candidates = [
+            config.TMP_DIR / job_id / "final_with_bgm.mp4",
+            config.TMP_DIR / job_id / "final_output.mp4",
+            config.TMP_DIR / f"cache_{job_id}.mp4",
+        ]
+        local_video = None
+        for cand in local_candidates:
+            if cand.exists() and cand.stat().st_size > 0:
+                local_video = cand
+                break
 
-        blob = storage.bucket.blob(storage_path)
-        if not blob.exists():
-            raise HTTPException(status_code=404, detail="Storage上にファイルが見つかりません")
+        # 2. ローカルにない場合はCloud Storageからローカルキャッシュに1回だけ取得
+        if not local_video:
+            if storage_path.startswith("http"):
+                return RedirectResponse(url=storage_path)
 
-        def iterfile():
-            # 1MB チャンクでストリーミング
-            with blob.open("rb") as f:
-                while chunk := f.read(1024 * 1024):
-                    yield chunk
+            blob = storage.bucket.blob(storage_path)
+            if not blob.exists():
+                raise HTTPException(status_code=404, detail="Storage上にファイルが見つかりません")
 
-        return StreamingResponse(
-            iterfile(),
+            cache_path = config.TMP_DIR / f"cache_{job_id}.mp4"
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            blob.download_to_filename(str(cache_path))
+            local_video = cache_path
+
+        # 3. Starlette FileResponse を返却
+        # FileResponse は内部で Accept-Ranges: bytes, 206 Partial Content, Content-Length, Content-Range を完全自動処理
+        disposition = "attachment" if download == 1 else "inline"
+        filename = f"kimidori_video_{job_id}.mp4"
+
+        return FileResponse(
+            path=str(local_video),
             media_type="video/mp4",
+            content_disposition_type=disposition,
+            filename=filename if disposition == "attachment" else None,
             headers={
-                "Content-Disposition": f"attachment; filename=kimidori_video_{job_id}.mp4"
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=86400",
             }
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"ダウンロードエラー: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/video/download")
+async def download_video_file(path: str, download: int = 0):
+    """ファイルパスを指定して動画ファイルをストリーミング/ダウンロード（Pro版ショート/長尺用）"""
+    from fastapi.responses import FileResponse
+    try:
+        file_path = Path(path)
+        if not file_path.exists():
+            file_path = config.TMP_DIR / path.replace("\\", "/").lstrip("/")
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="指定された動画ファイルが見つかりません")
+
+        disposition = "attachment" if download == 1 else "inline"
+        return FileResponse(
+            path=str(file_path),
+            media_type="video/mp4",
+            content_disposition_type=disposition,
+            filename=file_path.name if disposition == "attachment" else None,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=86400",
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"動画ファイル配信エラー: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
