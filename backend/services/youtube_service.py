@@ -205,9 +205,10 @@ class YouTubeService:
         tags: list[str] = None,
         category_id: str = "22",  # 22 = People & Blogs
         privacy_status: str = "private",
+        publish_at: Optional[str] = None,
     ) -> Optional[str]:
         """
-        動画をYouTubeにアップロードする
+        動画をYouTubeにアップロードする（即時公開・非公開・限定公開・予約投稿 publishAt に対応）
 
         Args:
             video_path: アップロードする動画ファイルのパス
@@ -217,6 +218,7 @@ class YouTubeService:
             tags: タグリスト
             category_id: YouTubeカテゴリーID
             privacy_status: 公開設定（"private" / "unlisted" / "public"）
+            publish_at: 予約投稿日時 (ISO 8601形式: "YYYY-MM-DDTHH:MM:SSZ")
 
         Returns:
             Optional[str]: アップロードされた動画のURL。失敗した場合はNone
@@ -225,6 +227,13 @@ class YouTubeService:
         if not youtube:
             logger.warning(f"YouTube APIが利用できないため、投稿をスキップします (user_id={user_id})")
             return None
+
+        status_body = {
+            "privacyStatus": "private" if publish_at else privacy_status,
+            "selfDeclaredMadeForKids": False,
+        }
+        if publish_at:
+            status_body["publishAt"] = publish_at
 
         body = {
             "snippet": {
@@ -235,10 +244,7 @@ class YouTubeService:
                 "defaultLanguage": "ja",
                 "defaultAudioLanguage": "ja",
             },
-            "status": {
-                "privacyStatus": privacy_status,
-                "selfDeclaredMadeForKids": False,
-            },
+            "status": status_body,
         }
 
         # チャンク分割アップロード（大容量ファイル対応）

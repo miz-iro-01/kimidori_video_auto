@@ -62,7 +62,7 @@ class SettingsManager {
   // Gemini API Key Validation
   hasGeminiKey() {
     const key = this.get("geminiApiKey");
-    return typeof key === "string" && key.startsWith("AIza") && key.length > 30;
+    return typeof key === "string" && key.trim().length > 10;
   }
 
   // YouTube Accounts Management (Max 5)

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Auto Studio - Portable</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="single-screen-body">
+    <div class="studio-app">
+        <!-- Compact Top Header Bar -->
+        <header class="top-nav-bar">
+            <div class="brand-group">
+                <span class="brand-logo"></span>
+                <span class="brand-title">Video Studio Hub</span>
+                <span class="brand-version">Portable</span>
+            </div>
+
+            <!-- Global Video Settings -->
+            <div class="header-settings">
+                <div class="header-setting-item">
+                    <div class="toggle-group mini-toggle">
+                        <input type="radio" id="type-long" name="video_type" value="long" checked onchange="onVideoTypeChanged('long')">
+                        <label for="type-long" class="toggle-btn">長尺 (15〜20分 / 16:9)</label>
+                        <input type="radio" id="type-short" name="video_type" value="short" onchange="onVideoTypeChanged('short')">
+                        <label for="type-short" class="toggle-btn">ショート (60秒 / 9:16)</label>
+                    </div>
+                </div>
+
+                <div class="header-setting-item">
+                    <select id="style-select" class="form-select mini-select">
+                        <option value="manga_color" selected>2D カラー漫画</option>
+                        <option value="ukiyoe">浮世絵・和風絵巻調</option>
+                        <option value="cinematic">実写シネマティック</option>
+                        <option value="anime">アニメーション調</option>
+                        <option value="3d_art">3D スタイライズド</option>
+                        <option value="watercolor">水彩画調</option>
+                    </select>
+                </div>
+
+                <div class="header-setting-item">
+                    <select id="genre-select" class="form-select mini-select">
+                        <option value="business" selected>ビジネス・洋書解説</option>
+                        <option value="edoculture">江戸の暮らし・浮世絵雑学</option>
+                        <option value="story">ストーリー・ドラマ</option>
+                        <option value="trivia">雑学・トリビア</option>
+                        <option value="history">歴史・偉人伝</option>
+                        <option value="finance">お金・投資・経済</option>
+                    </select>
+                </div>
+
+                <div class="header-setting-item">
+                    <select id="thumbnail-style-select" class="form-select mini-select" title="YouTubeサムネイルの型を選択">
+                        <option value="split" selected>サムネ型: 左右対比 (絶望 vs 成功)</option>
+                        <option value="impact">サムネ型: 中央人物インパクト (迫真表情)</option>
+                        <option value="three_step">サムネ型: 3分割比較 (ステップ)</option>
+                        <option value="auto">サムネ型: おまかせ (AI自動)</option>
+                    </select>
+                </div>
+
+                <div class="header-setting-item api-key-box">
+                    <input type="password" id="gemini-api-key" class="form-input mini-input" placeholder="Gemini API Key (任意)" oninput="saveApiKey(this.value)">
+                </div>
+            </div>
+
+            <!-- Header Right Status -->
+            <div class="header-right">
+                <button class="btn btn-outline btn-sm" id="btn-sync-host" onclick="sendDraftToHost()" style="display: none;" title="親プラットフォームに下書き送信">下書き連携</button>
+                <div class="status-indicator">
+                    <span class="status-dot" id="system-status-dot"></span>
+                    <span class="status-text" id="system-status-text">待機中</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dynamic Live Progress Banner -->
+        <div class="live-progress-bar-strip">
+            <div class="progress-info-row">
+                <span class="progress-label" id="progress-detail">待機中: 台本を入力・生成すると自動解析され、「素材生成開始」を押せます。</span>
+                <span class="progress-value" id="progress-percent">0%</span>
+            </div>
+            <div class="progress-track">
+                <div class="progress-fill" id="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+        </div>
+
+        <!-- Split Main Workspace -->
+        <main class="main-dashboard-grid">
+            <!-- Left Panel: Script Creation & Editor -->
+            <section class="dashboard-panel left-script-panel">
+                <div class="panel-header-toolbar">
+                    <div class="script-mode-tabs mini-tabs">
+                        <button class="mode-tab-btn active" id="btn-mode-api" onclick="switchScriptMode('api')">[1] Gemini API生成</button>
+                        <button class="mode-tab-btn" id="btn-mode-direct" onclick="switchScriptMode('direct')">[2] 直接入力・サンプル</button>
+                    </div>
+                </div>
+
+                <!-- Input Method Inputs -->
+                <div class="method-input-container">
+                    <div id="box-mode-api" class="method-input-row compact-row">
+                        <input type="text" id="api-theme-input" class="form-input" placeholder="リサーチテーマ (例: 40代から豊かになる知恵 / 江戸の暮らし)">
+                        <button class="btn btn-accent btn-sm" onclick="generateScriptViaApi()">API台本生成</button>
+                    </div>
+
+                    <div id="box-mode-direct" class="method-input-row compact-row" style="display: none;">
+                        <button class="btn btn-secondary btn-sm" onclick="loadSampleScript()">サンプル台本をセット</button>
+                    </div>
+                </div>
+
+                <!-- Script Editor -->
+                <div class="editor-wrap">
+                    <textarea id="script-input" class="form-textarea studio-editor" placeholder="台本テキスト（[00:00] Cut_001形式）がここにセットされます。直接編集も可能です..."></textarea>
+                </div>
+
+                <!-- Left Panel Footer Actions -->
+                <div class="panel-footer-actions">
+                    <button class="btn btn-accent btn-lg" id="btn-start" onclick="startGeneration()" disabled>素材生成開始</button>
+                    <button class="btn btn-outline btn-sm" id="btn-reset" onclick="resetStudio()">リセット</button>
+                </div>
+                <div id="resume-hint" class="resume-hint-box" style="display: none;"></div>
+            </section>
+
+            <!-- Right Panel: Visual Workspace Tabs -->
+            <section class="dashboard-panel right-workspace-panel">
+                <div class="panel-header-toolbar">
+                    <div class="workspace-tabs mini-tabs">
+                        <button class="tab-btn active" onclick="switchTab('tab-storyboard')">絵コンテリスト</button>
+                        <button class="tab-btn" onclick="switchTab('tab-assets')">生成アセット一覧</button>
+                        <button class="tab-btn" onclick="switchTab('tab-export')">タイムライン調整</button>
+                    </div>
+                </div>
+
+                <div class="tab-viewport">
+                    <!-- Tab 1: Storyboard Table -->
+                    <div id="tab-storyboard" class="tab-content active">
+                        <div class="table-scroll-container">
+                            <table class="studio-table" id="storyboard-table">
+                                <thead>
+                                    <tr>
+                                        <th>カットID</th>
+                                        <th>タイム</th>
+                                        <th>話者</th>
+                                        <th>セリフ / ナレーション</th>
+                                        <th>シーン描写</th>
+                                        <th>演出 / カメラ</th>
+                                        <th>形式</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="storyboard-body">
+                                    <tr>
+                                        <td colspan="7" class="text-muted text-center" style="padding: 40px;">台本を入力・生成すると、ここに全カットの絵コンテ・演出が自動展開されます。</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Generated Assets (Real-time thumbnail gallery) -->
+                    <div id="tab-assets" class="tab-content">
+                        <div class="asset-grid-scroll" id="asset-grid">
+                            <div class="text-muted text-center grid-empty" style="grid-column: 1/-1; padding: 40px;">生成された画像・動画アセットがここにリアルタイム表示されます。</div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 3: Timeline Settings -->
+                    <div id="tab-export" class="tab-content">
+                        <div class="export-scroll-box">
+                            <div class="export-section tts-spacious-card">
+                                <div class="section-header-row">
+                                    <span class="section-label">動画タイムライン編集 (カット順・表示秒数・有効/無効)</span>
+                                    <span class="text-muted" style="font-size: 11px;">カットごとの秒数調整・スキップ設定</span>
+                                </div>
+                                <div class="timeline-editor-container" id="timeline-editor-list">
+                                    <div class="text-muted text-center" style="padding: 20px; font-size: 12px;">素材生成後にタイムラインの各カットを編集できます。</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

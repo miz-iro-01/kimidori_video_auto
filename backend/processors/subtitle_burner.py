@@ -24,6 +24,24 @@ class SubtitleBurner:
         self.outline_color = config.SUBTITLE_OUTLINE_COLOR
         self.outline_width = config.SUBTITLE_OUTLINE_WIDTH
 
+    def _seconds_to_ass_time(self, seconds: float) -> str:
+        """秒数を ASS形式 (H:MM:SS.cs) に変換"""
+        m, s = divmod(seconds, 60)
+        h, m = divmod(m, 60)
+        cs = int((s - int(s)) * 100)
+        return f"{int(h)}:{int(m):02d}:{int(s):02d}.{cs:02d}"
+
+    def _format_subtitle_text(self, text: str, max_line_len: int = 14) -> str:
+        """長すぎる字幕テキストを自然な位置で\\N改行する"""
+        clean_t = text.strip().replace("\n", "")
+        if len(clean_t) <= max_line_len:
+            return clean_t
+            
+        chunks = []
+        for i in range(0, len(clean_t), max_line_len):
+            chunks.append(clean_t[i:i + max_line_len])
+        return "\\N".join(chunks)
+
     def create_ass_subtitle(
         self,
         segments: list[dict],
@@ -32,25 +50,15 @@ class SubtitleBurner:
         video_height: int = 1080,
     ) -> Path:
         """
-        Whisperのセグメントデータから ASS字幕ファイルを生成する
-
-        Args:
-            segments: Whisperの認識セグメント [{start, end, text}, ...]
-            output_path: 出力する.assファイルのパス
-            video_width: 動画の幅
-            video_height: 動画の高さ
-
-        Returns:
-            Path: 生成された.assファイルのパス
+        Whisperのセグメントデータから実用レベルのプロ仕様 ASS字幕ファイルを生成する
         """
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # ASS字幕のスタイル定義
-        # MarginV で下からの位置を調整
         margin_v = int(video_height * (1.0 - config.SUBTITLE_POSITION_Y))
+        font_name = "MS Gothic" if config.SUBTITLE_FONT == "Noto Sans CJK JP" else config.SUBTITLE_FONT
 
         ass_content = f"""[Script Info]
-Title: KIMIDORI Movie Auto - 自動テロップ
+Title: KIMIDORI Movie Auto - 自動プロテロップ
 ScriptType: v4.00+
 PlayResX: {video_width}
 PlayResY: {video_height}
@@ -58,7 +66,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Noto Sans CJK JP,{self.font_size},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,{self.outline_width},1,2,20,20,{margin_v},1
+Style: Default,{font_name},{self.font_size},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,{self.outline_width},2,2,20,20,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -66,14 +74,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         for seg in segments:
             start_time = self._seconds_to_ass_time(seg["start"])
             end_time = self._seconds_to_ass_time(seg["end"])
-            text = seg["text"].strip().replace("\n", "\\N")
+            formatted_text = self._format_subtitle_text(seg["text"])
 
-            ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}\n"
+            ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{formatted_text}\n"
 
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(ass_content)
 
-        logger.info(f"ASS字幕ファイル生成完了: {output_path.name} ({len(segments)}セグメント)")
+        logger.info(f"プロ仕様ASS字幕ファイル生成完了: {output_path.name} ({len(segments)}セグメント)")
         return output_path
 
     def burn_subtitles_to_video(
