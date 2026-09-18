@@ -34,6 +34,15 @@ class AppController {
           targetSec.classList.add('active');
           targetSec.style.display = 'block';
         }
+
+        // 簡易ショート動画（generate）タブが選択され、かつ生成完了画面が表示中の場合は初期画面にリセット
+        if (target === 'generate') {
+          const s4 = document.getElementById('step4');
+          const vr = document.getElementById('videoResultPanel');
+          if (s4 && s4.style.display !== 'none' && vr && vr.style.display !== 'none') {
+            this.resetWizard(true); // 静かにリセット
+          }
+        }
       });
     });
   }
@@ -273,16 +282,122 @@ class AppController {
     }
   }
 
+  // --- ウィザードのリセット (STEP 1に戻る) ---
+  resetWizard(silent = false) {
+    this.wizardState = { theme: "", strategy: "", scriptData: null, duration: 45, style: "informative", target: "" };
+    this.currentJobId = null;
+
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+
+    // ステップを初期化してSTEP 1を表示
+    if (this.showStep) {
+      this.showStep(1);
+    } else {
+      document.querySelectorAll('.wizard-step').forEach(step => {
+        step.classList.remove('active');
+        step.style.display = 'none';
+      });
+      const s1 = document.getElementById('step1');
+      if (s1) {
+        s1.classList.add('active');
+        s1.style.display = 'block';
+      }
+    }
+
+    // 進行状況・結果パネルをリセット
+    const pA = document.getElementById('execPanelA');
+    if (pA) pA.style.display = 'none';
+    const vr = document.getElementById('videoResultPanel');
+    if (vr) vr.style.display = 'none';
+    const ar = document.getElementById('appliedResearchPanel');
+    if (ar) ar.style.display = 'none';
+    const at = document.getElementById('appliedResearchText');
+    if (at) at.textContent = '';
+    const bar = document.getElementById('execBarA');
+    if (bar) bar.style.width = '0%';
+    const title = document.getElementById('execTitleA');
+    if (title) title.textContent = '動画をレンダリング中...';
+
+    // プレイヤー停止・クリア
+    const vp = document.getElementById('finalVideoPlayer');
+    if (vp) {
+      vp.pause();
+      vp.removeAttribute('src');
+      vp.load();
+    }
+
+    // ダウンロードボタンリセット
+    const btnDl = document.getElementById('btnDownloadFinal');
+    if (btnDl) btnDl.href = '#';
+
+    // 投稿ボタンリセット
+    const btnPost = document.getElementById('btnPostToYouTube');
+    if (btnPost) {
+      btnPost.disabled = false;
+      btnPost.style.backgroundColor = '';
+      btnPost.innerHTML = '<span class="icon-youtube"></span> YouTubeに投稿する';
+    }
+
+    // 入力欄クリア
+    const themeInput = document.getElementById('inputTheme');
+    if (themeInput) {
+      themeInput.value = '';
+      themeInput.focus();
+    }
+    const scriptInput = document.getElementById('inputScriptData');
+    if (scriptInput) scriptInput.value = '';
+
+    // リサーチ/台本ローディングのリセット
+    const rl = document.getElementById('researchLoading');
+    if (rl) rl.style.display = 'none';
+    const rr = document.getElementById('researchResults');
+    if (rr) rr.style.display = 'none';
+    const sl = document.getElementById('scriptLoading');
+    if (sl) sl.style.display = 'none';
+    const se = document.getElementById('scriptEditor');
+    if (se) se.style.display = 'none';
+
+    // ヘッダーのリセットボタン非表示
+    const btnHReset = document.getElementById('btnHeaderResetWizard');
+    if (btnHReset) btnHReset.style.display = 'none';
+
+    if (!silent) {
+      this.showToast("最初から新しく作成する画面に戻りました", "info");
+    }
+  }
+
   // --- フォーム初期化 (モードA: ウィザード) ---
   initForms() {
     // 状態管理
     this.wizardState = { theme: "", strategy: "", scriptData: null, duration: 45, style: "informative", target: "" };
 
     const showStep = (stepNum) => {
-      document.querySelectorAll('.wizard-step').forEach(el => el.style.display = 'none');
-      document.getElementById(`step${stepNum}`).style.display = 'block';
+      document.querySelectorAll('.wizard-step').forEach(el => {
+        el.classList.remove('active');
+        el.style.display = 'none';
+      });
+      const current = document.getElementById(`step${stepNum}`);
+      if (current) {
+        current.classList.add('active');
+        current.style.display = 'block';
+      }
+      const headerResetBtn = document.getElementById('btnHeaderResetWizard');
+      if (headerResetBtn) {
+        headerResetBtn.style.display = stepNum > 1 ? 'inline-flex' : 'none';
+      }
     };
     this.showStep = showStep;
+
+    // リセットボタン（STEP 4 結果パネル ＆ ヘッダー）
+    document.getElementById('btnResetWizard')?.addEventListener('click', () => {
+      this.resetWizard();
+    });
+    document.getElementById('btnHeaderResetWizard')?.addEventListener('click', () => {
+      this.resetWizard();
+    });
 
     // STEP 1: リサーチ開始
     document.getElementById('btnRunResearch')?.addEventListener('click', async () => {
@@ -408,7 +523,7 @@ class AppController {
       try {
         const btn = document.getElementById('btnPostToYouTube');
         btn.disabled = true;
-        btn.innerHTML = `<span style="display:inline-block; animation: spin 1s linear infinite;">⏳</span> 投稿中...`;
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 6px;"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> 投稿中...`;
 
         const userId = (() => {
           if (firebase.auth().currentUser) return firebase.auth().currentUser.uid;
@@ -509,7 +624,7 @@ class AppController {
     }
   }
 
-  startJobPolling(jobId, mode) {
+  startJobPolling(jobId, mode, options = {}) {
     const bar = document.getElementById(`execBar${mode}`);
     const title = document.getElementById(`execTitle${mode}`);
     const panel = document.getElementById(`execPanel${mode}`);
@@ -517,7 +632,8 @@ class AppController {
     const player = document.getElementById('finalVideoPlayer');
     const downloadBtn = document.getElementById('btnDownloadFinal');
 
-    if (!bar || !title) return;
+    const hasCustomCallbacks = options && (options.onProgress || options.onComplete || options.onError);
+    if (!hasCustomCallbacks && (!bar || !title)) return;
 
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
@@ -532,15 +648,18 @@ class AppController {
         const job = await res.json();
 
         // UIを更新
-        bar.style.width = `${job.progress}%`;
-        title.textContent = `${job.message} (${job.progress}%)`;
+        if (bar) bar.style.width = `${job.progress}%`;
+        if (title) title.textContent = `${job.message} (${job.progress}%)`;
+        if (options?.onProgress) {
+          options.onProgress(job);
+        }
 
         if (job.status === "completed") {
           clearInterval(this.pollInterval);
           this.pollInterval = null;
 
           if (panel) panel.style.display = 'none';
-          if (resultPanel) resultPanel.style.display = 'block';
+          if (resultPanel && mode === 'A') resultPanel.style.display = 'block';
 
           // リサーチ戦略が保存されていれば表示（完全自動モードの証拠）
           const researchPanel = document.getElementById('appliedResearchPanel');
@@ -552,27 +671,37 @@ class AppController {
 
           // 完成動画のURLを設定（バックエンドのダウンロードAPIを使用）
           const videoUrl = `${apiUrl}/api/download/${jobId}`;
-          if (player) {
+          if (player && mode === 'A') {
             player.src = videoUrl;
             player.load();
           }
 
-          if (downloadBtn) {
+          if (downloadBtn && mode === 'A') {
             downloadBtn.href = videoUrl;
           }
 
-          this.showToast("動画の生成が完了しました！", "success");
+          if (options?.onComplete) {
+            options.onComplete(job);
+          } else {
+            this.showToast("動画の生成が完了しました！", "success");
+          }
         } else if (job.status === "failed") {
           clearInterval(this.pollInterval);
           this.pollInterval = null;
 
           if (panel) panel.style.display = 'none';
-          this.showToast(`動画生成に失敗: ${job.message}`, "error");
+          if (options?.onError) {
+            options.onError(job.message);
+          } else {
+            this.showToast(`動画生成に失敗: ${job.message}`, "error");
+          }
 
           // 失敗した場合は入力画面に戻す
-          const isAuto = document.getElementById('checkAutoMode')?.checked;
-          if (this.showStep) {
-            this.showStep(isAuto ? 1 : 3);
+          if (mode === 'A') {
+            const isAuto = document.getElementById('checkAutoMode')?.checked;
+            if (this.showStep) {
+              this.showStep(isAuto ? 1 : 3);
+            }
           }
         }
       } catch (err) {
@@ -1315,7 +1444,10 @@ class AppController {
               msgEl.textContent = "生成完了";
               if (job.video_path) {
                 resEl.style.display = 'block';
-                previewEl.src = `${window.apiClient.baseUrl}/api/video/download?path=${encodeURIComponent(job.video_path)}`;
+                const dlUrl = `${window.apiClient.baseUrl}/api/video/download?path=${encodeURIComponent(job.video_path)}`;
+                previewEl.src = dlUrl;
+                const dlBtn = document.getElementById('btnDownloadProShorts');
+                if (dlBtn) dlBtn.href = dlUrl;
               }
               btnGenProShorts.disabled = false;
             },
@@ -1331,6 +1463,23 @@ class AppController {
         }
       });
     }
+
+    // Pro版ショート動画 リセットボタン
+    document.getElementById('btnResetProShorts')?.addEventListener('click', () => {
+      const progArea = document.getElementById('proShortsProgressArea');
+      if (progArea) progArea.style.display = 'none';
+      const scriptArea = document.getElementById('proShortsScriptArea');
+      if (scriptArea) scriptArea.style.display = 'none';
+      const resEl = document.getElementById('proShortsVideoResult');
+      if (resEl) resEl.style.display = 'none';
+      const prev = document.getElementById('proShortsVideoPreview');
+      if (prev) { prev.pause(); prev.removeAttribute('src'); }
+      const themeInput = document.getElementById('inputProShortsTheme');
+      if (themeInput) { themeInput.value = ''; themeInput.focus(); }
+      const jsonArea = document.getElementById('inputProShortsScriptJson');
+      if (jsonArea) jsonArea.value = '';
+      this.showToast("最初から新しく作成する画面に戻りました", "info");
+    });
 
     // 2. 長尺動画（15〜20分）完全仕様
     const btnRunLong = document.getElementById('btnRunLongVideoScript');
@@ -1439,6 +1588,23 @@ class AppController {
         }
       });
     }
+
+    // 長尺動画 リセットボタン
+    document.getElementById('btnResetLongVideo')?.addEventListener('click', () => {
+      const progArea = document.getElementById('longVideoProgressArea');
+      if (progArea) progArea.style.display = 'none';
+      const scriptArea = document.getElementById('longVideoScriptArea');
+      if (scriptArea) scriptArea.style.display = 'none';
+      const resEl = document.getElementById('longVideoResult');
+      if (resEl) resEl.style.display = 'none';
+      const prev = document.getElementById('longVideoPreview');
+      if (prev) { prev.pause(); prev.removeAttribute('src'); }
+      const themeInput = document.getElementById('inputLongVideoTheme');
+      if (themeInput) { themeInput.value = ''; themeInput.focus(); }
+      const jsonArea = document.getElementById('inputLongVideoScriptJson');
+      if (jsonArea) jsonArea.value = '';
+      this.showToast("最初から新しく作成する画面に戻りました", "info");
+    });
   }
 }
 

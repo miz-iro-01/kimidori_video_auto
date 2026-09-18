@@ -121,9 +121,15 @@
 
       <!-- ==================== 動画生成ウィザード ==================== -->
       <section class="view-section" id="view-generate">
-        <header class="section-header">
-          <h1 class="section-title">新規動画プロジェクト</h1>
-          <p class="section-subtitle">リサーチから投稿までをステップ・バイ・ステップで進めます</p>
+        <header class="section-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h1 class="section-title">簡易ショート動画</h1>
+            <p class="section-subtitle">リサーチから投稿までをステップ・バイ・ステップで進めます</p>
+          </div>
+          <button class="btn btn-outline" id="btnHeaderResetWizard" style="display: none; align-items: center; gap: 6px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+            最初から新しく作成する
+          </button>
         </header>
 
         <div class="glass-card main-form-card">
@@ -266,11 +272,18 @@
                 <video id="finalVideoPlayer" controls style="width: 100%; max-width: 400px; border-radius: var(--radius-md); margin-bottom: 1.5rem; border: 2px solid var(--border-highlight);"></video>
                 
                 <div id="appliedResearchPanel" style="display: none; background: var(--bg-card); border-left: 4px solid var(--accent-primary); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem; text-align: left; font-size: 0.9rem;">
-                  <h4 style="margin-top: 0; margin-bottom: 0.5rem; color: var(--accent-primary);">💡 自動適用されたリサーチ戦略</h4>
+                  <h4 style="margin-top: 0; margin-bottom: 0.5rem; color: var(--accent-primary); display: flex; align-items: center; gap: 6px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    自動適用されたリサーチ戦略
+                  </h4>
                   <pre id="appliedResearchText" style="white-space: pre-wrap; color: var(--text-secondary); margin: 0; font-family: inherit; line-height: 1.5;"></pre>
                 </div>
 
-                <div class="action-footer" style="justify-content: center; display: flex; gap: 1rem;">
+                <div class="action-footer" style="justify-content: center; display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem;">
+                  <button class="btn btn-outline" id="btnResetWizard" style="display: inline-flex; align-items: center; gap: 6px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                    最初から新しく作成する
+                  </button>
                   <a href="#" class="btn btn-outline" id="btnDownloadFinal" download>ダウンロード</a>
                   <button class="btn btn-primary" id="btnPostToYouTube">
                     <span class="icon-youtube"></span> YouTubeに投稿する
@@ -339,6 +352,13 @@
           <p id="proShortsProgressMsg" style="color: var(--text-secondary);">素材を準備中...</p>
           <div id="proShortsVideoResult" style="display: none; margin-top: 1.5rem;">
             <video id="proShortsVideoPreview" controls style="max-width: 320px; max-height: 560px; border-radius: 8px;"></video>
+            <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+              <button class="btn btn-outline" id="btnResetProShorts" style="display: inline-flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                最初から新しく作成する
+              </button>
+              <a id="btnDownloadProShorts" class="btn btn-primary" href="#" download="pro_shorts.mp4">完成動画を保存</a>
+            </div>
           </div>
         </div>
       </section>
@@ -414,7 +434,11 @@
           <p id="longVideoProgressMessage" style="color: var(--text-secondary);">音声を先行測定中...</p>
           <div id="longVideoResult" style="display: none; margin-top: 1.5rem;">
             <video id="longVideoPreview" controls style="max-width: 100%; max-height: 480px; border-radius: 8px;"></video>
-            <div style="margin-top: 1rem;">
+            <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+              <button class="btn btn-outline" id="btnResetLongVideo" style="display: inline-flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                最初から新しく作成する
+              </button>
               <a id="btnDownloadLongVideo" class="btn btn-primary" href="#" download="long_video.mp4">完成動画を保存</a>
             </div>
           </div>
@@ -432,7 +456,9 @@
           <form id="formEdit" onsubmit="return false;">
             
             <div class="upload-zone" id="uploadZoneB">
-              <div class="upload-icon">📁</div>
+              <div class="upload-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>
+              </div>
               <h3>動画をドラッグ＆ドロップ</h3>
               <p>またはクリックしてファイルを選択（最大500MB）</p>
               <input type="file" id="inputFileB" accept="video/*" hidden>
@@ -651,13 +677,16 @@
 
           <!-- グローバルシステム設定カード -->
           <div class="glass-card">
-            <div class="card-header-icon">⚙️ <h3>グローバル YouTube OAuth 設定</h3></div>
+            <div class="card-header-icon" style="display: flex; align-items: center; gap: 8px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+              <h3>グローバル YouTube OAuth 設定</h3>
+            </div>
             <p class="card-desc">一般ユーザー向けの「かんたん連携」で使用されるシステムのデフォルトOAuth認証情報です。</p>
             
             <div class="guide-box" style="border-left: 3px solid var(--accent-secondary);">
-              <p style="font-size: 0.8rem; margin: 0; line-height: 1.4;">
-                ⚠️ <strong>注意:</strong> ここで設定する Client ID と Client Secret はサーバー全体のデフォルトとして使用されます。
-                一般ユーザーが「かんたん連携」を実行した際、この認証情報を用いて認証が行われます。
+              <p style="font-size: 0.8rem; margin: 0; line-height: 1.4; display: flex; align-items: flex-start; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 2px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                <span><strong>注意:</strong> ここで設定する Client ID と Client Secret はサーバー全体のデフォルトとして使用されます。一般ユーザーが「かんたん連携」を実行した際、この認証情報を用いて認証が行われます。</span>
               </p>
             </div>
 
@@ -676,7 +705,8 @@
             <!-- プレミアム手順ガイド (アコーディオン) -->
             <details class="guide-accordion" style="border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; background: rgba(255,255,255,0.01); transition: all 0.3s ease;">
               <summary style="font-size: 0.85rem; font-weight: bold; cursor: pointer; color: var(--accent-secondary); display: flex; align-items: center; gap: 0.5rem; outline: none; list-style: none;">
-                🔑 <strong>本物のグローバル OAuth 認証キーを取得する手順（Google Cloud）</strong>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-2 2m-1.5 1.5L14 9l-4 4-4-4 4-4 3.5 3.5"></path><circle cx="7.5" cy="15.5" r="5.5"></circle></svg>
+                <strong>本物のグローバル OAuth 認証キーを取得する手順（Google Cloud）</strong>
               </summary>
               <div style="font-size: 0.8rem; line-height: 1.5; color: var(--text-secondary); margin-top: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
                 <ol style="margin: 0; padding-left: 1.25rem;">
