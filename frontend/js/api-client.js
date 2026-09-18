@@ -67,52 +67,165 @@ class ApiClient {
     return await res.json();
   }
 
-  /** 台本プレビュー取得 */
+  /** 台本プレビュー取得（無料API・有料API完全両対応・デュアルエンジン） */
   async getScriptPreview(theme, style, duration) {
     const geminiKey = window.settingsManager.get("geminiApiKey");
     if (!window.settingsManager.hasGeminiKey()) {
       throw new Error("Gemini APIキーが設定されていません。");
     }
 
-    const res = await fetch(`${this.baseUrl}/api/preview/script`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        theme, style, duration_seconds: parseInt(duration), gemini_api_key: geminiKey
-      })
-    });
-    
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.detail || `台本生成エラー (${res.status})`);
+    try {
+      const res = await fetch(`${this.baseUrl}/api/preview/script`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          theme, style, duration_seconds: parseInt(duration), gemini_api_key: geminiKey
+        })
+      });
+      
+      if (res.ok) {
+        return await res.json();
+      }
+      console.warn("バックエンド台本生成通信失敗、直接Gemini APIフォールバックを実行します...");
+    } catch (e) {
+      console.warn("バックエンド台本生成失敗、直接Gemini APIフォールバック:", e);
     }
-    
-    return await res.json();
+
+    // ブラウザ直接フォールバック
+    const modelsToTry = [
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-8b"
+    ];
+
+    const targetSec = parseInt(duration) || 60;
+    const prompt = `あなたはYouTubeで100万回再生されるショート動画のプロ脚本家です。
+テーマ「${theme}」、スタイル「${style}」、目標秒数「${targetSec}秒」の台本を作成してください。
+
+以下のJSON形式で出力してください:
+{
+  "title": "タイトル",
+  "scenes": [
+    {
+      "scene_number": 1,
+      "narration": "ナレーション（日本語）",
+      "image_prompt": "英語の画像生成プロンプト"
+    }
+  ]
+}`;
+
+    for (const model of modelsToTry) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+      try {
+        const directRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
+          })
+        });
+
+        if (directRes.ok) {
+          const data = await directRes.json();
+          const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (rawText) {
+            const m = rawText.match(/```(?:json)?\s*(\{.*?\})\s*```/s);
+            const jsonStr = m ? m[1] : rawText;
+            try {
+              return JSON.parse(jsonStr);
+            } catch {
+              return { title: theme, scenes: [{ scene_number: 1, narration: rawText, image_prompt: theme }] };
+            }
+          }
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+
+    throw new Error("台本プレビューの生成に失敗しました。Gemini APIキーをご確認ください。");
   }
 
-  /** トレンドリサーチの実行 */
+  /** トレンドリサーチの実行（無料API・有料API完全両対応・デュアルエンジン） */
   async runResearch(keyword) {
     const geminiKey = window.settingsManager.get("geminiApiKey");
     if (!window.settingsManager.hasGeminiKey()) {
       throw new Error("Gemini APIキーが設定されていません。");
     }
 
-    const res = await fetch(`${this.baseUrl}/api/research`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        keyword, 
-        gemini_api_key: geminiKey,
-        user_id: this._getUserId()
-      })
-    });
+    // 1. まずバックエンドAPIにリクエスト
+    try {
+      const res = await fetch(`${this.baseUrl}/api/research`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          keyword, 
+          gemini_api_key: geminiKey,
+          user_id: this._getUserId()
+        })
+      });
 
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.detail || `リサーチエラー (${res.status})`);
+      if (res.ok) {
+        return await res.json();
+      }
+      console.warn(`バックエンドリサーチがHTTP ${res.status} を返しました。直接Gemini APIフォールバックを実行します...`);
+    } catch (e) {
+      console.warn("バックエンドリサーチ通信失敗、直接Gemini APIフォールバックを実行します:", e);
     }
 
-    return await res.json();
+    // 2. バックエンドが古い/エラーの場合は、ブラウザから直接Gemini APIを呼び出す（無料・有料API完全両対応）
+    const modelsToTry = [
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash",
+      "gemini-1.5-flash-8b"
+    ];
+
+    const prompt = `あなたはYouTubeで100万回再生を連発するトッププロデューサー・トレンドアナリストです。
+テーマ・キーワード「${keyword}」について、現在YouTubeショートやTikTokでバズる動画の傾向を徹底的に分析し、具体的な台本構成と戦略を提案してください。
+
+以下のフォーマットに沿って明快に日本語で出力してください。
+1. 【トレンドの傾向】: なぜこのテーマが伸びているのか？視聴者が求めているコアな心理や悩み。
+2. 【最強のフック（冒頭1〜3秒）の提案】: 視聴者の手をピタッと止める冒頭のセリフ案を3つ。
+3. 【推奨される台本構成】: 視聴維持率を高める展開（フック→共感→解決・新事実→オチ）。
+4. 【狙うべきターゲット・感情】: どんな層にどんな感情（驚き、納得、共感など）を引き起こすべきか。`;
+
+    let lastErr = null;
+    for (const model of modelsToTry) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+      try {
+        const directRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 2048 }
+          })
+        });
+
+        if (directRes.ok) {
+          const data = await directRes.json();
+          const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (analysisText) {
+            return {
+              success: true,
+              keyword: keyword,
+              analyzed_videos: [],
+              analysis_result: analysisText
+            };
+          }
+        } else {
+          const errData = await directRes.text();
+          lastErr = `HTTP ${directRes.status}: ${errData}`;
+        }
+      } catch (err) {
+        lastErr = err.message;
+      }
+    }
+
+    throw new Error(`リサーチに失敗しました: お手元のGemini APIキーでアクセス可能なモデルが見つかりませんでした (${lastErr})。APIキーをご確認ください。`);
   }
 
   // ===== BGM管理 API =====
