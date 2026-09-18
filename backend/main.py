@@ -964,6 +964,66 @@ async def generate_manga_video_endpoint(req: MangaVideoGenerateRequest, backgrou
     return {"job_id": job_id, "status": "PROCESSING"}
 
 
+# =============================================================================
+# Pro版ショート動画 & 長尺動画（完全仕様） API エンドポイント
+# =============================================================================
+class ProShortsRequest(BaseModel):
+    theme: str
+    genre: str = "story"
+    user_id: str = "default_user"
+    gemini_api_keys: Optional[List[str]] = None
+
+
+@app.post("/api/pro-shorts/script")
+async def generate_pro_shorts_script_endpoint(req: ProShortsRequest):
+    """Pro版ショート動画（60秒・全カット動画演出）の台本を生成する"""
+    access = permission_manager.check_feature_access(req.user_id, FeatureName.PRO_SHORT_VIDEO_CREATE if hasattr(FeatureName, "PRO_SHORT_VIDEO_CREATE") else FeatureName.MANGA_LONG_VIDEO_CREATE)
+    if not access["allowed"]:
+        raise HTTPException(status_code=403, detail=access["reason"])
+
+    try:
+        from processors.pro_shorts_engine import ProShortsEngine
+        km = KeyManager(req.gemini_api_keys or [config.GEMINI_API_KEY])
+        engine = ProShortsEngine(key_manager=km)
+        script = await engine.generate_pro_shorts_script(theme=req.theme, genre=req.genre)
+        return {"success": True, "script": script}
+    except Exception as e:
+        logger.error(f"Pro版ショート動画台本生成失敗: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class LongVideoScriptRequest(BaseModel):
+    theme: str
+    genre: str = "story"
+    target_minutes: int = 15
+    research_notes: Optional[str] = ""
+    user_id: str = "default_user"
+    gemini_api_keys: Optional[List[str]] = None
+
+
+@app.post("/api/long-video/script")
+async def generate_long_video_script_endpoint(req: LongVideoScriptRequest):
+    """長尺動画（15〜20分・全5章・120〜180カット）の完全仕様台本と人物シートを生成する"""
+    access = permission_manager.check_feature_access(req.user_id, FeatureName.MANGA_LONG_VIDEO_CREATE)
+    if not access["allowed"]:
+        raise HTTPException(status_code=403, detail=access["reason"])
+
+    try:
+        from processors.long_video_engine import LongVideoEngine
+        km = KeyManager(req.gemini_api_keys or [config.GEMINI_API_KEY])
+        engine = LongVideoEngine(key_manager=km)
+        script = await engine.generate_long_script(
+            theme=req.theme,
+            genre=req.genre,
+            target_minutes=req.target_minutes,
+            research_notes=req.research_notes or ""
+        )
+        return {"success": True, "script": script}
+    except Exception as e:
+        logger.error(f"長尺動画台本生成失敗: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 # =============================================================================
 # 起動時の初期化

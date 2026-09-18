@@ -261,6 +261,60 @@ class ApiClient {
 
     return await res.json();
   }
+
+  /** Pro版ショート動画の台本生成 */
+  async generateProShortsScript(theme, genre = "story") {
+    const geminiKey = window.settingsManager.get("geminiApiKey");
+    if (!geminiKey) throw new Error("Gemini APIキーを設定画面で保存してください。");
+
+    const payload = {
+      theme: theme,
+      genre: genre,
+      user_id: this._getUserId(),
+      gemini_api_keys: [geminiKey]
+    };
+
+    const res = await fetch(`${this.baseUrl}/api/pro-shorts/script`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `Pro版ショート動画台本生成エラー (${res.status})`);
+    }
+
+    return await res.json();
+  }
+
+  /** 長尺動画（15〜20分）完全仕様の台本・人物シート生成 */
+  async generateLongVideoScript(theme, genre = "story", targetMinutes = 15, researchNotes = "") {
+    const geminiKey = window.settingsManager.get("geminiApiKey");
+    if (!geminiKey) throw new Error("Gemini APIキーを設定画面で保存してください。");
+
+    const payload = {
+      theme: theme,
+      genre: genre,
+      target_minutes: parseInt(targetMinutes, 10),
+      research_notes: researchNotes,
+      user_id: this._getUserId(),
+      gemini_api_keys: [geminiKey]
+    };
+
+    const res = await fetch(`${this.baseUrl}/api/long-video/script`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `長尺動画台本生成エラー (${res.status})`);
+    }
+
+    return await res.json();
+  }
 }
 
 window.apiClient = new ApiClient();

@@ -17,37 +17,63 @@ class ResearchEngine:
     def __init__(self, gemini_api_key: str, firestore_service=None):
         if not gemini_api_key:
             raise ValueError("Gemini APIキーが設定されていません。")
+        self.gemini_api_key = gemini_api_key
         genai.configure(api_key=gemini_api_key)
         self.fallback_models = config.GEMINI_FALLBACK_MODELS
         self.firestore = firestore_service
 
     async def _try_generate(self, prompt: str) -> str:
-        """フォールバックモデルを含めてGemini APIを呼び出す"""
+        """フォールバックモデルを含めてGemini APIを高信頼性で呼び出す"""
+        models_to_try = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-8b",
+            "gemini-2.0-flash-lite"
+        ]
+        
         last_error = None
-        for model_name in self.fallback_models:
-            model = genai.GenerativeModel(model_name)
-            for attempt in range(2):
-                try:
-                    logger.info(f"Gemini API呼び出し (research): model={model_name} (attempt {attempt+1})")
-                    response = await asyncio.wait_for(model.generate_content_async(prompt), timeout=35.0)
+        # 1. google.generativeai SDKによる試行
+        for model_name in models_to_try:
+            try:
+                logger.info(f"Gemini API呼び出し (research): model={model_name}")
+                model = genai.GenerativeModel(model_name)
+                response = await asyncio.wait_for(model.generate_content_async(prompt), timeout=30.0)
+                if response and response.text:
                     return response.text.strip()
+            except Exception as e:
+                err_str = str(e)
+                last_error = e
+                logger.warning(f"モデル {model_name} でSDKエラー ({err_str[:150]})、次を試します。")
+                continue
+
+        # 2. SDKが全滅した場合はREST API経由で直接再試行（portable-video-studio方式）
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            payload = {
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.7, "maxOutputTokens": 4096}
+            }
+            for model_name in models_to_try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.gemini_api_key}"
+                try:
+                    async with session.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            candidates = data.get("candidates", [])
+                            if candidates and "content" in candidates[0]:
+                                parts = candidates[0]["content"].get("parts", [])
+                                if parts and "text" in parts[0]:
+                                    return parts[0]["text"].strip()
+                        else:
+                            err_txt = await resp.text()
+                            last_error = f"HTTP {resp.status}: {err_txt[:150]}"
                 except Exception as e:
                     last_error = e
-                    if "429" in str(e):
-                        if attempt == 0:
-                            logger.warning(f"モデル {model_name} で429エラー、5秒後にリトライ...")
-                            await asyncio.sleep(5)
-                        else:
-                            logger.warning(f"モデル {model_name} のクォータ枯渇、次のモデルへフォールバック")
-                            break
-                    else:
-                        logger.warning(f"モデル {model_name} でエラー ({e})、次のモデルへフォールバックします。")
-                        break
+                    continue
 
         raise Exception(
-            f"全てのGeminiモデルでクォータ制限に達しました。"
-            f"しばらく時間をおいてから再試行してください。"
-            f"\n最後のエラー: {last_error}"
+            f"Geminiリサーチ解析が一時的に混雑しています。しばらく時間をおいて再試行してください。(詳細: {last_error})"
         )
 
     def search_trending_shorts(self, keyword: str, limit: int = 5, user_id: str = None) -> List[Dict]:

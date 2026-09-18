@@ -1208,115 +1208,234 @@ class AppController {
     return div.innerHTML;
   }
 
-  // --- 長尺・長尺漫画動画作成フォーム制御 ---
+  // --- Pro版ショート動画＆長尺動画（完全仕様）フォーム制御 ---
   initMangaForm() {
-    const btnRunScript = document.getElementById('btnRunMangaScript');
-    const btnGenVideo = document.getElementById('btnGenerateMangaVideo');
-    const scriptArea = document.getElementById('mangaScriptArea');
-    const lockNotice = document.getElementById('mangaLockNotice');
-
-    // 画面切替時に権限チェック
-    const checkPermissions = async () => {
-      try {
-        const res = await window.apiClient.getUserPermissions("manga_long_video_create");
-        if (!res.access_info?.allowed) {
-          if (lockNotice) lockNotice.style.display = 'block';
-          if (btnRunScript) btnRunScript.disabled = true;
-        } else {
-          if (lockNotice) lockNotice.style.display = 'none';
-          if (btnRunScript) btnRunScript.disabled = false;
-        }
-      } catch (e) {
-        console.log("Permission check failed:", e.message);
-      }
-    };
-
-    const mangaNavBtn = document.querySelector('.nav-item[data-target="manga"]');
-    if (mangaNavBtn) {
-      mangaNavBtn.addEventListener('click', checkPermissions);
-    }
-
-    // 1. コマ割り・シナリオJSON生成
-    if (btnRunScript) {
-      btnRunScript.addEventListener('click', async () => {
-        const text = document.getElementById('inputMangaOriginalText').value.trim();
-        const duration = document.getElementById('inputMangaDuration').value;
-
-        if (!text) return this.showToast("原案・ストーリーテキストを入力してください", "error");
-
-        this.showToast("コマ割り・シナリオJSONを生成中...", "info");
-        btnRunScript.disabled = true;
-
-        try {
-          const res = await window.apiClient.generateMangaScript(text, duration);
-          if (res.success && res.script) {
-            document.getElementById('inputMangaScriptJson').value = JSON.stringify(res.script, null, 2);
-            scriptArea.style.display = 'block';
-            this.showToast("シナリオデータが生成されました！内容を確認してください", "success");
+    // 完全自動投稿モードのPro限定制御
+    const checkAutoMode = document.getElementById('checkAutoMode');
+    if (checkAutoMode) {
+      checkAutoMode.addEventListener('change', async (e) => {
+        if (checkAutoMode.checked) {
+          try {
+            const res = await window.apiClient.getUserPermissions("auto_posting");
+            if (!res.access_info?.allowed) {
+              checkAutoMode.checked = false;
+              this.showToast("完全自動投稿モードはProアカウント限定の機能です（無料プランでは手動確認ステップでご利用いただけます）", "info");
+            }
+          } catch {
+            // ローカル等でエラー時も無料プラン挙動
+            checkAutoMode.checked = false;
+            this.showToast("完全自動投稿モードはProアカウント限定の機能です", "info");
           }
-        } catch (err) {
-          this.showToast("シナリオ生成失敗: " + err.message, "error");
-        } finally {
-          btnRunScript.disabled = false;
         }
       });
     }
 
-    // 2. 動画一括合成
-    if (btnGenVideo) {
-      btnGenVideo.addEventListener('click', async () => {
-        const jsonStr = document.getElementById('inputMangaScriptJson').value.trim();
-        if (!jsonStr) return this.showToast("シナリオデータがありません", "error");
+    // 1. Pro版ショート動画
+    const btnRunProShorts = document.getElementById('btnRunProShortsScript');
+    const btnGenProShorts = document.getElementById('btnGenerateProShortsVideo');
+    const proShortsScriptArea = document.getElementById('proShortsScriptArea');
+    const proShortsLockNotice = document.getElementById('proShortsLockNotice');
+
+    const checkProShortsPerm = async () => {
+      try {
+        const res = await window.apiClient.getUserPermissions("manga_long_video_create");
+        if (!res.access_info?.allowed) {
+          if (proShortsLockNotice) proShortsLockNotice.style.display = 'block';
+        } else {
+          if (proShortsLockNotice) proShortsLockNotice.style.display = 'none';
+        }
+      } catch (e) {
+        console.log("Permission check:", e);
+      }
+    };
+    const proShortsNavBtn = document.querySelector('.nav-item[data-target="pro-shorts"]');
+    if (proShortsNavBtn) proShortsNavBtn.addEventListener('click', checkProShortsPerm);
+
+    if (btnRunProShorts) {
+      btnRunProShorts.addEventListener('click', async () => {
+        const theme = document.getElementById('inputProShortsTheme').value.trim();
+        const genre = document.getElementById('inputProShortsGenre').value;
+        if (!theme) return this.showToast("テーマ・題材を入力してください", "error");
+
+        this.showToast("Pro版ショート台本（全6〜7カット・全カット動画演出）を生成中...", "info");
+        btnRunProShorts.disabled = true;
+        try {
+          const res = await window.apiClient.generateProShortsScript(theme, genre);
+          if (res.success && res.script) {
+            document.getElementById('inputProShortsScriptJson').value = JSON.stringify(res.script, null, 2);
+            proShortsScriptArea.style.display = 'block';
+            this.showToast("Pro版ショート動画の台本が生成されました！", "success");
+          }
+        } catch (err) {
+          this.showToast("台本生成失敗: " + err.message, "error");
+        } finally {
+          btnRunProShorts.disabled = false;
+        }
+      });
+    }
+
+    if (btnGenProShorts) {
+      btnGenProShorts.addEventListener('click', async () => {
+        const jsonStr = document.getElementById('inputProShortsScriptJson').value.trim();
+        if (!jsonStr) return this.showToast("台本データがありません", "error");
 
         let scriptData;
         try {
           scriptData = JSON.parse(jsonStr);
         } catch (e) {
-          return this.showToast("シナリオJSONの形式が正しくありません: " + e.message, "error");
+          return this.showToast("JSON形式が不正です: " + e.message, "error");
         }
 
         const ttsEngine = window.settingsManager.get('ttsEngine') || 'edge';
         const voiceName = window.settingsManager.get('voiceName') || 'nanami';
 
-        this.showToast("長尺漫画動画の生成を開始しました", "info");
-        btnGenVideo.disabled = true;
+        this.showToast("Pro版ショート動画の生成を開始しました", "info");
+        btnGenProShorts.disabled = true;
 
         try {
           const res = await window.apiClient.generateMangaVideo(scriptData, ttsEngine, voiceName);
-          const progressArea = document.getElementById('mangaProgressArea');
-          const statusTitle = document.getElementById('mangaProgressStatusTitle');
-          const progressFill = document.getElementById('mangaProgressFill');
-          const progressMsg = document.getElementById('mangaProgressMessage');
-          const videoResult = document.getElementById('mangaVideoResult');
-          const videoPreview = document.getElementById('mangaVideoPreview');
+          const progArea = document.getElementById('proShortsProgressArea');
+          const titleEl = document.getElementById('proShortsProgressTitle');
+          const fillEl = document.getElementById('proShortsProgressFill');
+          const msgEl = document.getElementById('proShortsProgressMsg');
+          const resEl = document.getElementById('proShortsVideoResult');
+          const previewEl = document.getElementById('proShortsVideoPreview');
 
-          progressArea.style.display = 'block';
+          progArea.style.display = 'block';
 
-          this.startJobPolling(res.job_id, 'MANGA', {
+          this.startJobPolling(res.job_id, 'PRO_SHORTS', {
             onProgress: (job) => {
-              statusTitle.textContent = job.message || "動画生成中...";
-              progressFill.style.width = `${job.progress || 10}%`;
-              progressMsg.textContent = `進捗: ${job.progress}%`;
+              titleEl.textContent = job.message || "生成中...";
+              fillEl.style.width = `${job.progress || 10}%`;
+              msgEl.textContent = `進捗: ${job.progress}%`;
             },
             onComplete: (job) => {
-              statusTitle.textContent = "✨ 長尺漫画動画が完成しました！";
-              progressFill.style.width = "100%";
-              progressMsg.textContent = "生成完了";
+              titleEl.textContent = "Pro版ショート動画が完成しました！";
+              fillEl.style.width = "100%";
+              msgEl.textContent = "生成完了";
               if (job.video_path) {
-                videoResult.style.display = 'block';
-                videoPreview.src = `${window.apiClient.baseUrl}/api/video/download?path=${encodeURIComponent(job.video_path)}`;
+                resEl.style.display = 'block';
+                previewEl.src = `${window.apiClient.baseUrl}/api/video/download?path=${encodeURIComponent(job.video_path)}`;
               }
-              btnGenVideo.disabled = false;
+              btnGenProShorts.disabled = false;
             },
             onError: (err) => {
-              statusTitle.textContent = "❌ 生成失敗";
-              progressMsg.textContent = err;
-              btnGenVideo.disabled = false;
+              titleEl.textContent = "生成失敗";
+              msgEl.textContent = err;
+              btnGenProShorts.disabled = false;
             }
           });
         } catch (err) {
           this.showToast("動画生成失敗: " + err.message, "error");
-          btnGenVideo.disabled = false;
+          btnGenProShorts.disabled = false;
+        }
+      });
+    }
+
+    // 2. 長尺動画（15〜20分）完全仕様
+    const btnRunLong = document.getElementById('btnRunLongVideoScript');
+    const btnGenLong = document.getElementById('btnGenerateLongVideo');
+    const longScriptArea = document.getElementById('longVideoScriptArea');
+    const longLockNotice = document.getElementById('longVideoLockNotice');
+
+    const checkLongPerm = async () => {
+      try {
+        const res = await window.apiClient.getUserPermissions("manga_long_video_create");
+        if (!res.access_info?.allowed) {
+          if (longLockNotice) longLockNotice.style.display = 'block';
+        } else {
+          if (longLockNotice) longLockNotice.style.display = 'none';
+        }
+      } catch (e) {
+        console.log("Permission check:", e);
+      }
+    };
+    const longNavBtn = document.querySelector('.nav-item[data-target="long-video"]');
+    if (longNavBtn) longNavBtn.addEventListener('click', checkLongPerm);
+
+    if (btnRunLong) {
+      btnRunLong.addEventListener('click', async () => {
+        const theme = document.getElementById('inputLongVideoTheme').value.trim();
+        const genre = document.getElementById('inputLongVideoGenre').value;
+        const duration = document.getElementById('inputLongVideoDuration').value;
+
+        if (!theme) return this.showToast("動画テーマまたは原案資料を入力してください", "error");
+
+        this.showToast("全5章長尺台本＆人物シートを生成中...", "info");
+        btnRunLong.disabled = true;
+
+        try {
+          const res = await window.apiClient.generateLongVideoScript(theme, genre, duration);
+          if (res.success && res.script) {
+            document.getElementById('inputLongVideoScriptJson').value = JSON.stringify(res.script, null, 2);
+            longScriptArea.style.display = 'block';
+            this.showToast("全5章台本と確定設計図が生成されました！", "success");
+          }
+        } catch (err) {
+          this.showToast("長尺台本生成失敗: " + err.message, "error");
+        } finally {
+          btnRunLong.disabled = false;
+        }
+      });
+    }
+
+    if (btnGenLong) {
+      btnGenLong.addEventListener('click', async () => {
+        const jsonStr = document.getElementById('inputLongVideoScriptJson').value.trim();
+        if (!jsonStr) return this.showToast("台本データがありません", "error");
+
+        let scriptData;
+        try {
+          scriptData = JSON.parse(jsonStr);
+        } catch (e) {
+          return this.showToast("JSON形式が不正です: " + e.message, "error");
+        }
+
+        const ttsEngine = window.settingsManager.get('ttsEngine') || 'edge';
+        const voiceName = window.settingsManager.get('voiceName') || 'nanami';
+
+        this.showToast("長尺動画（小分け小メモリ生成）を開始しました", "info");
+        btnGenLong.disabled = true;
+
+        try {
+          const res = await window.apiClient.generateMangaVideo(scriptData, ttsEngine, voiceName);
+          const progArea = document.getElementById('longVideoProgressArea');
+          const titleEl = document.getElementById('longVideoProgressStatusTitle');
+          const fillEl = document.getElementById('longVideoProgressFill');
+          const msgEl = document.getElementById('longVideoProgressMessage');
+          const resEl = document.getElementById('longVideoResult');
+          const previewEl = document.getElementById('longVideoPreview');
+          const downloadBtn = document.getElementById('btnDownloadLongVideo');
+
+          progArea.style.display = 'block';
+
+          this.startJobPolling(res.job_id, 'LONG_VIDEO', {
+            onProgress: (job) => {
+              titleEl.textContent = job.message || "小分け合成中...";
+              fillEl.style.width = `${job.progress || 10}%`;
+              msgEl.textContent = `進捗: ${job.progress}%`;
+            },
+            onComplete: (job) => {
+              titleEl.textContent = "長尺動画が完成しました！";
+              fillEl.style.width = "100%";
+              msgEl.textContent = "生成完了";
+              if (job.video_path) {
+                const downloadUrl = `${window.apiClient.baseUrl}/api/video/download?path=${encodeURIComponent(job.video_path)}`;
+                resEl.style.display = 'block';
+                previewEl.src = downloadUrl;
+                if (downloadBtn) downloadBtn.href = downloadUrl;
+              }
+              btnGenLong.disabled = false;
+            },
+            onError: (err) => {
+              titleEl.textContent = "生成失敗";
+              msgEl.textContent = err;
+              btnGenLong.disabled = false;
+            }
+          });
+        } catch (err) {
+          this.showToast("動画生成失敗: " + err.message, "error");
+          btnGenLong.disabled = false;
         }
       });
     }
