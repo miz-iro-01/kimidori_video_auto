@@ -83,8 +83,9 @@
           <span id="systemStatusText">システム待機中</span>
         </div>
         <div id="currentUserDisplay" style="font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-top: 0.25rem;"></div>
-        <button class="btn btn-outline" id="btnLogout" style="width: 100%; padding: 0.5rem; font-size: 0.85rem;">
-          🚪 ログアウト
+        <button class="btn btn-outline" id="btnLogout" style="width: 100%; padding: 0.5rem; font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          ログアウト
         </button>
       </div>
     </aside>
@@ -102,7 +103,9 @@
         <div class="dashboard-grid">
           <!-- 必須設定のアラート -->
           <div class="glass-card alert-card" id="setupAlertCard">
-            <div class="alert-icon">⚠️</div>
+            <div class="alert-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-secondary);"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
             <div class="alert-content">
               <h3>初期設定が完了していません</h3>
               <p>動画を生成するにはGemini APIキーの登録が必要です。「API・連携設定」から設定を行ってください。</p>
@@ -184,7 +187,10 @@
               <div id="researchResults" style="display: none;">
                 <p style="margin-bottom: 1rem; color: var(--text-secondary);">以下の分析結果から、今回の動画に採用する方向性を選んでください。</p>
                 <div class="guide-box">
-                  <h4 style="color: var(--accent-primary);">💡 分析されたトレンド戦略</h4>
+                  <h4 style="color: var(--accent-primary); display: flex; align-items: center; gap: 6px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6"></path><path d="M10 22h4"></path></svg>
+                    分析されたトレンド戦略
+                  </h4>
                   <div id="researchAnalysisText" style="white-space: pre-wrap; font-size: 0.95rem;"></div>
                 </div>
                 <div class="action-footer">
@@ -209,7 +215,7 @@
                 <!-- BGM設定セクション -->
                 <div class="glass-card" style="margin-top: 1.5rem; padding: 1.25rem; border: 1px solid rgba(57, 255, 20, 0.15);">
                   <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
-                    <span style="font-size: 1.2rem;">🎵</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
                     <h4 style="margin: 0; color: var(--accent-primary);">BGM設定</h4>
                   </div>
                   <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">動画に挿入するBGMを選択します。システムが用意した楽曲を使用します。</p>
@@ -219,7 +225,7 @@
                     <div class="custom-select-wrapper">
                       <select id="bgmModeSelect" class="form-input form-select">
                         <option value="none">BGMなし</option>
-                        <option value="auto">✨ 自動選曲（AIがテーマに合う曲を選びます）</option>
+                        <option value="auto">自動選曲（AIがテーマに合う曲を選びます）</option>
                         <option value="manual">手動選択</option>
                       </select>
                     </div>
@@ -292,6 +298,57 @@
               </div>
             </div>
 
+          </div>
+
+          <!-- 簡易ショート動画 高精度化の仕組み・技術仕様まとめ（ワンクリックコピー機能） -->
+          <div class="glass-card" style="margin-top: 2rem; border: 1px solid rgba(0, 240, 255, 0.3); background: rgba(0, 240, 255, 0.02);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.75rem;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                <h3 style="margin: 0; font-size: 1.05rem; color: var(--accent-primary);">簡易ショート動画 高精度化の仕組み・技術仕様まとめ</h3>
+              </div>
+              <button class="btn btn-outline" id="btnCopyShortsTechSummary" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 0.45rem 0.9rem; border-color: var(--accent-primary); color: var(--accent-primary); cursor: pointer;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                まとめ内容をコピー
+              </button>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem; line-height: 1.5;">
+              テロップの自然改行（最大14文字制限・最大3行分割）、文脈スコアリング、黒フチ描画、HTTP 206部分ストリーミングによる超高速プレビューなど、本ツールで達成した高精度化の仕様全容です。ボタン一つでクリップボードにコピーできます。
+            </p>
+            <details class="guide-accordion" open style="border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; background: rgba(0,0,0,0.25);">
+              <summary style="font-size: 0.85rem; font-weight: bold; cursor: pointer; color: var(--accent-secondary); display: flex; align-items: center; gap: 0.5rem; outline: none; list-style: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                <span>技術仕様・設計概要（クリックで開閉）</span>
+              </summary>
+              <div id="shortsTechSummaryContent" style="font-size: 0.82rem; line-height: 1.65; color: var(--text-secondary); margin-top: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
+                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">1. 自然言語解析と文脈分割</strong>
+                    単語の途中切断（「気/遣う」「先/生は」等）を完全撲滅。句読点（100点）、カギ括弧（75点）、助詞・接続詞（25〜45点）の重み付けで、意味が通る自然な文節単位で自動改行。
+                  </div>
+                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
+                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">2. 厳格な行頭・行末禁則処理</strong>
+                    閉じ括弧「」や句読点が次の行頭に来る「ぶら下がり」や、1〜2文字だけの孤立行（「は」「。」等）を自動検知して前後の行にバランスよく再配分。
+                  </div>
+                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
+                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">3. 横幅14文字 × 最大3行カード分割</strong>
+                    スマホ縦画面の1行を最大14文字・最大3行に厳格制限。セリフ量が多い場合も同じ背景尺の中で1〜3枚のテロップカードに時間等分分割し流れるように演出。
+                  </div>
+                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
+                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">4. 視認性重視のデザインと余白</strong>
+                    62px太字フォント＋5pxのアンチエイリアス黒フチを採用。画面左右に106pxのセーフティマージンを確保し、スマホ端やSNS UIに隠れない設計。
+                  </div>
+                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
+                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">5. MP4 faststart & HTTP 206 ストリーミング</strong>
+                    動画先頭にmoovアトムを配置（-movflags +faststart）し、Starlette FileResponse によるバイト範囲リクエストに対応。プレビュー再生の待ち時間をゼロ化。
+                  </div>
+                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
+                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">6. デュアルGemini API自動フォールバック</strong>
+                    無料版API（AQ.A...）と有料版API（AIza...）の両方に完全対応。エラー時も複数モデルへの自動フォールバックで生成を確実に完遂。
+                  </div>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
       </section>
@@ -525,7 +582,7 @@
             <p class="card-desc">動画の台本生成に使用します。Google AI Studioから無料で取得できます。</p>
             
             <div class="guide-box">
-              <h4>🔑 取得手順</h4>
+              <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>取得手順</h4>
               <ol>
                 <li><a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>にアクセス</li>
                 <li>「Create API key」ボタンをクリックしてキーを生成</li>
@@ -544,11 +601,11 @@
 
           <!-- Pexels API (オプション) -->
           <div class="glass-card">
-            <div class="card-header-icon"><span class="icon-image">🖼️</span> <h3>フリー画像自動取得 (推奨)</h3></div>
+            <div class="card-header-icon"><span class="icon-image"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></span> <h3>フリー画像自動取得 (推奨)</h3></div>
             <p class="card-desc">Pexelsから高品質な画像・動画素材を自動で取得して動画の背景にします。</p>
             
             <div class="guide-box">
-              <h4>🔑 取得手順（完全無料）</h4>
+              <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>取得手順（完全無料）</h4>
               <ol>
                 <li><a href="https://www.pexels.com/api/" target="_blank">Pexels API</a>に登録・ログイン</li>
                 <li>「Your API Key」を発行して以下に貼り付け</li>
@@ -573,7 +630,7 @@
             <!-- かんたん連携用の案内 -->
             <div class="guide-box" id="ytNormalUserGuide" style="margin-bottom: 1rem; border-left: 3px solid var(--accent-primary); background: rgba(57, 255, 20, 0.03);">
               <p style="font-size: 0.85rem; color: var(--text-primary); margin: 0; line-height: 1.4;">
-                ✨ <strong>かんたん連携が有効です</strong><br>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg><strong>かんたん連携が有効です</strong><br>
                 面倒なAPIキー等の取得や設定は一切不要です。下のボタンを押すだけで、ご自身のチャンネルを安全に連携・認証できます。
               </p>
             </div>
@@ -650,27 +707,34 @@
 
         <div class="settings-grid">
           <!-- システム利用状況カード -->
+          <!-- システム利用状況カード -->
           <div class="glass-card">
-            <div class="card-header-icon">📈 <h3>システム全体の利用状況</h3></div>
+            <div class="card-header-icon" style="display: flex; align-items: center; gap: 8px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M3 3v18h18"></path><path d="m19 9-5 5-4-4-3 3"></path></svg>
+              <h3>システム全体の利用状況</h3>
+            </div>
             <p class="card-desc">全ユーザーのアクティビティと動画生成処理の要約です。</p>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
-              <div class="glass-card" style="padding: 1.25rem; background: rgba(255,255,255,0.02); text-align: center;">
-                <span style="font-size: 0.85rem; color: var(--text-secondary);">登録済ユーザー数</span>
-                <div style="font-size: 2rem; font-weight: 700; color: var(--accent-primary); margin-top: 0.5rem;" id="adminUserCount">1</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem; margin-top: 1rem;">
+              <div class="glass-card" style="padding: 1rem; background: rgba(255,255,255,0.02); text-align: center;">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">登録済ユーザー</span>
+                <div style="font-size: 1.8rem; font-weight: 700; color: var(--accent-primary); margin-top: 0.3rem;" id="adminUserCount">--</div>
               </div>
-              <div class="glass-card" style="padding: 1.25rem; background: rgba(255,255,255,0.02); text-align: center;">
-                <span style="font-size: 0.85rem; color: var(--text-secondary);">累計生成ジョブ数</span>
-                <div style="font-size: 2rem; font-weight: 700; color: var(--accent-secondary); margin-top: 0.5rem;" id="adminJobCount">12</div>
+              <div class="glass-card" style="padding: 1rem; background: rgba(255,255,255,0.02); text-align: center;">
+                <span style="font-size: 0.8rem; color: var(--text-secondary);">累計生成ジョブ</span>
+                <div style="font-size: 1.8rem; font-weight: 700; color: var(--accent-secondary); margin-top: 0.3rem;" id="adminJobCount">--</div>
               </div>
             </div>
             
             <div class="guide-box" style="margin-top: 1.5rem; background: rgba(0,0,0,0.15);">
-              <h4 style="color: var(--accent-primary);">⚡ アクティブサーバー情報</h4>
+              <h4 style="color: var(--accent-primary); display: flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"></rect><rect width="20" height="8" x="2" y="14" rx="2" ry="2"></rect><line x1="6" x2="6.01" y1="6" y2="6"></line><line x1="6" x2="6.01" y1="18" y2="18"></line></svg>
+                アクティブサーバー情報
+              </h4>
               <p style="font-size: 0.85rem; line-height: 1.6; margin-top: 0.5rem;">
-                <strong>サーバーURL:</strong> <code id="adminServerUrl" style="background: rgba(0,0,0,0.3); padding: 0.2rem 0.4rem; border-radius: 4px;">http://localhost:8080</code><br>
+                <strong>サーバーURL:</strong> <code id="adminServerUrl" style="background: rgba(0,0,0,0.3); padding: 0.2rem 0.4rem; border-radius: 4px;">--</code><br>
                 <strong>Firestore接続:</strong> <span class="badge" style="background: var(--accent-primary); color: #000; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">接続中</span><br>
-                <strong>環境モード:</strong> <span class="badge" style="background: var(--accent-secondary); color: #fff; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">デベロッパー</span>
+                <strong>環境モード:</strong> <span class="badge" style="background: var(--accent-secondary); color: #fff; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">本番稼働</span>
               </p>
             </div>
           </div>
@@ -739,22 +803,30 @@
 
         <!-- システムBGM管理 (管理者専用) -->
         <div class="glass-card" style="margin-top: 2rem;">
-          <div class="card-header-icon"><span style="font-size: 1.2rem;">🎵</span> <h3>システムBGM管理 (グローバル)</h3></div>
+          <div class="card-header-icon" style="display: flex; align-items: center; gap: 8px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+            <h3>システムBGM管理 (グローバル)</h3>
+          </div>
           <p class="card-desc">システム全体で使用されるBGM楽曲を登録・管理します。一般ユーザーの動画生成時にここで登録されたBGMが適用されます。</p>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1rem;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-top: 1rem;">
             <!-- BGMアップロード -->
             <div>
-              <h4 style="color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 0.95rem;">📤 新規BGMの登録</h4>
+              <h4 style="color: var(--accent-primary); margin-bottom: 0.5rem; font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                新規BGMの登録
+              </h4>
               <div class="guide-box" style="margin-bottom: 1rem; border-left: 3px solid var(--accent-secondary); padding: 0.75rem;">
-                <p style="font-size: 0.75rem; margin: 0; line-height: 1.5;">
-                  💡 <strong>TuneCoreとの連携について</strong><br>
-                  ここにTuneCoreにアップロード済みの音源を登録することで、一般ユーザーの動画に使用された際に楽曲収益を得ることができます。
+                <p style="font-size: 0.75rem; margin: 0; line-height: 1.5; display: flex; align-items: flex-start; gap: 6px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                  <span><strong>TuneCoreとの連携について:</strong> ここにTuneCoreにアップロード済みの音源を登録することで、一般ユーザーの動画に使用された際に楽曲収益を得ることができます。</span>
                 </p>
               </div>
               
               <div class="upload-zone" id="bgmUploadZone" style="min-height: 80px; padding: 1rem;">
-                <div class="upload-icon" style="font-size: 1.5rem;">🎵</div>
+                <div class="upload-icon" style="font-size: 1.5rem;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+                </div>
                 <h3 style="font-size: 0.9rem;">音源ファイルをドロップ</h3>
                 <p style="font-size: 0.75rem;">MP3, WAV等（最大50MB）</p>
                 <input type="file" id="bgmFileInput" accept="audio/*" hidden>
@@ -780,47 +852,126 @@
 
             <!-- BGM一覧 -->
             <div>
-              <h4 style="color: var(--accent-secondary); margin-bottom: 0.5rem; font-size: 0.95rem;">📋 登録済みBGM一覧</h4>
+              <h4 style="color: var(--accent-secondary); margin-bottom: 0.5rem; font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path><path d="M3 6h.01"></path><path d="M3 12h.01"></path><path d="M3 18h.01"></path></svg>
+                登録済みBGM一覧
+              </h4>
               <div id="bgmTrackList" style="margin-top: 0; max-height: 600px; overflow-y: auto;">
                 <div class="empty-state" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
-                  🎵 BGMが未登録です。
+                  BGMが未登録です。
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 登録ユーザー一覧 -->
-        <div class="glass-card" style="margin-top: 2rem;">
-          <h3 class="card-title">👥 システム管理者用ユーザーリスト</h3>
-          <div style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+        <!-- ==================== ユーザー総合管理センター ==================== -->
+        <div class="glass-card" style="margin-top: 2rem; border-top: 2px solid var(--accent-primary);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+              <div>
+                <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-primary);">ユーザー管理・権限制御センター</h3>
+                <p style="margin: 0.25rem 0 0 0; font-size: 0.82rem; color: var(--text-secondary);">全ユーザーの閲覧、プラン（無料/Pro/管理者）変更、手動アカウント追加、アカウント停止・削除を一元管理</p>
+              </div>
+            </div>
+            <button class="btn btn-outline" id="btnRefreshAdminUsers" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+              ユーザー一覧を更新
+            </button>
+          </div>
+
+          <!-- ユーザー統計バッジ 4枚 -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem;">
+            <div class="glass-card" style="padding: 0.75rem 1rem; background: rgba(255,255,255,0.02); text-align: center; border-left: 3px solid var(--accent-primary);">
+              <span style="font-size: 0.75rem; color: var(--text-secondary);">全登録ユーザー</span>
+              <div id="adminStatTotal" style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary); margin-top: 0.2rem;">0</div>
+            </div>
+            <div class="glass-card" style="padding: 0.75rem 1rem; background: rgba(255,255,255,0.02); text-align: center; border-left: 3px solid #8b5cf6;">
+              <span style="font-size: 0.75rem; color: var(--text-secondary);">管理者 (Admin)</span>
+              <div id="adminStatAdmin" style="font-size: 1.5rem; font-weight: 700; color: #a78bfa; margin-top: 0.2rem;">0</div>
+            </div>
+            <div class="glass-card" style="padding: 0.75rem 1rem; background: rgba(255,255,255,0.02); text-align: center; border-left: 3px solid #f59e0b;">
+              <span style="font-size: 0.75rem; color: var(--text-secondary);">Proサブスク会員</span>
+              <div id="adminStatPro" style="font-size: 1.5rem; font-weight: 700; color: #fbbf24; margin-top: 0.2rem;">0</div>
+            </div>
+            <div class="glass-card" style="padding: 0.75rem 1rem; background: rgba(255,255,255,0.02); text-align: center; border-left: 3px solid var(--text-secondary);">
+              <span style="font-size: 0.75rem; color: var(--text-secondary);">一般無料会員</span>
+              <div id="adminStatFree" style="font-size: 1.5rem; font-weight: 700; color: var(--text-secondary); margin-top: 0.2rem;">0</div>
+            </div>
+          </div>
+
+          <!-- 新規ユーザー手動追加パネル -->
+          <div class="glass-card" style="padding: 1.25rem; background: rgba(0, 240, 255, 0.03); border: 1px solid rgba(0, 240, 255, 0.2); margin-bottom: 1.5rem;">
+            <h4 style="margin-top: 0; margin-bottom: 0.75rem; color: var(--accent-primary); font-size: 0.95rem; display: flex; align-items: center; gap: 6px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" x2="19" y1="8" y2="14"></line><line x1="22" x2="16" y1="11" y2="11"></line></svg>
+              ユーザーを手動で新規追加
+            </h4>
+            <form id="formAdminCreateUser" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; align-items: end;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" style="font-size: 0.75rem;">メールアドレス *</label>
+                <input type="email" id="adminNewUserEmail" class="form-input" placeholder="user@example.com" required style="padding: 0.5rem 0.75rem; font-size: 0.85rem;">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" style="font-size: 0.75rem;">会員プラン / 権限</label>
+                <select id="adminNewUserPlan" class="form-input form-select" style="padding: 0.5rem 0.75rem; font-size: 0.85rem;">
+                  <option value="free" selected>無料プラン (Free)</option>
+                  <option value="pro">Proサブスク会員 (Pro)</option>
+                  <option value="admin">システム管理者 (Admin)</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" style="font-size: 0.75rem;">ステータス</label>
+                <select id="adminNewUserStatus" class="form-input form-select" style="padding: 0.5rem 0.75rem; font-size: 0.85rem;">
+                  <option value="active" selected>アクティブ (有効)</option>
+                  <option value="suspended">一時停止中 (無効)</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label class="form-label" style="font-size: 0.75rem;">備考・メモ</label>
+                <input type="text" id="adminNewUserNotes" class="form-input" placeholder="例: VIP受講生、手動付与" style="padding: 0.5rem 0.75rem; font-size: 0.85rem;">
+              </div>
+              <div style="margin-bottom: 0;">
+                <button type="submit" class="btn btn-primary" id="btnAdminSubmitUser" style="width: 100%; padding: 0.55rem; font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" x2="19" y1="8" y2="14"></line><line x1="22" x2="16" y1="11" y2="11"></line></svg>
+                  ユーザーを追加登録
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- 検索・絞り込みフィルター -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+            <div style="flex: 1; min-width: 240px;">
+              <input type="text" id="adminUserSearchInput" class="form-input" placeholder="メールアドレスや備考で絞り込み..." style="padding: 0.5rem 0.75rem; font-size: 0.85rem;">
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <select id="adminUserFilterPlan" class="form-input form-select" style="padding: 0.5rem 0.75rem; font-size: 0.85rem; min-width: 130px;">
+                <option value="all">全プラン表示</option>
+                <option value="admin">管理者のみ</option>
+                <option value="pro">Pro会員のみ</option>
+                <option value="free">無料会員のみ</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- ユーザー一覧テーブル -->
+          <div style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
               <thead>
-                <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-secondary);">
-                  <th style="padding: 0.75rem 1rem;">ユーザーID</th>
-                  <th style="padding: 0.75rem 1rem;">メールアドレス</th>
-                  <th style="padding: 0.75rem 1rem;">権限クラス</th>
+                <tr style="background: rgba(255,255,255,0.02); border-bottom: 2px solid var(--border-color); color: var(--text-secondary);">
+                  <th style="padding: 0.75rem 1rem;">メールアドレス / ユーザーID</th>
+                  <th style="padding: 0.75rem 1rem;">権限・プラン区分</th>
                   <th style="padding: 0.75rem 1rem;">ステータス</th>
+                  <th style="padding: 0.75rem 1rem;">備考・メモ</th>
+                  <th style="padding: 0.75rem 1rem; text-align: center;">操作</th>
                 </tr>
               </thead>
               <tbody id="adminUserListBody">
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                  <td style="padding: 0.75rem 1rem; font-family: monospace;">sl0wmugi9@gmail.com_uid</td>
-                  <td style="padding: 0.75rem 1rem;">sl0wmugi9@gmail.com</td>
-                  <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary); font-weight: bold;">👑 共同管理者</span></td>
-                  <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary);">● アクティブ</span></td>
-                </tr>
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                  <td style="padding: 0.75rem 1rem; font-family: monospace;">oumaumauma32@gmail.com_uid</td>
-                  <td style="padding: 0.75rem 1rem;">oumaumauma32@gmail.com</td>
-                  <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary); font-weight: bold;">👑 共同管理者</span></td>
-                  <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary);">● アクティブ</span></td>
-                </tr>
-                <tr style="border-bottom: 1px solid var(--border-color);">
-                  <td style="padding: 0.75rem 1rem; font-family: monospace;">user_demo_uid</td>
-                  <td style="padding: 0.75rem 1rem;">user@example.com</td>
-                  <td style="padding: 0.75rem 1rem;">一般ユーザー</td>
-                  <td style="padding: 0.75rem 1rem;"><span style="color: var(--text-secondary);">● オフライン</span></td>
+                <tr>
+                  <td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                    ユーザー一覧を読み込み中...
+                  </td>
                 </tr>
               </tbody>
             </table>

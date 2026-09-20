@@ -232,10 +232,22 @@ class ApiClient {
 
   /** ユーザーIDを取得するヘルパー */
   _getUserId() {
-    if (firebase.auth().currentUser) return firebase.auth().currentUser.uid;
+    if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+      const user = firebase.auth().currentUser;
+      if (user.email === 'oumaumauma32@gmail.com' || user.email === 'sl0wmugi9@gmail.com') {
+        return user.email;
+      }
+      return user.uid;
+    }
     const mockUserStr = localStorage.getItem('kimidori_mock_user');
     if (mockUserStr) {
-      try { return JSON.parse(mockUserStr).uid; } catch(e) {}
+      try {
+        const u = JSON.parse(mockUserStr);
+        if (u.email === 'oumaumauma32@gmail.com' || u.email === 'sl0wmugi9@gmail.com') {
+          return u.email;
+        }
+        return u.uid || u.email;
+      } catch(e) {}
     }
     return "user_123";
   }
@@ -426,6 +438,56 @@ class ApiClient {
       throw new Error(err.detail || `長尺動画台本生成エラー (${res.status})`);
     }
 
+    return await res.json();
+  }
+
+  /** 管理用: 登録ユーザー一覧取得 */
+  async getAdminUsers() {
+    const res = await fetch(`${this.baseUrl}/api/admin/users`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `ユーザー一覧取得エラー (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** 管理用: ユーザー手動追加 */
+  async createAdminUser(userData) {
+    const res = await fetch(`${this.baseUrl}/api/admin/users`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(userData)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `ユーザー追加エラー (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** 管理用: ユーザー情報更新 */
+  async updateAdminUser(userId, updates) {
+    const res = await fetch(`${this.baseUrl}/api/admin/users/${encodeURIComponent(userId)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `ユーザー更新エラー (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** 管理用: ユーザー削除 */
+  async deleteAdminUser(userId) {
+    const res = await fetch(`${this.baseUrl}/api/admin/users/${encodeURIComponent(userId)}`, {
+      method: "DELETE"
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `ユーザー削除エラー (${res.status})`);
+    }
     return await res.json();
   }
 }

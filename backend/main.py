@@ -143,6 +143,22 @@ class UserPlanUpdateRequest(BaseModel):
     expire_date: Optional[str] = None
 
 
+class AdminUserCreateRequest(BaseModel):
+    email: str
+    plan: Optional[str] = "free"
+    role: Optional[str] = "user"
+    status: Optional[str] = "active"
+    notes: Optional[str] = ""
+
+
+class AdminUserUpdateRequest(BaseModel):
+    plan: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    subscription_expire_date: Optional[str] = None
+
+
 async def run_manga_video_job(
     job_id: str,
     script_data: dict,
@@ -969,6 +985,65 @@ async def update_user_plan_endpoint(req: UserPlanUpdateRequest):
     """ユーザーの会員プランを更新する（デモ・テスト用）"""
     success = permission_manager.update_user_plan(req.user_id, req.plan, req.expire_date)
     return {"success": success}
+
+
+# -----------------------------------------------------------------------------
+# 管理者専用: ユーザー管理 API (一覧・手動追加・プラン変更・削除)
+# -----------------------------------------------------------------------------
+@app.get("/api/admin/users")
+async def get_admin_users():
+    """管理用: 登録ユーザー一覧を取得"""
+    try:
+        users = permission_manager.list_users()
+        return {"success": True, "users": users}
+    except Exception as e:
+        logger.error(f"Failed to list admin users: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/users")
+async def create_admin_user(req: AdminUserCreateRequest):
+    """管理用: 新規ユーザーを手動登録"""
+    try:
+        user = permission_manager.create_user(
+            email=req.email,
+            plan=req.plan or "free",
+            role=req.role or "user",
+            status=req.status or "active",
+            notes=req.notes or ""
+        )
+        return {"success": True, "user": user}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to create user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/admin/users/{user_id}")
+async def update_admin_user(user_id: str, req: AdminUserUpdateRequest):
+    """管理用: 既存ユーザーのプラン・権限・ステータスを更新"""
+    try:
+        updates = req.dict(exclude_unset=True)
+        updated_user = permission_manager.update_user(user_id, updates)
+        return {"success": True, "user": updated_user}
+    except Exception as e:
+        logger.error(f"Failed to update user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/admin/users/{user_id}")
+async def delete_admin_user(user_id: str):
+    """管理用: ユーザーを削除"""
+    try:
+        success = permission_manager.delete_user(user_id)
+        return {"success": success}
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to delete user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.post("/api/manga/script")

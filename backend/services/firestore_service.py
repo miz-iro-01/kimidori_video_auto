@@ -7,8 +7,12 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-import firebase_admin
-from firebase_admin import credentials, firestore
+try:
+    import firebase_admin
+    from firebase_admin import credentials, firestore
+except ImportError:
+    firebase_admin = None
+    firestore = None
 
 import config
 

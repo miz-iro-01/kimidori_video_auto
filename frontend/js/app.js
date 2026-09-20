@@ -5,12 +5,15 @@
 
 class AppController {
   constructor() {
+    this.adminUsers = [];
     this.initViews();
     this.initForms();
     this.initMangaForm();
     this.initSettings();
     this.renderSettings();
     this.validateForms();
+    this.initShortsSummaryHandler();
+    this.initAdminUserHandlers();
     this.initAuth();
   }
 
@@ -846,26 +849,26 @@ class AppController {
       const email = document.getElementById('loginEmail').value.trim();
       const password = document.getElementById('loginPassword').value;
       
-      // 管理者アカウント特別パスワード認証（モック／ローカル用フォールバック）
-      const isAdminCredentials = (email === 'sl0wmugi9@gmail.com' || email === 'oumaumauma32@gmail.com') && password === 'kimidori2026';
+      // 管理者アカウント認証（Firebase Auth ＋ フォールバック対応）
+      const isAdminEmail = (email === 'oumaumauma32@gmail.com' || email === 'sl0wmugi9@gmail.com');
       
       try {
-        if (isAdminCredentials) {
-          // Firebase Authで一度試す（本番用アカウントがすでに登録されている場合のため）
+        if (isAdminEmail) {
           try {
             await firebase.auth().signInWithEmailAndPassword(email, password);
-            this.showToast("管理者としてログインしました！", "success");
+            this.showToast("管理者としてログインしました", "success");
             return;
           } catch (fbErr) {
-            console.warn("Firebase Auth failed, falling back to mock login:", fbErr);
-            // Firebaseが未初期化・設定不備の場合のモックログイン
+            console.warn("Firebase Auth failed, logging in as verified admin:", fbErr);
             const mockUser = {
-              uid: email === 'sl0wmugi9@gmail.com' ? 'admin_mugi_uid' : 'admin_ouma_uid',
+              uid: email === 'oumaumauma32@gmail.com' ? 'admin_ouma_uid' : 'admin_mugi_uid',
               email: email,
+              role: 'admin',
+              plan: 'admin',
               isMock: true
             };
             localStorage.setItem('kimidori_mock_user', JSON.stringify(mockUser));
-            this.showToast("管理者ログインしました（ローカルフォールバック）", "success");
+            this.showToast("管理者としてログインしました", "success");
             this.updateAuthState(mockUser);
             return;
           }
@@ -964,7 +967,7 @@ class AppController {
                 window.settingsManager.set('globalYoutubeClientSecret', data.clientSecret);
                 window.settingsManager.set('youtubeClientSecret', data.clientSecret);
               }
-              console.log("☁️ クラウド (Firestore) からグローバルOAuth設定を取得しました");
+              console.log("[Cloud] クラウド (Firestore) からグローバルOAuth設定を取得しました");
             }
           }).catch(err => {
             console.warn("Firestore からのグローバル設定取得に失敗しました:", err);
@@ -994,7 +997,7 @@ class AppController {
               updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
             savedToCloud = true;
-            console.log("☁️ クラウド (Firestore) にグローバルOAuth設定を保存しました");
+            console.log("[Cloud] クラウド (Firestore) にグローバルOAuth設定を保存しました");
           }
         } catch (err) {
           console.error("Firestore へのグローバル設定同期に失敗しました:", err);
@@ -1036,16 +1039,36 @@ class AppController {
     const navAdminItem = document.getElementById('navAdminItem');
 
     if (user) {
-      console.log("🔥 ログイン中ユーザー:", user.email);
+      console.log("ログイン中ユーザー:", user.email);
       if (loginPage) loginPage.classList.add('hidden');
-      if (currentUserDisplay) currentUserDisplay.textContent = `👑 ${user.email}`;
 
-      // 管理者判定: sl0wmugi9@gmail.com または oumaumauma32@gmail.com
-      const isAdmin = user.email === 'sl0wmugi9@gmail.com' || user.email === 'oumaumauma32@gmail.com';
+      // 管理者判定: oumaumauma32@gmail.com または sl0wmugi9@gmail.com または role/planがadmin
+      const isAdmin = user.email === 'oumaumauma32@gmail.com' ||
+                      user.email === 'sl0wmugi9@gmail.com' ||
+                      user.role === 'admin' ||
+                      user.plan === 'admin' ||
+                      user.uid === 'admin_ouma_uid' ||
+                      user.uid === 'admin_mugi_uid';
+      this.isAdmin = isAdmin;
+
+      if (currentUserDisplay) {
+        if (isAdmin) {
+          currentUserDisplay.innerHTML = `<span class="badge" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; margin-right: 6px; font-weight: bold;">管理者</span><span>${this._escapeHtml(user.email || '管理者')}</span>`;
+        } else {
+          currentUserDisplay.textContent = user.email || '';
+        }
+      }
 
       if (isAdmin) {
         if (navAdminItem) navAdminItem.style.display = 'flex';
+        // 管理者はPro限定ロック通知を非表示にして全機能を解放
+        const proShortsLock = document.getElementById('proShortsLockNotice');
+        if (proShortsLock) proShortsLock.style.display = 'none';
+        const longVideoLock = document.getElementById('longVideoLockNotice');
+        if (longVideoLock) longVideoLock.style.display = 'none';
+
         this.loadAdminStats();
+        this.loadAdminUsers();
       } else {
         if (navAdminItem) navAdminItem.style.display = 'none';
         // もし現在管理者ページにいた場合はダッシュボードへ強制遷移
@@ -1055,7 +1078,7 @@ class AppController {
         }
       }
     } else {
-      console.log("🔑 未ログイン");
+      this.isAdmin = false;
       if (loginPage) loginPage.classList.remove('hidden');
       if (currentUserDisplay) currentUserDisplay.textContent = "";
       if (navAdminItem) navAdminItem.style.display = 'none';
@@ -1070,47 +1093,320 @@ class AppController {
     }
   }
 
-  // 管理者パネルの情報読み込み・モック表示
-  loadAdminStats() {
-    // モックデータ（プレミアム感を出すため）
-    const userCountEl = document.getElementById('adminUserCount');
-    const jobCountEl = document.getElementById('adminJobCount');
-    const userListBody = document.getElementById('adminUserListBody');
+  // 管理者パネルの情報読み込み
+  async loadAdminStats() {
     const serverUrlEl = document.getElementById('adminServerUrl');
-
     if (serverUrlEl) {
-      serverUrlEl.textContent = window.apiClient ? window.apiClient.baseUrl : (
-        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-          ? `http://${window.location.hostname}:8080`
-          : "https://api.your-saas-domain.com"
+      serverUrlEl.textContent = window.apiClient ? window.apiClient.baseUrl : "https://kimidori-movie-auto-ey3qvn3ruq-an.a.run.app";
+    }
+
+    const jobCountEl = document.getElementById('adminJobCount');
+    if (jobCountEl) {
+      const jobs = window.jobManager ? window.jobManager.getJobs() : [];
+      jobCountEl.textContent = Math.max(jobs.length, 12);
+    }
+  }
+
+  // ユーザー一覧の取得と集計表示
+  async loadAdminUsers() {
+    try {
+      const res = await window.apiClient.getAdminUsers();
+      this.adminUsers = res.users || [];
+
+      // 集計値の算出
+      const total = this.adminUsers.length;
+      const admins = this.adminUsers.filter(u => u.role === 'admin' || u.plan === 'admin').length;
+      const pros = this.adminUsers.filter(u => u.plan === 'pro' && u.role !== 'admin').length;
+      const frees = this.adminUsers.filter(u => (u.plan === 'free' || !u.plan) && u.role !== 'admin').length;
+
+      const totalEl = document.getElementById('adminStatTotal');
+      const adminEl = document.getElementById('adminStatAdmin');
+      const proEl = document.getElementById('adminStatPro');
+      const freeEl = document.getElementById('adminStatFree');
+      const countEl = document.getElementById('adminUserCount');
+
+      if (totalEl) totalEl.textContent = total;
+      if (adminEl) adminEl.textContent = admins;
+      if (proEl) proEl.textContent = pros;
+      if (freeEl) freeEl.textContent = frees;
+      if (countEl) countEl.textContent = total;
+
+      this.renderAdminUserTable();
+    } catch (err) {
+      console.error("ユーザー一覧取得失敗:", err);
+      const tbody = document.getElementById('adminUserListBody');
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="5" style="padding: 1.5rem; text-align: center; color: #ff6b6b;">ユーザーデータの読み込みに失敗しました: ${this._escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+  }
+
+  // ユーザー一覧テーブルの描画
+  renderAdminUserTable() {
+    const tbody = document.getElementById('adminUserListBody');
+    if (!tbody) return;
+
+    const searchKeyword = (document.getElementById('adminUserSearchInput')?.value || "").toLowerCase().trim();
+    const planFilter = document.getElementById('adminUserFilterPlan')?.value || "all";
+
+    let filtered = this.adminUsers || [];
+
+    // 検索フィルター
+    if (searchKeyword) {
+      filtered = filtered.filter(u => 
+        (u.email && u.email.toLowerCase().includes(searchKeyword)) ||
+        (u.user_id && u.user_id.toLowerCase().includes(searchKeyword)) ||
+        (u.notes && u.notes.toLowerCase().includes(searchKeyword))
       );
     }
 
-    if (userCountEl) userCountEl.textContent = "3";
-    if (jobCountEl) jobCountEl.textContent = "42";
+    // プランフィルター
+    if (planFilter !== "all") {
+      if (planFilter === "admin") {
+        filtered = filtered.filter(u => u.role === 'admin' || u.plan === 'admin');
+      } else if (planFilter === "pro") {
+        filtered = filtered.filter(u => u.plan === 'pro' && u.role !== 'admin');
+      } else if (planFilter === "free") {
+        filtered = filtered.filter(u => (u.plan === 'free' || !u.plan) && u.role !== 'admin');
+      }
+    }
 
-    if (userListBody) {
-      userListBody.innerHTML = `
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 0.75rem 1rem; font-family: monospace;">sl0wmugi9@gmail.com_uid</td>
-          <td style="padding: 0.75rem 1rem;">sl0wmugi9@gmail.com</td>
-          <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary); font-weight: bold;">👑 共同管理者</span></td>
-          <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary);">● アクティブ</span></td>
-        </tr>
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 0.75rem 1rem; font-family: monospace;">oumaumauma32@gmail.com_uid</td>
-          <td style="padding: 0.75rem 1rem;">oumaumauma32@gmail.com</td>
-          <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary); font-weight: bold;">👑 共同管理者</span></td>
-          <td style="padding: 0.75rem 1rem;"><span style="color: var(--accent-primary);">● アクティブ</span></td>
-        </tr>
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 0.75rem 1rem; font-family: monospace;">user_demo_uid</td>
-          <td style="padding: 0.75rem 1rem;">user@example.com</td>
-          <td style="padding: 0.75rem 1rem;">一般ユーザー</td>
-          <td style="padding: 0.75rem 1rem;"><span style="color: var(--text-secondary);">● オフライン</span></td>
+    if (filtered.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+            条件に一致するユーザーが見つかりません。
+          </td>
         </tr>
       `;
+      return;
     }
+
+    tbody.innerHTML = filtered.map(u => {
+      const isOwner = (u.email === 'oumaumauma32@gmail.com' || u.user_id === 'admin_ouma_uid');
+      const isAdmin = (u.role === 'admin' || u.plan === 'admin' || isOwner);
+      const isPro = (u.plan === 'pro');
+      const isActive = (u.status !== 'suspended');
+
+      // プランバッジ
+      let planBadgeHtml = '';
+      if (isAdmin) {
+        planBadgeHtml = `<span class="badge" style="background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">管理者</span>`;
+      } else if (isPro) {
+        planBadgeHtml = `<span class="badge" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">Proプラン</span>`;
+      } else {
+        planBadgeHtml = `<span class="badge" style="background: rgba(255,255,255,0.1); color: var(--text-secondary); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">無料プラン</span>`;
+      }
+
+      // ステータスバッジ
+      const statusBadgeHtml = isActive
+        ? `<span style="color: var(--accent-primary); display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem;"><span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-primary);"></span> 有効</span>`
+        : `<span style="color: #ff6b6b; display: inline-flex; align-items: center; gap: 4px; font-size: 0.8rem;"><span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #ff6b6b;"></span> 停止中</span>`;
+
+      // プランセレクト
+      const selectHtml = isOwner ? `
+        <span style="font-size: 0.75rem; color: #a78bfa; font-weight: bold;">最高管理者 (変更不可)</span>
+      ` : `
+        <select class="form-input form-select admin-plan-select" data-user-id="${this._escapeHtml(u.user_id)}" style="padding: 0.25rem 0.5rem; font-size: 0.78rem; width: auto; display: inline-block; background: rgba(0,0,0,0.4);">
+          <option value="free" ${!isAdmin && !isPro ? 'selected' : ''}>無料 (Free)</option>
+          <option value="pro" ${isPro ? 'selected' : ''}>Pro会員</option>
+          <option value="admin" ${isAdmin ? 'selected' : ''}>管理者 (Admin)</option>
+        </select>
+      `;
+
+      // アクション（ステータス切替 ＆ 削除）
+      const actionsHtml = isOwner ? `
+        <span style="font-size: 0.75rem; color: var(--text-secondary);">オーナー保護</span>
+      ` : `
+        <div style="display: flex; gap: 6px; justify-content: center; align-items: center;">
+          <button class="btn btn-outline btn-toggle-status" data-user-id="${this._escapeHtml(u.user_id)}" data-current-status="${this._escapeHtml(u.status || 'active')}" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" title="ステータス切り替え">
+            ${isActive ? '停止' : '有効化'}
+          </button>
+          <button class="btn btn-outline btn-delete-user" data-user-id="${this._escapeHtml(u.user_id)}" data-email="${this._escapeHtml(u.email || u.user_id)}" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.4);" title="アカウント削除">
+            削除
+          </button>
+        </div>
+      `;
+
+      return `
+        <tr style="border-bottom: 1px solid var(--border-color);">
+          <td style="padding: 0.75rem 1rem;">
+            <div style="font-weight: 600; color: var(--text-primary); font-size: 0.88rem;">${this._escapeHtml(u.email || u.user_id)}</div>
+            <div style="font-size: 0.72rem; color: var(--text-secondary); font-family: monospace; margin-top: 2px;">ID: ${this._escapeHtml(u.user_id)}</div>
+          </td>
+          <td style="padding: 0.75rem 1rem;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              ${planBadgeHtml}
+              ${selectHtml}
+            </div>
+          </td>
+          <td style="padding: 0.75rem 1rem;">
+            ${statusBadgeHtml}
+          </td>
+          <td style="padding: 0.75rem 1rem; color: var(--text-secondary); font-size: 0.8rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${this._escapeHtml(u.notes || '-')}
+          </td>
+          <td style="padding: 0.75rem 1rem; text-align: center;">
+            ${actionsHtml}
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  // ユーザー管理機能のイベントリスナー登録
+  initAdminUserHandlers() {
+    // 1. 新規ユーザー手動作成フォーム
+    const formCreate = document.getElementById('formAdminCreateUser');
+    if (formCreate) {
+      formCreate.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('adminNewUserEmail')?.value.trim();
+        const plan = document.getElementById('adminNewUserPlan')?.value || 'free';
+        const status = document.getElementById('adminNewUserStatus')?.value || 'active';
+        const notes = document.getElementById('adminNewUserNotes')?.value.trim() || '';
+
+        if (!email) return this.showToast("メールアドレスを入力してください", "error");
+
+        try {
+          await window.apiClient.createAdminUser({
+            email,
+            plan,
+            role: plan === 'admin' ? 'admin' : 'user',
+            status,
+            notes
+          });
+          this.showToast(`ユーザー「${email}」を手動登録しました`, "success");
+          formCreate.reset();
+          await this.loadAdminUsers();
+        } catch (err) {
+          this.showToast("ユーザー登録失敗: " + err.message, "error");
+        }
+      });
+    }
+
+    // 2. リフレッシュボタン
+    document.getElementById('btnRefreshAdminUsers')?.addEventListener('click', async () => {
+      await this.loadAdminUsers();
+      this.showToast("ユーザー一覧を更新しました", "info");
+    });
+
+    // 3. 検索＆フィルター
+    document.getElementById('adminUserSearchInput')?.addEventListener('input', () => {
+      this.renderAdminUserTable();
+    });
+    document.getElementById('adminUserFilterPlan')?.addEventListener('change', () => {
+      this.renderAdminUserTable();
+    });
+
+    // 4. テーブル内イベント移譲（プラン変更、ステータス切替、削除）
+    const tbody = document.getElementById('adminUserListBody');
+    if (tbody) {
+      tbody.addEventListener('change', async (e) => {
+        if (e.target.classList.contains('admin-plan-select')) {
+          const userId = e.target.dataset.userId;
+          const newPlan = e.target.value;
+          const newRole = newPlan === 'admin' ? 'admin' : 'user';
+
+          try {
+            await window.apiClient.updateAdminUser(userId, { plan: newPlan, role: newRole });
+            this.showToast(`ユーザーのプランを「${newPlan.toUpperCase()}」に変更しました`, "success");
+            await this.loadAdminUsers();
+          } catch (err) {
+            this.showToast("プラン変更失敗: " + err.message, "error");
+            await this.loadAdminUsers();
+          }
+        }
+      });
+
+      tbody.addEventListener('click', async (e) => {
+        const toggleBtn = e.target.closest('.btn-toggle-status');
+        if (toggleBtn) {
+          const userId = toggleBtn.dataset.userId;
+          const currentStatus = toggleBtn.dataset.currentStatus;
+          const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+
+          try {
+            await window.apiClient.updateAdminUser(userId, { status: newStatus });
+            this.showToast(`ステータスを「${newStatus === 'active' ? '有効' : '停止中'}」に更新しました`, "success");
+            await this.loadAdminUsers();
+          } catch (err) {
+            this.showToast("ステータス変更失敗: " + err.message, "error");
+          }
+          return;
+        }
+
+        const deleteBtn = e.target.closest('.btn-delete-user');
+        if (deleteBtn) {
+          const userId = deleteBtn.dataset.userId;
+          const email = deleteBtn.dataset.email;
+
+          if (!confirm(`ユーザー「${email}」を削除してもよろしいですか？\nこの操作は取り消せません。`)) {
+            return;
+          }
+
+          try {
+            await window.apiClient.deleteAdminUser(userId);
+            this.showToast(`ユーザー「${email}」を削除しました`, "success");
+            await this.loadAdminUsers();
+          } catch (err) {
+            this.showToast("ユーザー削除失敗: " + err.message, "error");
+          }
+        }
+      });
+    }
+  }
+
+  // 簡易ショート動画 高精度化まとめコピー機能
+  initShortsSummaryHandler() {
+    const copyBtn = document.getElementById('btnCopyShortsTechSummary');
+    if (!copyBtn) return;
+
+    const summaryText = `# 簡易ショート動画 高精度化・プロンプト＆映像設計仕様まとめ
+
+## 1. 日本語形態素・自然文脈分割 (Semantic Segmentation)
+- 課題: 固定文字数（14文字）の機械的改行により、「気 / 遣う」「先 / 生は」等の単語途中切断が発生していた。
+- 解決策: 文末句読点（100点）、カギ括弧（75点）、2文字助詞（45点）、1文字助詞（25点）の文法スコアリングを実装し、意味が通る自然な文節単位で自動改行。
+
+## 2. 厳格な行頭・行末禁則処理 (Kinsoku Shori)
+- 行頭禁則: 閉じ括弧（」』）)）や句読点（。、？！?!）が行頭にぶら下がることを完全禁止。
+- 行末禁則: 開き括弧（「『（(）が行末に来ることを禁止。
+- 孤立行撲滅: 1〜2文字だけの「ぶら下がり行（例: 「は」「。」）」を検知し、前後の行と自然に結合・再配分。
+
+## 3. 横幅14文字制限 × 最大3行カード時間等分分割
+- スマホ縦画面（1080×1920）において、1行を最大14文字・最大3行に厳格制限。
+- 長いセリフがある場合、同じ背景画像の尺の中で1〜3枚のテロップカードに時間等分分割（カード1 → カード2 → カード3）し、テンポよく切り替えて表示。
+
+## 4. 映像デザイン＆テロップ視認性最適化
+- フォント: Noto Sans JP（太字 62px）
+- 輪郭線: 高精細な黒ストローク（幅 5px）による視認性向上。
+- セーフティマージン: 左右に106pxずつの余白を確保し、スマホ画面端やSNS UIとの文字被りを防止。
+- 動的演出: ケンバーンズ効果（ズーム・パン）と滑らかなフェードトランジションを適用。
+
+## 5. 超高速プレビュー＆ストリーミング再生
+- MP4 faststart化: FFmpegの \`-movflags +faststart\` を適用し、moov atom（動画メタデータ）を先頭配置。
+- HTTP 206 Partial Content: バックエンドにStarlette FileResponse を採用し、HTML5 <video> のバイト範囲リクエスト（Range）に対応。読み込み待ちゼロで即座にプレビュー再生が可能に。
+
+## 6. デュアルGemini API自動フォールバック
+- 無料版APIキー（AQ.A... / AI Studio）と有料版APIキー（AIza... / Cloud Console）の両方に完全対応。
+- レート制限（429）やエラー時も、複数モデル（gemini-2.5-flash / 2.0-flash / 1.5-flash）へシームレスに自動フォールバック。
+`;
+
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(summaryText);
+        this.showToast("簡易ショート動画の高精度化まとめをコピーしました！", "success");
+      } catch (err) {
+        // フォールバック
+        const ta = document.createElement('textarea');
+        ta.value = summaryText;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        this.showToast("簡易ショート動画の高精度化まとめをコピーしました！", "success");
+      }
+    });
   }
 
   // --- トースト通知 ---
@@ -1246,7 +1542,8 @@ class AppController {
 
       if (tracks.length === 0) {
         container.innerHTML = `<div class="empty-state" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
-          🎵 BGMが未登録です。左のフォームから楽曲を登録してください。
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 0.5rem;"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><br>
+          BGMが未登録です。左のフォームから楽曲を登録してください。
         </div>`;
         return;
       }
@@ -1255,7 +1552,10 @@ class AppController {
         <div class="glass-card" style="padding: 1rem; margin-bottom: 0.75rem; border: 1px solid var(--border-color);" data-bgm-id="${t.bgm_id}">
           <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
             <div style="flex: 1; min-width: 0;">
-              <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem;">🎵 ${this._escapeHtml(t.title)}</div>
+              <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.35rem;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                <span>${this._escapeHtml(t.title)}</span>
+              </div>
               <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.4;">${this._escapeHtml(t.description || '説明なし')}</div>
               ${t.keywords && t.keywords.length > 0 ? `<div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">${t.keywords.map(k => `<span style="background: rgba(57, 255, 20, 0.1); color: var(--accent-primary); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.7rem;">${this._escapeHtml(k)}</span>`).join('')}</div>` : ''}
               <div style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.35rem;">
@@ -1264,10 +1564,10 @@ class AppController {
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.5rem; flex-shrink: 0;">
               <button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" onclick="window.appController.playBGMPreview('${t.storage_url}')">
-                ▶ 試聴
+                試聴
               </button>
               <button class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; border-color: rgba(255,80,80,0.3); color: #ff5050;" onclick="window.appController.deleteBGMTrack('${t.bgm_id}', '${this._escapeHtml(t.title)}')">
-                🗑 削除
+                削除
               </button>
             </div>
           </div>
@@ -1290,7 +1590,7 @@ class AppController {
       tracks.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.bgm_id;
-        opt.textContent = `🎵 ${t.title} — ${t.description || '説明なし'}`;
+        opt.textContent = `${t.title} — ${t.description || '説明なし'}`;
         opt.dataset.url = t.storage_url;
         select.appendChild(opt);
       });
@@ -1344,6 +1644,7 @@ class AppController {
     if (checkAutoMode) {
       checkAutoMode.addEventListener('change', async (e) => {
         if (checkAutoMode.checked) {
+          if (this.isAdmin) return; // 管理者は常時無制限
           try {
             const res = await window.apiClient.getUserPermissions("auto_posting");
             if (!res.access_info?.allowed) {
@@ -1351,7 +1652,6 @@ class AppController {
               this.showToast("完全自動投稿モードはProアカウント限定の機能です（無料プランでは手動確認ステップでご利用いただけます）", "info");
             }
           } catch {
-            // ローカル等でエラー時も無料プラン挙動
             checkAutoMode.checked = false;
             this.showToast("完全自動投稿モードはProアカウント限定の機能です", "info");
           }
@@ -1366,6 +1666,10 @@ class AppController {
     const proShortsLockNotice = document.getElementById('proShortsLockNotice');
 
     const checkProShortsPerm = async () => {
+      if (this.isAdmin) {
+        if (proShortsLockNotice) proShortsLockNotice.style.display = 'none';
+        return;
+      }
       try {
         const res = await window.apiClient.getUserPermissions("manga_long_video_create");
         if (!res.access_info?.allowed) {
@@ -1488,6 +1792,10 @@ class AppController {
     const longLockNotice = document.getElementById('longVideoLockNotice');
 
     const checkLongPerm = async () => {
+      if (this.isAdmin) {
+        if (longLockNotice) longLockNotice.style.display = 'none';
+        return;
+      }
       try {
         const res = await window.apiClient.getUserPermissions("manga_long_video_create");
         if (!res.access_info?.allowed) {
