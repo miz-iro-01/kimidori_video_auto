@@ -126,7 +126,8 @@ class BatchAssetGenerator:
         output_dir: Path,
         tts_engine: str = "edge",
         voice_name: Optional[str] = None,
-        image_size: Tuple[int, int] = (1080, 1920)
+        image_size: Tuple[int, int] = (1080, 1920),
+        tts_params: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         1シーン分の音声・ベース画像・吹き出しオーバーレイ画像を生成（キャッシュ優先）
@@ -140,7 +141,7 @@ class BatchAssetGenerator:
         # ----------------------------------------------------
         # 1. 音声アセット生成（キャッシュチェック）
         # ----------------------------------------------------
-        voice_params = {"engine": tts_engine, "voice": voice_name}
+        voice_params = {"engine": tts_engine, "voice": voice_name, **(tts_params or {})}
         cached_audio = self.cache_manager.get_audio(narration, voice_params)
 
         audio_out_path = output_dir / f"speech_{scene_num:03d}.mp3"
@@ -153,7 +154,7 @@ class BatchAssetGenerator:
         else:
             # 新規生成
             try:
-                tts_mgr = TTSManager(engine=tts_engine, voice_name=voice_name or "nanami")
+                tts_mgr = TTSManager(engine=tts_engine, voice_name=voice_name or "nanami", **(tts_params or {}))
                 scenes_input = [{"narration": narration}]
                 # 各並列タスクごとに独立した一時サブディレクトリを使用
                 sub_temp_dir = output_dir / f"scene_temp_{scene_num:03d}"
@@ -226,7 +227,8 @@ class BatchAssetGenerator:
         output_dir: Union[str, Path],
         tts_engine: str = "edge",
         voice_name: Optional[str] = None,
-        image_size: Tuple[int, int] = (1080, 1920)
+        image_size: Tuple[int, int] = (1080, 1920),
+        tts_params: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
         全シーンのアセットをバッチ生成するメインメソッド
@@ -243,7 +245,8 @@ class BatchAssetGenerator:
                 output_dir=out_p,
                 tts_engine=tts_engine,
                 voice_name=voice_name,
-                image_size=image_size
+                image_size=image_size,
+                tts_params=tts_params
             )
             for scene in scenes
         ]

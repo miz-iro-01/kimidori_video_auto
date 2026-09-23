@@ -22,12 +22,18 @@ class ModeAProcessor:
     """モードA: テーマからショート動画を自動生成（ケンバーンズ効果付き）"""
 
     def __init__(self, firestore_service, storage_service,
-                 gemini_api_key: str = "", pexels_api_key: str = "",
+                 gemini_api_key: str = "", paid_gemini_api_key: str = "", pexels_api_key: str = "",
                  tts_engine: str = "edge", voice_name: str = "nanami", speaking_rate: float = 1.0,
-                 google_tts_key: str = "", elevenlabs_key: str = "", aivis_key: str = ""):
+                 google_tts_key: str = "", elevenlabs_key: str = "", aivis_key: str = "",
+                 **kwargs):
         self.firestore = firestore_service
         self.storage = storage_service
-        self.script_gen = ScriptGenerator(api_key=gemini_api_key)
+        # テキスト・台本生成には無料APIキー（なければ有料キー）を使用
+        text_api_key = gemini_api_key or paid_gemini_api_key
+        # 画像生成・アニメーションには有料APIキー（なければ無料キー）を使用
+        self.visual_api_key = paid_gemini_api_key or gemini_api_key
+        self.paid_gemini_api_key = paid_gemini_api_key
+        self.script_gen = ScriptGenerator(api_key=text_api_key)
         self.pexels_api_key = pexels_api_key
         
         self.tts = TTSManager(
@@ -36,7 +42,8 @@ class ModeAProcessor:
             speaking_rate=speaking_rate,
             google_tts_key=google_tts_key,
             elevenlabs_key=elevenlabs_key,
-            aivis_key=aivis_key
+            aivis_key=aivis_key,
+            **kwargs
         )
 
     def _get_job_dir(self, job_id: str) -> Path:

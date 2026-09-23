@@ -26,25 +26,61 @@ class ApiClient {
       throw new Error("Gemini APIキーが設定されていません。");
     }
 
+    const paidGeminiKey = window.settingsManager.get("paidGeminiApiKey") || "";
+    const openAiTtsKey = window.settingsManager.get("openAiTtsKey") || "";
+    const openAiTtsModel = window.settingsManager.get("openAiTtsModel") || "tts-1";
+    const azureTtsKey = window.settingsManager.get("azureTtsKey") || "";
+    const azureTtsRegion = window.settingsManager.get("azureTtsRegion") || "japaneast";
+    const awsAccessKey = window.settingsManager.get("awsAccessKey") || "";
+    const awsSecretKey = window.settingsManager.get("awsSecretKey") || "";
+    const awsRegion = window.settingsManager.get("awsRegion") || "ap-northeast-1";
+    const voicevoxUrl = window.settingsManager.get("voicevoxUrl") || "http://localhost:50021";
+    const sharevoxUrl = window.settingsManager.get("sharevoxUrl") || "http://localhost:50025";
+    const coeiroinkUrl = window.settingsManager.get("coeiroinkUrl") || "http://localhost:50031";
+    const aivisUrl = window.settingsManager.get("aivisUrl") || "http://localhost:10101";
+    const ossTtsUrl = window.settingsManager.get("ossTtsUrl") || "http://localhost:9880";
+    const ossTtsFormat = window.settingsManager.get("ossTtsFormat") || "openai";
+    const ossVoice = window.settingsManager.get("ossVoice") || "";
+    const ondokuToken = window.settingsManager.get("ondokuToken") || "";
+    const coefontKey = window.settingsManager.get("coefontKey") || "";
+    const coefontId = window.settingsManager.get("coefontId") || "";
+    const speakingRate = parseFloat(window.settingsManager.get("speakingRate")) || 1.0;
+
     const payload = {
       theme,
       style,
       duration_seconds: parseInt(duration),
-      user_id: (() => {
-        if (firebase.auth().currentUser) return firebase.auth().currentUser.uid;
-        const mockUserStr = localStorage.getItem('kimidori_mock_user');
-        if (mockUserStr) {
-          try { return JSON.parse(mockUserStr).uid; } catch(e) {}
-        }
-        return "user_123";
-      })(),
+      user_id: this._getUserId(),
       gemini_api_key: geminiKey,
+      paid_gemini_api_key: paidGeminiKey,
       pexels_api_key: pexelsKey,
       tts_engine: ttsEngine,
       voice_name: voiceName,
+      speaking_rate: speakingRate,
       google_tts_key: googleTtsKey,
       elevenlabs_key: elevenLabsKey,
+      openai_key: openAiTtsKey,
+      openai_model: openAiTtsModel,
+      azure_key: azureTtsKey,
+      azure_region: azureTtsRegion,
+      aws_access_key: awsAccessKey,
+      aws_secret_key: awsSecretKey,
+      aws_region: awsRegion,
+      voicevox_url: voicevoxUrl,
+      voicevox_speaker: voiceName && /^\d+$/.test(voiceName) ? parseInt(voiceName) : 3,
+      sharevox_url: sharevoxUrl,
+      sharevox_speaker: voiceName && /^\d+$/.test(voiceName) ? parseInt(voiceName) : 0,
+      coeiroink_url: coeiroinkUrl,
+      coeiroink_style: voiceName && /^\d+$/.test(voiceName) ? parseInt(voiceName) : 0,
+      aivis_url: aivisUrl,
       aivis_key: aivisKey,
+      aivis_speaker: voiceName && /^\d+$/.test(voiceName) ? parseInt(voiceName) : 1,
+      oss_tts_url: ossTtsUrl,
+      oss_tts_format: ossTtsFormat,
+      oss_voice: ossVoice,
+      ondoku_token: ondokuToken,
+      coefont_key: coefontKey,
+      coefont_id: coefontId,
       target_youtube_account: targetChannelId || null,
       script_data: scriptData,
       auto_post: autoPost,
@@ -360,17 +396,45 @@ class ApiClient {
     return await res.json();
   }
 
-  /** 長尺漫画動画の生成ジョブの発行 */
+  /** 長尺漫画動画 / Pro版ショート動画の生成ジョブの発行 */
   async generateMangaVideo(scriptData, ttsEngine = "edge", voiceName = "nanami", bgmMap = {}) {
     const geminiKey = window.settingsManager.get("geminiApiKey");
+    const paidGeminiKey = window.settingsManager.get("paidGeminiApiKey") || "";
+
+    const ttsParams = {
+      speaking_rate: parseFloat(window.settingsManager.get("speakingRate")) || 1.0,
+      google_tts_key: window.settingsManager.get("googleTtsKey") || "",
+      elevenlabs_key: window.settingsManager.get("elevenLabsKey") || "",
+      openai_key: window.settingsManager.get("openAiTtsKey") || "",
+      openai_model: window.settingsManager.get("openAiTtsModel") || "tts-1",
+      azure_key: window.settingsManager.get("azureTtsKey") || "",
+      azure_region: window.settingsManager.get("azureTtsRegion") || "japaneast",
+      aws_access_key: window.settingsManager.get("awsAccessKey") || "",
+      aws_secret_key: window.settingsManager.get("awsSecretKey") || "",
+      aws_region: window.settingsManager.get("awsRegion") || "ap-northeast-1",
+      voicevox_url: window.settingsManager.get("voicevoxUrl") || "http://localhost:50021",
+      voicevox_speaker: voiceName && /^\d+$/.test(voiceName) ? parseInt(voiceName) : 3,
+      sharevox_url: window.settingsManager.get("sharevoxUrl") || "http://localhost:50025",
+      sharevox_speaker: voiceName && /^\d+$/.test(voiceName) ? parseInt(voiceName) : 0,
+      coeiroink_url: window.settingsManager.get("coeiroinkUrl") || "http://localhost:50031",
+      aivis_url: window.settingsManager.get("aivisUrl") || "http://localhost:10101",
+      aivis_key: window.settingsManager.get("aivisKey") || "",
+      oss_tts_url: window.settingsManager.get("ossTtsUrl") || "http://localhost:9880",
+      oss_tts_format: window.settingsManager.get("ossTtsFormat") || "openai",
+      ondoku_token: window.settingsManager.get("ondokuToken") || "",
+      coefont_key: window.settingsManager.get("coefontKey") || "",
+      coefont_id: window.settingsManager.get("coefontId") || ""
+    };
 
     const payload = {
       script_data: scriptData,
       user_id: this._getUserId(),
       gemini_api_keys: geminiKey || "",
+      paid_gemini_api_key: paidGeminiKey,
       tts_engine: ttsEngine,
       voice_name: voiceName,
-      bgm_map: bgmMap
+      bgm_map: bgmMap,
+      tts_params: ttsParams
     };
 
     const res = await fetch(`${this.baseUrl}/api/manga/generate`, {
@@ -489,6 +553,21 @@ class ApiClient {
       throw new Error(err.detail || `ユーザー削除エラー (${res.status})`);
     }
     return await res.json();
+  }
+
+  /** TTS 音声プレビュー試聴 */
+  async previewTTS(previewData) {
+    const res = await fetch(`${this.baseUrl}/api/tts/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(previewData)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `TTSプレビュー失敗 (${res.status})`);
+    }
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
   }
 }
 

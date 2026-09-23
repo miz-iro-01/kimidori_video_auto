@@ -70,16 +70,43 @@ class ModeARequest(BaseModel):
     style: Optional[str] = Field("informative", description="動画のスタイル")
     duration_seconds: Optional[int] = Field(45, description="目標の動画長さ（秒）")
     user_id: str = Field(..., description="FirebaseユーザーID")
-    gemini_api_key: str = Field("", description="ユーザーのGemini APIキー")
+    gemini_api_key: str = Field("", description="ユーザーのGemini APIキー（無料枠：リサーチ・構成・台本用）")
+    paid_gemini_api_key: str = Field("", description="ユーザーのGemini 有料APIキー（有料枠：リファレンス画像・キャラクター・動画生成用）")
     pexels_api_key: str = Field("", description="Pexels APIキー（フリー画像用）")
     
-    # TTS Settings
+    # TTS Settings (全エンジン対応)
     tts_engine: str = Field("edge", description="使用するTTSエンジン")
-    voice_name: str = Field("nanami", description="音声名（Edge用など）")
+    voice_name: str = Field("nanami", description="音声名")
     speaking_rate: float = Field(1.0, description="読み上げ速度")
     google_tts_key: str = Field("", description="Google Cloud TTS用APIキー")
     elevenlabs_key: str = Field("", description="ElevenLabs APIキー")
+    elevenlabs_voice_id: str = Field("21m00Tcm4TlvDq8ikWAM", description="ElevenLabs 音声ID")
+    openai_key: str = Field("", description="OpenAI APIキー")
+    openai_model: str = Field("tts-1", description="OpenAI TTSモデル")
+    openai_voice: str = Field("alloy", description="OpenAI TTSボイス")
+    azure_key: str = Field("", description="Azure Speech APIキー")
+    azure_region: str = Field("japaneast", description="Azure リージョン")
+    azure_voice: str = Field("ja-JP-NanamiNeural", description="Azure 音声名")
+    aws_access_key: str = Field("", description="AWS Access Key")
+    aws_secret_key: str = Field("", description="AWS Secret Key")
+    aws_region: str = Field("ap-northeast-1", description="AWS リージョン")
+    polly_voice: str = Field("Mizuki", description="Amazon Polly 音声名")
+    voicevox_url: str = Field("http://localhost:50021", description="VOICEVOX URL")
+    voicevox_speaker: int = Field(3, description="VOICEVOX スピーカーID")
+    sharevox_url: str = Field("http://localhost:50025", description="SHAREVOX URL")
+    sharevox_speaker: int = Field(0, description="SHAREVOX スピーカーID")
+    coeiroink_url: str = Field("http://localhost:50031", description="COEIROINK URL")
+    coeiroink_speaker: str = Field("", description="COEIROINK スピーカーUUID")
+    coeiroink_style: int = Field(0, description="COEIROINK スタイルID")
+    aivis_url: str = Field("http://localhost:10101", description="Aivis URL")
     aivis_key: str = Field("", description="Aivis Cloud APIキー")
+    aivis_speaker: int = Field(1, description="Aivis スピーカーID")
+    oss_tts_url: str = Field("http://localhost:9880", description="OSS TTS URL")
+    oss_tts_format: str = Field("openai", description="OSS TTSフォーマット")
+    oss_voice: str = Field("", description="OSS 音声名/話者")
+    ondoku_token: str = Field("", description="音読さん APIトークン")
+    coefont_key: str = Field("", description="CoeFont APIキー")
+    coefont_id: str = Field("", description="CoeFont ID")
     
     # BGM Settings
     bgm_mode: str = Field("none", description="BGMモード: auto(自動選曲), manual(手動選択), none(BGMなし)")
@@ -130,11 +157,52 @@ class MangaVideoGenerateRequest(BaseModel):
     """長尺漫画動画生成リクエスト"""
     script_data: dict = Field(..., description="生成されたシナリオJSON")
     user_id: str = Field(..., description="FirebaseユーザーID")
-    gemini_api_keys: Union[List[str], str] = Field("", description="Gemini APIキー")
+    gemini_api_keys: Union[List[str], str] = Field("", description="Gemini APIキー（無料枠：テキスト・構成用）")
+    paid_gemini_api_key: Optional[str] = Field("", description="Gemini 有料APIキー（画像・キャラクター・動画生成用）")
     tts_engine: str = Field("edge", description="TTSエンジン")
     voice_name: str = Field("nanami", description="声色名")
     bgm_map: Dict[str, str] = Field({}, description="タグ別BGMファイルマッピング")
     auto_post: bool = Field(False, description="完全自動投稿フラグ")
+    # TTS Parameters
+    tts_params: Optional[Dict[str, Any]] = Field(None, description="詳細なTTS設定パラメータ")
+
+
+class TTSPreviewRequest(BaseModel):
+    """TTS音声プレビューリクエスト"""
+    text: str = Field("こんにちは。これはナレーション音声のテストプレビューです。", description="読み上げテキスト")
+    tts_engine: str = Field("edge", description="使用するTTSエンジン")
+    voice_name: str = Field("nanami", description="音声名")
+    speaking_rate: float = Field(1.0, description="読み上げ速度")
+    # 認証キー・設定
+    google_tts_key: Optional[str] = ""
+    elevenlabs_key: Optional[str] = ""
+    elevenlabs_voice_id: Optional[str] = "21m00Tcm4TlvDq8ikWAM"
+    openai_key: Optional[str] = ""
+    openai_model: Optional[str] = "tts-1"
+    openai_voice: Optional[str] = "alloy"
+    azure_key: Optional[str] = ""
+    azure_region: Optional[str] = "japaneast"
+    azure_voice: Optional[str] = "ja-JP-NanamiNeural"
+    aws_access_key: Optional[str] = ""
+    aws_secret_key: Optional[str] = ""
+    aws_region: Optional[str] = "ap-northeast-1"
+    polly_voice: Optional[str] = "Mizuki"
+    voicevox_url: Optional[str] = "http://localhost:50021"
+    voicevox_speaker: Optional[int] = 3
+    sharevox_url: Optional[str] = "http://localhost:50025"
+    sharevox_speaker: Optional[int] = 0
+    coeiroink_url: Optional[str] = "http://localhost:50031"
+    coeiroink_speaker: Optional[str] = ""
+    coeiroink_style: Optional[int] = 0
+    aivis_url: Optional[str] = "http://localhost:10101"
+    aivis_key: Optional[str] = ""
+    aivis_speaker: Optional[int] = 1
+    oss_tts_url: Optional[str] = "http://localhost:9880"
+    oss_tts_format: Optional[str] = "openai"
+    oss_voice: Optional[str] = ""
+    ondoku_token: Optional[str] = ""
+    coefont_key: Optional[str] = ""
+    coefont_id: Optional[str] = ""
 
 
 class UserPlanUpdateRequest(BaseModel):
@@ -166,7 +234,9 @@ async def run_manga_video_job(
     tts_engine: str,
     voice_name: str,
     bgm_map: dict,
-    watermark_required: bool
+    watermark_required: bool,
+    paid_gemini_api_key: str = "",
+    tts_params: Optional[dict] = None
 ):
     """長尺漫画動画のバックグラウンド合成タスク"""
     try:
@@ -175,13 +245,14 @@ async def run_manga_video_job(
 
         firestore.update_job(job_id, {"progress": 25, "message": "画像・ナレーション音声をバッチ生成中..."})
 
-        # Step 3 バッチアセット生成
+        # Step 3 バッチアセット生成（有料Geminiキーを画像生成、TTS設定をナレーションに使用）
         batch_gen = BatchAssetGenerator()
         scene_assets = await batch_gen.generate_batch_assets(
             script_data=script_data,
             output_dir=job_dir / "assets",
             tts_engine=tts_engine,
-            voice_name=voice_name
+            voice_name=voice_name,
+            tts_params=tts_params
         )
 
         firestore.update_job(job_id, {"progress": 65, "message": "0.3秒演出切り替え・マルチBGMクロスフェード合成中..."})
@@ -247,26 +318,12 @@ async def process_mode_a(request: ModeARequest, background_tasks: BackgroundTask
         )
 
         # バックグラウンドで動画処理を実行
+        req_dict = request.model_dump()
         background_tasks.add_task(
             run_mode_a_pipeline,
             job_id=job_id,
-            theme=request.theme,
-            style=request.style,
             duration=duration,
-            user_id=request.user_id,
-            gemini_api_key=request.gemini_api_key,
-            pexels_api_key=request.pexels_api_key,
-            tts_engine=request.tts_engine,
-            voice_name=request.voice_name,
-            speaking_rate=request.speaking_rate,
-            google_tts_key=request.google_tts_key,
-            elevenlabs_key=request.elevenlabs_key,
-            aivis_key=request.aivis_key,
-            script_data=request.script_data,
-            auto_post=request.auto_post,
-            bgm_mode=request.bgm_mode,
-            bgm_id=request.bgm_id,
-            bgm_volume=request.bgm_volume,
+            **req_dict
         )
 
         logger.info(f"モードAジョブ開始: {job_id} テーマ='{request.theme}' 自動投稿={request.auto_post}")
@@ -562,7 +619,8 @@ async def run_mode_a_pipeline(
     style: str,
     duration: int,
     user_id: str,
-    gemini_api_key: str,
+    gemini_api_key: str = "",
+    paid_gemini_api_key: str = "",
     pexels_api_key: str = "",
     tts_engine: str = "edge",
     voice_name: str = "nanami",
@@ -575,18 +633,21 @@ async def run_mode_a_pipeline(
     bgm_mode: str = "none",
     bgm_id: str = None,
     bgm_volume: float = 0.15,
+    **kwargs
 ):
     """モードAの処理パイプライン全体を実行"""
     processor = ModeAProcessor(
         firestore, storage,
         gemini_api_key=gemini_api_key,
+        paid_gemini_api_key=paid_gemini_api_key,
         pexels_api_key=pexels_api_key,
         tts_engine=tts_engine,
         voice_name=voice_name,
         speaking_rate=speaking_rate,
         google_tts_key=google_tts_key,
         elevenlabs_key=elevenlabs_key,
-        aivis_key=aivis_key
+        aivis_key=aivis_key,
+        **kwargs
     )
     try:
         firestore.update_job(job_id, status="processing", progress=5, message="処理を開始しています...")
@@ -1087,7 +1148,15 @@ async def generate_manga_video_endpoint(req: MangaVideoGenerateRequest, backgrou
 
     background_tasks.add_task(
         run_manga_video_job,
-        job_id, req.script_data, req.user_id, req.tts_engine, req.voice_name, req.bgm_map, access["watermark_required"]
+        job_id=job_id,
+        script_data=req.script_data,
+        user_id=req.user_id,
+        tts_engine=req.tts_engine,
+        voice_name=req.voice_name,
+        bgm_map=req.bgm_map,
+        watermark_required=access["watermark_required"],
+        paid_gemini_api_key=req.paid_gemini_api_key or "",
+        tts_params=req.tts_params
     )
     return {"job_id": job_id, "status": "PROCESSING"}
 
@@ -1149,6 +1218,226 @@ async def generate_long_video_script_endpoint(req: LongVideoScriptRequest):
         return {"success": True, "script": script}
     except Exception as e:
         logger.error(f"長尺動画台本生成失敗: {e}")
+# =============================================================================
+# TTS 統合API (完全無料・フリーミアム・有料の全エンジン対応 & 試聴プレビュー)
+# =============================================================================
+@app.get("/api/tts/engines")
+async def list_tts_engines():
+    """利用可能な全TTSエンジンのカタログ一覧"""
+    return {
+        "engines": [
+            {
+                "id": "edge",
+                "name": "Edge TTS",
+                "tier": "free",
+                "tier_label": "完全無料 (API不要)",
+                "description": "Microsoft Neural音声。APIキー不要で即座に使える最高品質の標準音声。",
+                "voices": [
+                    {"id": "nanami", "name": "七海 (女性・標準)"},
+                    {"id": "keita", "name": "慶太 (男性・標準)"},
+                    {"id": "aoi", "name": "あおい (女性・若い)"},
+                    {"id": "daichi", "name": "大地 (男性・落ち着き)"},
+                    {"id": "mayu", "name": "まゆ (女性・明るい)"},
+                    {"id": "naoki", "name": "直樹 (男性・若い)"},
+                    {"id": "shiori", "name": "しおり (女性・柔らか)"},
+                ]
+            },
+            {
+                "id": "gtts",
+                "name": "Google翻訳 TTS (gTTS)",
+                "tier": "free",
+                "tier_label": "完全無料 (API不要)",
+                "description": "Google Translate TTS。完全無料・登録不要・超軽量でどこでも動作。",
+                "voices": [{"id": "ja", "name": "日本語 (標準)"}]
+            },
+            {
+                "id": "voicevox",
+                "name": "VOICEVOX (ローカル/API)",
+                "tier": "free",
+                "tier_label": "完全無料 (商用利用可)",
+                "description": "ずんだもん、四国めたん等の大人気キャラクター音声。ローカルソフト起動または外部URLで利用可能。",
+                "voices": [
+                    {"id": "3", "name": "ずんだもん (ノーマル)"},
+                    {"id": "1", "name": "ずんだもん (あまあま)"},
+                    {"id": "7", "name": "ずんだもん (ツンツン)"},
+                    {"id": "5", "name": "ずんだもん (セクシー)"},
+                    {"id": "2", "name": "四国めたん (ノーマル)"},
+                    {"id": "0", "name": "四国めたん (あまあま)"},
+                    {"id": "8", "name": "春日部つむぎ (ノーマル)"},
+                    {"id": "10", "name": "雨晴はう (ノーマル)"},
+                    {"id": "9", "name": "波音リツ (ノーマル)"},
+                    {"id": "11", "name": "玄野武宏 (ノーマル)"},
+                    {"id": "12", "name": "白上虎太郎 (ノーマル)"},
+                    {"id": "13", "name": "青山龍星 (ノーマル)"},
+                    {"id": "14", "name": "冥鳴ひまり (ノーマル)"},
+                    {"id": "16", "name": "九州そら (ノーマル)"},
+                ]
+            },
+            {
+                "id": "sharevox",
+                "name": "SHAREVOX (ローカル/API)",
+                "tier": "free",
+                "tier_label": "完全無料 (商用利用可)",
+                "description": "小春音アミ、つくよみちゃん等の追加キャラクター音声。",
+                "voices": [
+                    {"id": "0", "name": "小春音アミ (ノーマル)"},
+                    {"id": "1", "name": "つくよみちゃん (ノーマル)"},
+                    {"id": "2", "name": "白痴ー (ノーマル)"},
+                ]
+            },
+            {
+                "id": "coeiroink",
+                "name": "COEIROINK (ローカル/API)",
+                "tier": "free",
+                "tier_label": "完全無料 (個人ライブラリ)",
+                "description": "多様なユーザー制作音声ライブラリが利用可能なTTSエンジン。",
+                "voices": [
+                    {"id": "0", "name": "つくよみちゃん (標準スタイル)"},
+                    {"id": "1", "name": "MANA (標準スタイル)"},
+                ]
+            },
+            {
+                "id": "aivis",
+                "name": "AivisSpeech / Aivis Cloud",
+                "tier": "free",
+                "tier_label": "完全無料 / クラウド",
+                "description": "VOICEVOX互換の高品質AI音声合成ソフト。",
+                "voices": [
+                    {"id": "1", "name": "話者 1"},
+                    {"id": "2", "name": "話者 2"},
+                ]
+            },
+            {
+                "id": "oss_custom",
+                "name": "次世代OSS音声モデル (Fish Speech / GPT-SoVITS / ChatTTS / StyleTTS2)",
+                "tier": "free",
+                "tier_label": "完全無料 (ローカル/サーバー)",
+                "description": "Fish Speech, GPT-SoVITS, ChatTTS, Bert-VITS2, StyleTTS2 等のローカルAPI/OpenAI互換TTSエンドポイント。",
+                "voices": [{"id": "default", "name": "デフォルト"}]
+            },
+            {
+                "id": "openai",
+                "name": "OpenAI TTS (tts-1 / tts-1-hd)",
+                "tier": "paid",
+                "tier_label": "有料 / 超自然",
+                "description": "人間と聞き分けがつかない最高レベルの自然な読み上げ。従量課金制。",
+                "voices": [
+                    {"id": "alloy", "name": "Alloy (中性的・標準)"},
+                    {"id": "echo", "name": "Echo (男性・クリア)"},
+                    {"id": "fable", "name": "Fable (イギリス調・表現豊か)"},
+                    {"id": "onyx", "name": "Onyx (男性・深みのある声)"},
+                    {"id": "nova", "name": "Nova (女性・明るい)"},
+                    {"id": "shimmer", "name": "Shimmer (女性・落ち着いた響き)"},
+                ]
+            },
+            {
+                "id": "elevenlabs",
+                "name": "ElevenLabs",
+                "tier": "freemium",
+                "tier_label": "月1万字無料 / 有料",
+                "description": "世界最高峰のリアルな多言語音声クローンと感情表現。",
+                "voices": [
+                    {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel (女性)"},
+                    {"id": "AZnzlk1XvdvUeBnXmlld", "name": "Domi (女性)"},
+                    {"id": "EXAVITQu4vr4xnSDxMaL", "name": "Bella (女性)"},
+                    {"id": "ErXwobaYiN019PkySvjV", "name": "Antoni (男性)"},
+                    {"id": "VR6AewLTigWG4xSOukaG", "name": "Arnold (男性)"},
+                    {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam (男性)"},
+                ]
+            },
+            {
+                "id": "google",
+                "name": "Google Cloud Text-to-Speech",
+                "tier": "freemium",
+                "tier_label": "月数百万字無料 / 有料",
+                "description": "Googleが提供する超高安定なNeural2/WaveNet音声。",
+                "voices": [
+                    {"id": "ja-JP-Neural2-B", "name": "Neural2-B (女性)"},
+                    {"id": "ja-JP-Neural2-C", "name": "Neural2-C (男性)"},
+                    {"id": "ja-JP-Wavenet-A", "name": "WaveNet-A (女性)"},
+                    {"id": "ja-JP-Wavenet-C", "name": "WaveNet-C (男性)"},
+                ]
+            },
+            {
+                "id": "azure",
+                "name": "Microsoft Azure Cognitive Services Speech",
+                "tier": "freemium",
+                "tier_label": "月50万字無料 (F0) / 有料",
+                "description": "極めて自然なAzureニューラル音声。F0ティアで毎月50万文字永久無料枠。",
+                "voices": [
+                    {"id": "ja-JP-NanamiNeural", "name": "Nanami (女性)"},
+                    {"id": "ja-JP-KeitaNeural", "name": "Keita (男性)"},
+                    {"id": "ja-JP-AoiNeural", "name": "Aoi (女性)"},
+                    {"id": "ja-JP-DaichiNeural", "name": "Daichi (男性)"},
+                ]
+            },
+            {
+                "id": "amazon_polly",
+                "name": "Amazon Polly (AWS)",
+                "tier": "freemium",
+                "tier_label": "12ヶ月無料枠 / 有料",
+                "description": "AWSが提供する音声合成。Mizuki, Takumi, Kazuhaのニューラル音声対応。",
+                "voices": [
+                    {"id": "Mizuki", "name": "Mizuki (女性・標準)"},
+                    {"id": "Takumi", "name": "Takumi (男性・Neural)"},
+                    {"id": "Kazuha", "name": "Kazuha (女性・Neural)"},
+                    {"id": "Tomoko", "name": "Tomoko (女性・標準)"},
+                ]
+            },
+            {
+                "id": "ondoku",
+                "name": "音読さん (Ondoku)",
+                "tier": "freemium",
+                "tier_label": "月5000字無料 / 有料",
+                "description": "クリエイターに人気のWeb読み上げツールのAPI連携。",
+                "voices": [{"id": "default", "name": "標準音声"}]
+            },
+            {
+                "id": "coefont",
+                "name": "CoeFont",
+                "tier": "paid",
+                "tier_label": "有料 (API対応)",
+                "description": "日本の著名人・アナウンサー声などの音声ライブラリプラットフォーム。",
+                "voices": [{"id": "default", "name": "登録ボイス"}]
+            }
+        ]
+    }
+
+
+@app.post("/api/tts/preview")
+async def preview_tts(req: TTSPreviewRequest):
+    """指定されたTTS設定で音声をテスト合成し、MP3バイナリを直接返す"""
+    try:
+        from processors.tts_manager import TTSManager
+        params = req.model_dump()
+        tts_engine = params.pop("tts_engine", "edge")
+        voice_name = params.pop("voice_name", "nanami")
+        speaking_rate = params.pop("speaking_rate", 1.0)
+        text = params.pop("text", "こんにちは。音声合成のテストです。")
+
+        tts_mgr = TTSManager(
+            engine=tts_engine,
+            voice_name=voice_name,
+            speaking_rate=speaking_rate,
+            **params
+        )
+
+        preview_dir = config.TMP_DIR / "tts_previews"
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        preview_file = preview_dir / f"preview_{int(datetime.utcnow().timestamp() * 1000)}.mp3"
+
+        await tts_mgr.synthesize_single_text(text, preview_file)
+
+        if not preview_file.exists() or preview_file.stat().st_size == 0:
+            raise RuntimeError("音声ファイルの生成に失敗しました")
+
+        return FileResponse(
+            path=str(preview_file),
+            media_type="audio/mpeg",
+            filename="tts_preview.mp3"
+        )
+    except Exception as e:
+        logger.error(f"TTSプレビュー生成エラー: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

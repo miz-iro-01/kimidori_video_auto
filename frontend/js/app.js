@@ -68,6 +68,18 @@ class AppController {
       this.showToast("Gemini APIキーを保存しました", "success");
     });
 
+    // Paid Gemini API Key (有料枠: 画像・キャラクター・動画生成用)
+    const paidGeminiInput = document.getElementById('setPaidGeminiKey');
+    const savePaidGeminiBtn = document.getElementById('btnSavePaidGemini');
+    if (paidGeminiInput && savePaidGeminiBtn) {
+      paidGeminiInput.value = window.settingsManager.get('paidGeminiApiKey') || "";
+      savePaidGeminiBtn.addEventListener('click', () => {
+        const val = paidGeminiInput.value.trim();
+        window.settingsManager.set('paidGeminiApiKey', val);
+        this.showToast("有料Gemini AIキーを保存しました", "success");
+      });
+    }
+
     // Pexels Key
     const pexelsInput = document.getElementById('setPexelsKey');
     const savePexelsBtn = document.getElementById('btnSavePexels');
@@ -79,50 +91,293 @@ class AppController {
       });
     }
 
-
-
-    // --- TTS Engine Settings ---
+    // --- TTS Engine Settings (全14エンジン対応) ---
     const ttsEngineSelect = document.getElementById('setTtsEngine');
+    const voiceSelect = document.getElementById('setVoiceName');
+    const speakingRateInput = document.getElementById('setSpeakingRate');
+    const labelSpeakingRate = document.getElementById('labelSpeakingRate');
+
+    // 各種キー・入力要素
     const googleTtsInput = document.getElementById('setGoogleTtsKey');
     const elevenLabsInput = document.getElementById('setElevenLabsKey');
-    const aivisInput = document.getElementById('setAivisKey');
-    
+    const openAiKeyInput = document.getElementById('setOpenAiTtsKey');
+    const openAiModelSelect = document.getElementById('setOpenAiTtsModel');
+    const azureKeyInput = document.getElementById('setAzureTtsKey');
+    const azureRegionInput = document.getElementById('setAzureTtsRegion');
+    const awsAccessKeyInput = document.getElementById('setAwsAccessKey');
+    const awsSecretKeyInput = document.getElementById('setAwsSecretKey');
+    const awsRegionInput = document.getElementById('setAwsRegion');
+    const voicevoxUrlInput = document.getElementById('setVoicevoxUrl');
+    const sharevoxUrlInput = document.getElementById('setSharevoxUrl');
+    const coeiroinkUrlInput = document.getElementById('setCoeiroinkUrl');
+    const aivisUrlInput = document.getElementById('setAivisUrl');
+    const aivisKeyInput = document.getElementById('setAivisKey');
+    const ossTtsUrlInput = document.getElementById('setOssTtsUrl');
+    const ossTtsFormatSelect = document.getElementById('setOssTtsFormat');
+    const ossVoiceInput = document.getElementById('setOssVoice');
+    const ondokuTokenInput = document.getElementById('setOndokuToken');
+    const coefontKeyInput = document.getElementById('setCoefontKey');
+    const coefontIdInput = document.getElementById('setCoefontId');
+
+    // 各種コンテナ
     const groupGoogle = document.getElementById('groupGoogleTtsKey');
     const groupElevenLabs = document.getElementById('groupElevenLabsKey');
-    const groupAivis = document.getElementById('groupAivisKey');
+    const groupOpenAi = document.getElementById('groupOpenAiTts');
+    const groupAzure = document.getElementById('groupAzureTts');
+    const groupPolly = document.getElementById('groupPollyTts');
+    const groupVoicevox = document.getElementById('groupVoicevoxUrl');
+    const groupSharevox = document.getElementById('groupSharevoxUrl');
+    const groupCoeiroink = document.getElementById('groupCoeiroinkUrl');
+    const groupAivis = document.getElementById('groupAivis');
+    const groupOssCustom = document.getElementById('groupOssCustom');
+    const groupOndoku = document.getElementById('groupOndokuToken');
+    const groupCoefont = document.getElementById('groupCoefont');
+
+    // エンジン別ボイスカタログ定義
+    const engineVoices = {
+      edge: [
+        { id: "nanami", name: "七海（女性・標準）" },
+        { id: "keita", name: "慶太（男性・標準）" },
+        { id: "aoi", name: "あおい（女性・若い）" },
+        { id: "daichi", name: "大地（男性・落ち着き）" },
+        { id: "mayu", name: "まゆ（女性・明るい）" },
+        { id: "naoki", name: "直樹（男性・若い）" },
+        { id: "shiori", name: "しおり（女性・柔らか）" }
+      ],
+      gtts: [
+        { id: "ja", name: "日本語（標準）" }
+      ],
+      voicevox: [
+        { id: "3", name: "ずんだもん (ノーマル)" },
+        { id: "1", name: "ずんだもん (あまあま)" },
+        { id: "7", name: "ずんだもん (ツンツン)" },
+        { id: "5", name: "ずんだもん (セクシー)" },
+        { id: "2", name: "四国めたん (ノーマル)" },
+        { id: "0", name: "四国めたん (あまあま)" },
+        { id: "8", name: "春日部つむぎ (ノーマル)" },
+        { id: "10", name: "雨晴はう (ノーマル)" },
+        { id: "9", name: "波音リツ (ノーマル)" },
+        { id: "11", name: "玄野武宏 (ノーマル)" },
+        { id: "12", name: "白上虎太郎 (ノーマル)" },
+        { id: "13", name: "青山龍星 (ノーマル)" },
+        { id: "14", name: "冥鳴ひまり (ノーマル)" },
+        { id: "16", name: "九州そら (ノーマル)" }
+      ],
+      sharevox: [
+        { id: "0", name: "小春音アミ (ノーマル)" },
+        { id: "1", name: "つくよみちゃん (ノーマル)" },
+        { id: "2", name: "白痴ー (ノーマル)" }
+      ],
+      coeiroink: [
+        { id: "0", name: "つくよみちゃん (標準スタイル)" },
+        { id: "1", name: "MANA (標準スタイル)" }
+      ],
+      aivis: [
+        { id: "1", name: "話者 1" },
+        { id: "2", name: "話者 2" }
+      ],
+      oss_custom: [
+        { id: "default", name: "デフォルト音声" }
+      ],
+      openai: [
+        { id: "alloy", name: "Alloy (中性的・標準)" },
+        { id: "echo", name: "Echo (男性・クリア)" },
+        { id: "fable", name: "Fable (表現力豊か)" },
+        { id: "onyx", name: "Onyx (男性・深みのある声)" },
+        { id: "nova", name: "Nova (女性・明るい)" },
+        { id: "shimmer", name: "Shimmer (女性・落ち着いた響き)" }
+      ],
+      elevenlabs: [
+        { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel (女性)" },
+        { id: "AZnzlk1XvdvUeBnXmlld", name: "Domi (女性)" },
+        { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella (女性)" },
+        { id: "ErXwobaYiN019PkySvjV", name: "Antoni (男性)" },
+        { id: "VR6AewLTigWG4xSOukaG", name: "Arnold (男性)" },
+        { id: "pNInz6obpgDQGcFmaJgB", name: "Adam (男性)" }
+      ],
+      google: [
+        { id: "ja-JP-Neural2-B", name: "Neural2-B (女性)" },
+        { id: "ja-JP-Neural2-C", name: "Neural2-C (男性)" },
+        { id: "ja-JP-Wavenet-A", name: "WaveNet-A (女性)" },
+        { id: "ja-JP-Wavenet-C", name: "WaveNet-C (男性)" }
+      ],
+      azure: [
+        { id: "ja-JP-NanamiNeural", name: "Nanami (女性)" },
+        { id: "ja-JP-KeitaNeural", name: "Keita (男性)" },
+        { id: "ja-JP-AoiNeural", name: "Aoi (女性)" },
+        { id: "ja-JP-DaichiNeural", name: "Daichi (男性)" }
+      ],
+      amazon_polly: [
+        { id: "Mizuki", name: "Mizuki (女性・標準)" },
+        { id: "Takumi", name: "Takumi (男性・Neural)" },
+        { id: "Kazuha", name: "Kazuha (女性・Neural)" },
+        { id: "Tomoko", name: "Tomoko (女性・標準)" }
+      ],
+      ondoku: [
+        { id: "default", name: "標準音声" }
+      ],
+      coefont: [
+        { id: "default", name: "登録ボイス" }
+      ]
+    };
+
+    const updateVoiceOptions = (engine) => {
+      if (!voiceSelect) return;
+      const list = engineVoices[engine] || engineVoices.edge;
+      const currentVal = window.settingsManager.get('voiceName');
+      voiceSelect.innerHTML = list.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+      if (list.some(v => v.id === currentVal)) {
+        voiceSelect.value = currentVal;
+      } else {
+        voiceSelect.value = list[0].id;
+      }
+    };
 
     const updateTtsUi = (engine) => {
-      groupGoogle.style.display = engine === 'google' ? 'block' : 'none';
-      groupElevenLabs.style.display = engine === 'elevenlabs' ? 'block' : 'none';
-      groupAivis.style.display = engine === 'aivis' ? 'block' : 'none';
+      if (groupGoogle) groupGoogle.style.display = engine === 'google' ? 'block' : 'none';
+      if (groupElevenLabs) groupElevenLabs.style.display = engine === 'elevenlabs' ? 'block' : 'none';
+      if (groupOpenAi) groupOpenAi.style.display = engine === 'openai' ? 'flex' : 'none';
+      if (groupAzure) groupAzure.style.display = engine === 'azure' ? 'flex' : 'none';
+      if (groupPolly) groupPolly.style.display = engine === 'amazon_polly' ? 'flex' : 'none';
+      if (groupVoicevox) groupVoicevox.style.display = engine === 'voicevox' ? 'block' : 'none';
+      if (groupSharevox) groupSharevox.style.display = engine === 'sharevox' ? 'block' : 'none';
+      if (groupCoeiroink) groupCoeiroink.style.display = engine === 'coeiroink' ? 'block' : 'none';
+      if (groupAivis) groupAivis.style.display = engine === 'aivis' ? 'flex' : 'none';
+      if (groupOssCustom) groupOssCustom.style.display = engine === 'oss_custom' ? 'flex' : 'none';
+      if (groupOndoku) groupOndoku.style.display = engine === 'ondoku' ? 'block' : 'none';
+      if (groupCoefont) groupCoefont.style.display = engine === 'coefont' ? 'flex' : 'none';
+
+      updateVoiceOptions(engine);
     };
+
+    // 初期値の読み込み
+    if (speakingRateInput && labelSpeakingRate) {
+      const savedRate = window.settingsManager.get('speakingRate') || 1.0;
+      speakingRateInput.value = savedRate;
+      labelSpeakingRate.textContent = `${parseFloat(savedRate).toFixed(2)}x`;
+      speakingRateInput.addEventListener('input', (e) => {
+        labelSpeakingRate.textContent = `${parseFloat(e.target.value).toFixed(2)}x`;
+      });
+    }
+
+    if (googleTtsInput) googleTtsInput.value = window.settingsManager.get('googleTtsKey') || "";
+    if (elevenLabsInput) elevenLabsInput.value = window.settingsManager.get('elevenLabsKey') || "";
+    if (openAiKeyInput) openAiKeyInput.value = window.settingsManager.get('openAiTtsKey') || "";
+    if (openAiModelSelect) openAiModelSelect.value = window.settingsManager.get('openAiTtsModel') || "tts-1";
+    if (azureKeyInput) azureKeyInput.value = window.settingsManager.get('azureTtsKey') || "";
+    if (azureRegionInput) azureRegionInput.value = window.settingsManager.get('azureTtsRegion') || "japaneast";
+    if (awsAccessKeyInput) awsAccessKeyInput.value = window.settingsManager.get('awsAccessKey') || "";
+    if (awsSecretKeyInput) awsSecretKeyInput.value = window.settingsManager.get('awsSecretKey') || "";
+    if (awsRegionInput) awsRegionInput.value = window.settingsManager.get('awsRegion') || "ap-northeast-1";
+    if (voicevoxUrlInput) voicevoxUrlInput.value = window.settingsManager.get('voicevoxUrl') || "http://localhost:50021";
+    if (sharevoxUrlInput) sharevoxUrlInput.value = window.settingsManager.get('sharevoxUrl') || "http://localhost:50025";
+    if (coeiroinkUrlInput) coeiroinkUrlInput.value = window.settingsManager.get('coeiroinkUrl') || "http://localhost:50031";
+    if (aivisUrlInput) aivisUrlInput.value = window.settingsManager.get('aivisUrl') || "http://localhost:10101";
+    if (aivisKeyInput) aivisKeyInput.value = window.settingsManager.get('aivisKey') || "";
+    if (ossTtsUrlInput) ossTtsUrlInput.value = window.settingsManager.get('ossTtsUrl') || "http://localhost:9880";
+    if (ossTtsFormatSelect) ossTtsFormatSelect.value = window.settingsManager.get('ossTtsFormat') || "openai";
+    if (ossVoiceInput) ossVoiceInput.value = window.settingsManager.get('ossVoice') || "";
+    if (ondokuTokenInput) ondokuTokenInput.value = window.settingsManager.get('ondokuToken') || "";
+    if (coefontKeyInput) coefontKeyInput.value = window.settingsManager.get('coefontKey') || "";
+    if (coefontIdInput) coefontIdInput.value = window.settingsManager.get('coefontId') || "";
 
     if (ttsEngineSelect) {
       const currentEngine = window.settingsManager.get('ttsEngine') || 'edge';
       ttsEngineSelect.value = currentEngine;
       updateTtsUi(currentEngine);
-      
-      if (googleTtsInput) googleTtsInput.value = window.settingsManager.get('googleTtsKey') || "";
-      if (elevenLabsInput) elevenLabsInput.value = window.settingsManager.get('elevenLabsKey') || "";
-      if (aivisInput) aivisInput.value = window.settingsManager.get('aivisKey') || "";
 
       ttsEngineSelect.addEventListener('change', (e) => {
         updateTtsUi(e.target.value);
       });
     }
 
-    // Voice & General TTS Save
-    const voiceSelect = document.getElementById('setVoiceName');
+    // ナレーション設定の保存
     const saveVoiceBtn = document.getElementById('btnSaveVoice');
-    if (voiceSelect && saveVoiceBtn) {
-      voiceSelect.value = window.settingsManager.get('voiceName') || "nanami";
+    if (saveVoiceBtn) {
       saveVoiceBtn.addEventListener('click', () => {
-        if(ttsEngineSelect) window.settingsManager.set('ttsEngine', ttsEngineSelect.value);
-        if(googleTtsInput) window.settingsManager.set('googleTtsKey', googleTtsInput.value.trim());
-        if(elevenLabsInput) window.settingsManager.set('elevenLabsKey', elevenLabsInput.value.trim());
-        if(aivisInput) window.settingsManager.set('aivisKey', aivisInput.value.trim());
-        window.settingsManager.set('voiceName', voiceSelect.value);
+        if (ttsEngineSelect) window.settingsManager.set('ttsEngine', ttsEngineSelect.value);
+        if (voiceSelect) window.settingsManager.set('voiceName', voiceSelect.value);
+        if (speakingRateInput) window.settingsManager.set('speakingRate', parseFloat(speakingRateInput.value) || 1.0);
+        if (googleTtsInput) window.settingsManager.set('googleTtsKey', googleTtsInput.value.trim());
+        if (elevenLabsInput) window.settingsManager.set('elevenLabsKey', elevenLabsInput.value.trim());
+        if (openAiKeyInput) window.settingsManager.set('openAiTtsKey', openAiKeyInput.value.trim());
+        if (openAiModelSelect) window.settingsManager.set('openAiTtsModel', openAiModelSelect.value);
+        if (azureKeyInput) window.settingsManager.set('azureTtsKey', azureKeyInput.value.trim());
+        if (azureRegionInput) window.settingsManager.set('azureTtsRegion', azureRegionInput.value.trim());
+        if (awsAccessKeyInput) window.settingsManager.set('awsAccessKey', awsAccessKeyInput.value.trim());
+        if (awsSecretKeyInput) window.settingsManager.set('awsSecretKey', awsSecretKeyInput.value.trim());
+        if (awsRegionInput) window.settingsManager.set('awsRegion', awsRegionInput.value.trim());
+        if (voicevoxUrlInput) window.settingsManager.set('voicevoxUrl', voicevoxUrlInput.value.trim());
+        if (sharevoxUrlInput) window.settingsManager.set('sharevoxUrl', sharevoxUrlInput.value.trim());
+        if (coeiroinkUrlInput) window.settingsManager.set('coeiroinkUrl', coeiroinkUrlInput.value.trim());
+        if (aivisUrlInput) window.settingsManager.set('aivisUrl', aivisUrlInput.value.trim());
+        if (aivisKeyInput) window.settingsManager.set('aivisKey', aivisKeyInput.value.trim());
+        if (ossTtsUrlInput) window.settingsManager.set('ossTtsUrl', ossTtsUrlInput.value.trim());
+        if (ossTtsFormatSelect) window.settingsManager.set('ossTtsFormat', ossTtsFormatSelect.value);
+        if (ossVoiceInput) window.settingsManager.set('ossVoice', ossVoiceInput.value.trim());
+        if (ondokuTokenInput) window.settingsManager.set('ondokuToken', ondokuTokenInput.value.trim());
+        if (coefontKeyInput) window.settingsManager.set('coefontKey', coefontKeyInput.value.trim());
+        if (coefontIdInput) window.settingsManager.set('coefontId', coefontIdInput.value.trim());
+
         this.showToast("ナレーション設定を保存しました", "success");
+      });
+    }
+
+    // テスト音声試聴ボタン
+    const btnTestTTS = document.getElementById('btnTestTTS');
+    const ttsTestTextInput = document.getElementById('setTtsTestText');
+    const ttsPreviewAudio = document.getElementById('ttsPreviewAudio');
+    if (btnTestTTS) {
+      btnTestTTS.addEventListener('click', async () => {
+        const text = ttsTestTextInput ? ttsTestTextInput.value.trim() : "こんにちは。音声合成のテストです。";
+        if (!text) {
+          return this.showToast("試聴したいテキストを入力してください", "warning");
+        }
+        btnTestTTS.disabled = true;
+        btnTestTTS.innerHTML = `<div style="border: 2px solid rgba(255,255,255,0.2); border-top-color: #39ff14; border-radius: 50%; width: 12px; height: 12px; animation: spin 1s linear infinite;"></div> 生成中...`;
+
+        try {
+          const previewPayload = {
+            text,
+            tts_engine: ttsEngineSelect ? ttsEngineSelect.value : "edge",
+            voice_name: voiceSelect ? voiceSelect.value : "nanami",
+            speaking_rate: speakingRateInput ? parseFloat(speakingRateInput.value) || 1.0 : 1.0,
+            google_tts_key: googleTtsInput ? googleTtsInput.value.trim() : "",
+            elevenlabs_key: elevenLabsInput ? elevenLabsInput.value.trim() : "",
+            openai_key: openAiKeyInput ? openAiKeyInput.value.trim() : "",
+            openai_model: openAiModelSelect ? openAiModelSelect.value : "tts-1",
+            azure_key: azureKeyInput ? azureKeyInput.value.trim() : "",
+            azure_region: azureRegionInput ? azureRegionInput.value.trim() : "japaneast",
+            aws_access_key: awsAccessKeyInput ? awsAccessKeyInput.value.trim() : "",
+            aws_secret_key: awsSecretKeyInput ? awsSecretKeyInput.value.trim() : "",
+            aws_region: awsRegionInput ? awsRegionInput.value.trim() : "ap-northeast-1",
+            voicevox_url: voicevoxUrlInput ? voicevoxUrlInput.value.trim() : "http://localhost:50021",
+            sharevox_url: sharevoxUrlInput ? sharevoxUrlInput.value.trim() : "http://localhost:50025",
+            coeiroink_url: coeiroinkUrlInput ? coeiroinkUrlInput.value.trim() : "http://localhost:50031",
+            aivis_url: aivisUrlInput ? aivisUrlInput.value.trim() : "http://localhost:10101",
+            aivis_key: aivisKeyInput ? aivisKeyInput.value.trim() : "",
+            oss_tts_url: ossTtsUrlInput ? ossTtsUrlInput.value.trim() : "http://localhost:9880",
+            oss_tts_format: ossTtsFormatSelect ? ossTtsFormatSelect.value : "openai",
+            oss_voice: ossVoiceInput ? ossVoiceInput.value.trim() : "",
+            ondoku_token: ondokuTokenInput ? ondokuTokenInput.value.trim() : "",
+            coefont_key: coefontKeyInput ? coefontKeyInput.value.trim() : "",
+            coefont_id: coefontIdInput ? coefontIdInput.value.trim() : ""
+          };
+
+          const audioUrl = await window.apiClient.previewTTS(previewPayload);
+          if (ttsPreviewAudio) {
+            ttsPreviewAudio.src = audioUrl;
+            ttsPreviewAudio.style.display = "block";
+            await ttsPreviewAudio.play();
+            this.showToast("音声を再生中...", "info");
+          }
+        } catch (err) {
+          console.error("TTSプレビューエラー:", err);
+          this.showToast(`試聴エラー: ${err.message}`, "error");
+        } finally {
+          btnTestTTS.disabled = false;
+          btnTestTTS.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> 試聴する`;
+        }
       });
     }
 

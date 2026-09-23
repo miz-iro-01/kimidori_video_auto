@@ -577,24 +577,58 @@
         <div class="settings-grid">
           
           <!-- Gemini API -->
+          <!-- Gemini API (無料枠) - リサーチ・構成・台本用 -->
           <div class="glass-card">
-            <div class="card-header-icon"><span class="icon-gemini"></span> <h3>Gemini API設定 (必須)</h3></div>
-            <p class="card-desc">動画の台本生成に使用します。Google AI Studioから無料で取得できます。</p>
+            <div class="card-header-icon" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="icon-gemini"></span> <h3>Gemini API (無料枠)</h3>
+              </div>
+              <span class="badge" style="background: rgba(57, 255, 20, 0.15); color: var(--accent-primary); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">リサーチ・構成・台本用</span>
+            </div>
+            <p class="card-desc">動画のトレンドリサーチ、構成案の策定、台本の自動生成に使用します。Google AI Studioから完全無料で取得できます。</p>
             
             <div class="guide-box">
-              <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>取得手順</h4>
+              <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>無料キーの取得手順</h4>
               <ol>
                 <li><a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>にアクセス</li>
                 <li>「Create API key」ボタンをクリックしてキーを生成</li>
-                <li>コピーして以下の入力欄に貼り付け</li>
+                <li>コピーして以下の入力欄に貼り付けて保存</li>
               </ol>
             </div>
 
             <div class="form-group">
-              <label class="form-label">APIキー</label>
+              <label class="form-label">無料APIキー (AIza... または AQ.A...)</label>
               <div class="input-action-wrapper">
-                <input type="password" id="setGeminiKey" class="form-input" placeholder="API Key (AIza... または AQ.A...)">
+                <input type="password" id="setGeminiKey" class="form-input" placeholder="無料APIキーを貼り付け">
                 <button class="btn btn-outline" id="btnSaveGemini">保存</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gemini / AI API (有料枠) - 画像・キャラクター・動画生成用 -->
+          <div class="glass-card">
+            <div class="card-header-icon" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ffaa00;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                <h3>Gemini AI (有料枠)</h3>
+              </div>
+              <span class="badge" style="background: rgba(255, 170, 0, 0.15); color: #ffaa00; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Pro専用 / 画像・動画生成用</span>
+            </div>
+            <p class="card-desc">リファレンス画像生成、キャラクター画像生成、およびアニメーション動画生成に使用します。有料Gemini APIまたはVertex AIキーを設定してください。</p>
+            
+            <div class="guide-box" style="border-left: 3px solid #ffaa00; background: rgba(255, 170, 0, 0.03);">
+              <p style="font-size: 0.82rem; color: var(--text-primary); margin: 0; line-height: 1.5;">
+                <strong>用途の自動分担:</strong><br>
+                テキスト処理（リサーチ・台本）には無料APIキーを消費し、画像・動画生成にはこちらの有料APIキーを使い分けます。<br>
+                ※未設定の場合は、無料枠キーが自動的にフォールバック利用されます。
+              </p>
+            </div>
+
+            <div class="form-group" style="margin-top: 1rem;">
+              <label class="form-label">有料APIキー (Gemini Paid / Vertex AI)</label>
+              <div class="input-action-wrapper">
+                <input type="password" id="setPaidGeminiKey" class="form-input" placeholder="有料APIキーを貼り付け">
+                <button class="btn btn-outline" id="btnSavePaidGemini" style="border-color: rgba(255, 170, 0, 0.4); color: #ffaa00;">保存</button>
               </div>
             </div>
           </div>
@@ -646,42 +680,50 @@
             </button>
           </div>
 
-          <!-- 音声設定 (複数TTS) -->
+          <!-- 音声設定 (完全無料・フリーミアム・有料TTS対応) -->
           <div class="glass-card">
-            <div class="card-header-icon"><span class="icon-audio"></span> <h3>ナレーション設定 (TTS)</h3></div>
-            <p class="card-desc">使用する音声合成エンジンと各種APIキーを設定します。</p>
+            <div class="card-header-icon" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="icon-audio"></span> <h3>ナレーション設定 (TTS)</h3>
+              </div>
+              <span class="badge" style="background: rgba(57, 255, 20, 0.15); color: var(--accent-primary); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">全14エンジン対応</span>
+            </div>
+            <p class="card-desc">完全無料のEdge/VOICEVOXから、超自然なOpenAI/ElevenLabsまで、お好みの音声エンジンを自由に選択・設定できます。</p>
             
-            <div class="form-group">
+            <div class="form-group" style="margin-top: 1rem;">
               <label class="form-label">TTSエンジン</label>
               <div class="custom-select-wrapper">
                 <select id="setTtsEngine" class="form-input form-select">
-                  <option value="edge">Edge TTS (完全無料)</option>
-                  <option value="google">Google Cloud TTS (有料/高品質)</option>
-                  <option value="elevenlabs">ElevenLabs (有料/超高品質)</option>
-                  <option value="aivis">AivisSpeech / Aivis Cloud (有料/高品質)</option>
+                  <optgroup label="── 完全無料（API不要 / ローカル / OSS） ──">
+                    <option value="edge">Edge TTS (Microsoft Neural・完全無料・推奨)</option>
+                    <option value="gtts">Google翻訳 TTS (gTTS・完全無料・API不要)</option>
+                    <option value="voicevox">VOICEVOX (ずんだもん・めたん等・商用無料)</option>
+                    <option value="sharevox">SHAREVOX (小春音アミ等・商用無料)</option>
+                    <option value="coeiroink">COEIROINK (つくよみちゃん等・無料)</option>
+                    <option value="aivis">AivisSpeech / Aivis Cloud (無料/高品質)</option>
+                    <option value="oss_custom">次世代OSS (Fish Speech / GPT-SoVITS / ChatTTS / StyleTTS2)</option>
+                  </optgroup>
+                  <optgroup label="── 制限付き無料 / フリーミアム ──">
+                    <option value="elevenlabs">ElevenLabs (月10,000字無料 / 有料・最高峰音声)</option>
+                    <option value="google">Google Cloud TTS (月数百万字無料 / Neural2)</option>
+                    <option value="azure">Microsoft Azure Speech (月50万字無料 F0 / 有料)</option>
+                    <option value="amazon_polly">Amazon Polly (AWS 12ヶ月無料枠 / 有料)</option>
+                    <option value="ondoku">音読さん Ondoku (月5,000字無料 / 有料)</option>
+                    <option value="coefont">CoeFont (API対応 / 有料)</option>
+                  </optgroup>
+                  <optgroup label="── 完全有料 / 従量課金 ──">
+                    <option value="openai">OpenAI TTS (tts-1 / tts-1-hd・最高レベルの自然さ)</option>
+                  </optgroup>
                 </select>
               </div>
             </div>
 
-            <div id="ttsKeyInputs">
-              <div class="form-group" id="groupGoogleTtsKey" style="display:none; margin-top:1rem;">
-                <label class="form-label">Google Cloud API キー</label>
-                <input type="password" id="setGoogleTtsKey" class="form-input" placeholder="AIzaSy...">
-              </div>
-              <div class="form-group" id="groupElevenLabsKey" style="display:none; margin-top:1rem;">
-                <label class="form-label">ElevenLabs API キー</label>
-                <input type="password" id="setElevenLabsKey" class="form-input" placeholder="sk_...">
-              </div>
-              <div class="form-group" id="groupAivisKey" style="display:none; margin-top:1rem;">
-                <label class="form-label">Aivis Cloud API キー</label>
-                <input type="password" id="setAivisKey" class="form-input" placeholder="API Key...">
-              </div>
-            </div>
-
-            <div class="form-group" style="margin-top:1rem;">
-              <label class="form-label">音声・キャラクター (Edge TTS用)</label>
+            <!-- 音声キャラクター/モデル選択 (エンジンに連動) -->
+            <div class="form-group" id="groupVoiceSelect" style="margin-top: 1rem;">
+              <label class="form-label" id="labelVoiceSelect">音声・キャラクター</label>
               <div class="custom-select-wrapper">
                 <select id="setVoiceName" class="form-input form-select">
+                  <!-- JSでエンジンの選択肢を動的に差し替え -->
                   <option value="nanami">七海（女性・標準）</option>
                   <option value="keita">慶太（男性・標準）</option>
                   <option value="aoi">あおい（女性・若い）</option>
@@ -692,7 +734,154 @@
                 </select>
               </div>
             </div>
-            <button class="btn btn-outline" id="btnSaveVoice" style="width: 100%;">設定を保存</button>
+
+            <!-- 話速スライダー -->
+            <div class="form-group" style="margin-top: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <label class="form-label" style="margin: 0;">読み上げ速度</label>
+                <span id="labelSpeakingRate" style="font-size: 0.85rem; color: var(--accent-primary); font-weight: 600;">1.0x</span>
+              </div>
+              <input type="range" id="setSpeakingRate" min="0.7" max="1.5" step="0.05" value="1.0" class="form-input" style="padding: 0.2rem 0; cursor: pointer;">
+            </div>
+
+            <!-- エンジン別 動的入力エリア -->
+            <div id="ttsKeyInputs" style="margin-top: 1rem;">
+              <!-- Google Cloud TTS -->
+              <div class="form-group" id="groupGoogleTtsKey" style="display:none;">
+                <label class="form-label">Google Cloud API キー</label>
+                <input type="password" id="setGoogleTtsKey" class="form-input" placeholder="AIzaSy...">
+              </div>
+
+              <!-- ElevenLabs -->
+              <div class="form-group" id="groupElevenLabsKey" style="display:none;">
+                <label class="form-label">ElevenLabs API キー (xi-api-key)</label>
+                <input type="password" id="setElevenLabsKey" class="form-input" placeholder="sk_...">
+              </div>
+
+              <!-- OpenAI TTS -->
+              <div id="groupOpenAiTts" style="display:none; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div class="form-group">
+                  <label class="form-label">OpenAI API キー</label>
+                  <input type="password" id="setOpenAiTtsKey" class="form-input" placeholder="sk-proj-...">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">OpenAI TTS モデル</label>
+                  <select id="setOpenAiTtsModel" class="form-input form-select">
+                    <option value="tts-1">tts-1 (標準・低遅延)</option>
+                    <option value="tts-1-hd">tts-1-hd (高解像度・最高音質)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Microsoft Azure Speech -->
+              <div id="groupAzureTts" style="display:none; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div class="form-group">
+                  <label class="form-label">Azure Speech API キー</label>
+                  <input type="password" id="setAzureTtsKey" class="form-input" placeholder="Azure Speech Key...">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Azure リージョン</label>
+                  <input type="text" id="setAzureTtsRegion" class="form-input" placeholder="例: japaneast">
+                </div>
+              </div>
+
+              <!-- Amazon Polly -->
+              <div id="groupPollyTts" style="display:none; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div class="form-group">
+                  <label class="form-label">AWS Access Key ID</label>
+                  <input type="text" id="setAwsAccessKey" class="form-input" placeholder="AKIA...">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">AWS Secret Access Key</label>
+                  <input type="password" id="setAwsSecretKey" class="form-input" placeholder="Secret Key...">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">AWS リージョン</label>
+                  <input type="text" id="setAwsRegion" class="form-input" placeholder="例: ap-northeast-1">
+                </div>
+              </div>
+
+              <!-- VOICEVOX / SHAREVOX / COEIROINK / Aivis -->
+              <div class="form-group" id="groupVoicevoxUrl" style="display:none;">
+                <label class="form-label">VOICEVOX サーバーURL (ローカルまたはリモート)</label>
+                <input type="text" id="setVoicevoxUrl" class="form-input" placeholder="http://localhost:50021">
+                <span style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; display: block;">※ローカルPCでVOICEVOXを起動している場合はそのままでOKです。</span>
+              </div>
+
+              <div class="form-group" id="groupSharevoxUrl" style="display:none;">
+                <label class="form-label">SHAREVOX サーバーURL</label>
+                <input type="text" id="setSharevoxUrl" class="form-input" placeholder="http://localhost:50025">
+              </div>
+
+              <div class="form-group" id="groupCoeiroinkUrl" style="display:none;">
+                <label class="form-label">COEIROINK サーバーURL</label>
+                <input type="text" id="setCoeiroinkUrl" class="form-input" placeholder="http://localhost:50031">
+              </div>
+
+              <div id="groupAivis" style="display:none; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div class="form-group">
+                  <label class="form-label">Aivis サーバーURL (または Aivis Cloud)</label>
+                  <input type="text" id="setAivisUrl" class="form-input" placeholder="http://localhost:10101">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Aivis Cloud API キー (クラウド利用時のみ)</label>
+                  <input type="password" id="setAivisKey" class="form-input" placeholder="オプション">
+                </div>
+              </div>
+
+              <!-- 次世代OSSモデル (Fish Speech / GPT-SoVITS / ChatTTS / StyleTTS2) -->
+              <div id="groupOssCustom" style="display:none; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div class="form-group">
+                  <label class="form-label">OSS 音声API サーバーURL</label>
+                  <input type="text" id="setOssTtsUrl" class="form-input" placeholder="例: http://localhost:9880">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">API フォーマット / 形式</label>
+                  <select id="setOssTtsFormat" class="form-input form-select">
+                    <option value="openai">OpenAI 互換 (/v1/audio/speech - Fish Speech, ChatTTS 等)</option>
+                    <option value="gpt_sovits">GPT-SoVITS (/tts WebUI API)</option>
+                    <option value="rest">汎用 REST POST</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">話者 / キャラクター名 (オプション)</label>
+                  <input type="text" id="setOssVoice" class="form-input" placeholder="例: default">
+                </div>
+              </div>
+
+              <!-- 音読さん (Ondoku) -->
+              <div class="form-group" id="groupOndokuToken" style="display:none;">
+                <label class="form-label">音読さん API トークン</label>
+                <input type="password" id="setOndokuToken" class="form-input" placeholder="API Token...">
+              </div>
+
+              <!-- CoeFont -->
+              <div id="groupCoefont" style="display:none; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div class="form-group">
+                  <label class="form-label">CoeFont API キー</label>
+                  <input type="password" id="setCoefontKey" class="form-input" placeholder="Access Key...">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">CoeFont ID</label>
+                  <input type="text" id="setCoefontId" class="form-input" placeholder="CoeFont UUID...">
+                </div>
+              </div>
+            </div>
+
+            <!-- プレビュー試聴テストエリア -->
+            <div class="guide-box" style="margin-top: 1.25rem; background: rgba(255,255,255,0.03); border-left: 3px solid var(--accent-primary);">
+              <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.35rem;">テスト音声の試聴</label>
+              <div class="input-action-wrapper" style="gap: 0.5rem;">
+                <input type="text" id="setTtsTestText" class="form-input" value="こんにちは。ナレーション音声のテストプレビューです。" placeholder="試聴したいテキストを入力">
+                <button class="btn btn-outline" id="btnTestTTS" style="white-space: nowrap; flex-shrink: 0; display: flex; align-items: center; gap: 4px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  試聴する
+                </button>
+              </div>
+              <audio id="ttsPreviewAudio" controls style="width: 100%; height: 32px; margin-top: 0.6rem; display: none;"></audio>
+            </div>
+
+            <button class="btn btn-primary" id="btnSaveVoice" style="width: 100%; margin-top: 1rem;">ナレーション設定を保存</button>
           </div>
 
         </div>
