@@ -10,10 +10,10 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List, Dict, Any, Union
 
 import config
 from fastapi.staticfiles import StaticFiles
@@ -342,23 +342,44 @@ async def process_mode_a(request: ModeARequest, background_tasks: BackgroundTask
 
 
 # =============================================================================
-# モードB: 既存動画の自動編集
+# モードB: 既存動画の自動編集 (アップロード / 連携実行)
 # =============================================================================
-@app.post("/api/process/mode-b", response_model=JobStatusResponse)
-async def process_mode_b(request: ModeBRequest, background_tasks: BackgroundTasks):
+@app.post("/api/process/mode-b/upload", response_model=JobStatusResponse)
+async def process_mode_b_upload(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    user_id: str = Form("default_user"),
+    jet_cut: bool = Form(True),
+    auto_subtitle: bool = Form(True),
+    target_youtube_account: Optional[str] = Form(None)
+):
     """
-    モードB: アップロードされた素材動画を自動編集
-    非同期でバックグラウンド処理を開始し、即座にジョブIDを返す
+    モードB: 素材動画を直接アップロードしてジェットカット＆自動テロップ処理を開始
     """
     try:
+        import uuid
+        job_id = str(uuid.uuid4())
+        job_dir = config.TMP_DIR / job_id
+        job_dir.mkdir(parents=True, exist_ok=True)
+
+        # アップロードされた動画ファイルを一時ディレクトリに保存
+        source_video_path = job_dir / "source.mp4"
+        with open(source_video_path, "wb") as f:
+            while chunk := await file.read(1024 * 1024 * 4):  # 4MB chunks
+                f.write(chunk)
+
+        logger.info(f"素材動画アップロード完了: {file.filename} -> {source_video_path} ({source_video_path.stat().st_size} bytes)")
+
         # Firestoreにジョブドキュメントを作成
-        job_id = firestore.create_job(
-            user_id=request.user_id,
+        firestore.create_job(
+            user_id=user_id,
             mode="B",
             params={
-                "storage_path": request.storage_path,
-                "enable_jet_cut": request.enable_jet_cut,
-                "enable_subtitles": request.enable_subtitles,
+                "storage_path": str(source_video_path),
+                "enable_jet_cut": jet_cut,
+                "enable_subtitles": auto_subtitle,
+                "target_youtube_account": target_youtube_account,
+                "filename": file.filename
             }
         )
 
@@ -366,13 +387,51 @@ async def process_mode_b(request: ModeBRequest, background_tasks: BackgroundTask
         background_tasks.add_task(
             run_mode_b_pipeline,
             job_id=job_id,
-            storage_path=request.storage_path,
-            enable_jet_cut=request.enable_jet_cut,
-            enable_subtitles=request.enable_subtitles,
-            user_id=request.user_id,
+            storage_path=str(source_video_path),
+            enable_jet_cut=jet_cut,
+            enable_subtitles=auto_subtitle,
+            user_id=user_id,
+            target_youtube_account=target_youtube_account,
         )
 
-        logger.info(f"モードBジョブ開始: {job_id} 素材='{request.storage_path}'")
+        return JobStatusResponse(
+            job_id=job_id,
+            status="pending",
+            progress=0,
+            message="動画を受け付けました。自動編集を開始します...",
+            created_at=datetime.utcnow().isoformat(),
+        )
+
+    except Exception as e:
+        logger.error(f"モードBアップロードジョブ作成失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"動画のアップロード・処理開始に失敗しました: {str(e)}")
+
+
+@app.post("/api/process/mode-b", response_model=JobStatusResponse)
+async def process_mode_b(request: ModeBRequest, background_tasks: BackgroundTasks):
+    """
+    モードB: 既存動画の自動編集リクエスト（Storageパス指定）
+    """
+    try:
+        job_id = firestore.create_job(
+            user_id=request.user_id,
+            mode="B",
+            params={
+                "enable_jet_cut": request.jet_cut,
+                "enable_subtitles": request.auto_subtitle,
+                "target_youtube_account": request.target_youtube_account,
+            }
+        )
+
+        background_tasks.add_task(
+            run_mode_b_pipeline,
+            job_id=job_id,
+            storage_path=getattr(request, "storage_path", ""),
+            enable_jet_cut=request.jet_cut,
+            enable_subtitles=request.auto_subtitle,
+            user_id=request.user_id,
+            target_youtube_account=request.target_youtube_account,
+        )
 
         return JobStatusResponse(
             job_id=job_id,
@@ -764,15 +823,22 @@ async def run_mode_b_pipeline(
     enable_jet_cut: bool,
     enable_subtitles: bool,
     user_id: str,
+    target_youtube_account: Optional[str] = None,
 ):
     """モードBの処理パイプライン全体を実行"""
     processor = ModeBProcessor(firestore, storage)
     try:
         firestore.update_job(job_id, status="processing", progress=5, message="処理を開始しています...")
 
-        # 1. 素材動画をダウンロード (10%)
-        firestore.update_job(job_id, progress=10, message="素材動画をダウンロード中...")
-        source_video_path = storage.download_file(storage_path, config.TMP_DIR / job_id / "source.mp4")
+        job_dir = config.TMP_DIR / job_id
+        job_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. 素材動画の取得 (10%)
+        firestore.update_job(job_id, progress=10, message="素材動画を準備中...")
+        if storage_path and Path(storage_path).exists():
+            source_video_path = Path(storage_path)
+        else:
+            source_video_path = storage.download_file(storage_path, job_dir / "source.mp4")
 
         # 2. 音声認識 (30%)
         firestore.update_job(job_id, progress=30, message="Whisperで音声認識中...")
@@ -795,22 +861,31 @@ async def run_mode_b_pipeline(
             final_video_path = cut_video_path
 
         # 5. Cloud Storageにアップロード (85%)
-        firestore.update_job(job_id, progress=85, message="完成動画をアップロード中...")
-        storage_url = storage.upload_file(
-            final_video_path,
-            f"outputs/{user_id}/{job_id}/output.mp4"
-        )
+        firestore.update_job(job_id, progress=85, message="完成動画を保存中...")
+        storage_url = None
+        try:
+            storage_url = storage.upload_file(
+                final_video_path,
+                f"outputs/{user_id}/{job_id}/output.mp4"
+            )
+        except Exception as st_err:
+            logger.warning(f"Storage保存スキップ (ローカルパスを利用): {st_err}")
 
-        # 6. YouTubeに投稿 (95%)
-        firestore.update_job(job_id, progress=95, message="YouTubeに投稿中...")
-        youtube_url = youtube.upload_video(
-            video_path=str(final_video_path),
-            user_id=user_id,
-            title=f"自動編集動画 | KIMIDORI Movie Auto",
-            description="自動編集（ジェットカット＋テロップ付与）された動画です。",
-            tags=["自動編集", "ジェットカット", "テロップ"],
-            privacy_status="private",
-        )
+        # 6. YouTubeに投稿 (オプション)
+        youtube_url = None
+        if target_youtube_account:
+            firestore.update_job(job_id, progress=95, message="YouTubeに投稿中...")
+            try:
+                youtube_url = youtube.upload_video(
+                    video_path=str(final_video_path),
+                    user_id=user_id,
+                    title="自動編集動画 | KIMIDORI Movie Auto",
+                    description="自動編集（ジェットカット＋テロップ付与）された動画です。",
+                    tags=["自動編集", "ジェットカット", "テロップ"],
+                    privacy_status="private",
+                )
+            except Exception as yt_err:
+                logger.warning(f"YouTube投稿エラー: {yt_err}")
 
         # 7. 完了 (100%)
         firestore.update_job(
@@ -820,8 +895,9 @@ async def run_mode_b_pipeline(
             message="処理が完了しました！",
             youtube_url=youtube_url,
             storage_url=storage_url,
+            video_path=str(final_video_path)
         )
-        logger.info(f"モードBジョブ完了: {job_id} → {youtube_url}")
+        logger.info(f"モードBジョブ完了: {job_id} -> {final_video_path}")
 
     except Exception as e:
         error_msg = f"処理中にエラーが発生しました: {str(e)}"

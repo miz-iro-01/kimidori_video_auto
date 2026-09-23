@@ -8,6 +8,7 @@ class AppController {
     this.adminUsers = [];
     this.initViews();
     this.initForms();
+    this.initEditForm();
     this.initMangaForm();
     this.initSettings();
     this.renderSettings();
@@ -877,6 +878,178 @@ class AppController {
           panel.style.display = 'none';
         } finally {
           btnSubmitResearch.disabled = false;
+        }
+      });
+    }
+  }
+
+  // --- 既存動画自動編集 (Mode B: ジェットカット ＆ Whisper字幕自動焼き付け) ---
+  initEditForm() {
+    const uploadZoneB = document.getElementById('uploadZoneB');
+    const inputFileB = document.getElementById('inputFileB');
+    const fileNameB = document.getElementById('fileNameB');
+    const btnSubmitB = document.getElementById('btnSubmitB');
+    const formEdit = document.getElementById('formEdit');
+    const checkJetCut = document.getElementById('checkJetCut');
+    const checkSubtitles = document.getElementById('checkSubtitles');
+    const inputTargetChannelB = document.getElementById('inputTargetChannelB');
+    const execPanelB = document.getElementById('execPanelB');
+    const execTitleB = document.getElementById('execTitleB');
+    const execBarB = document.getElementById('execBarB');
+    const videoResultPanelB = document.getElementById('videoResultPanelB');
+    const finalVideoPlayerB = document.getElementById('finalVideoPlayerB');
+    const btnDownloadFinalB = document.getElementById('btnDownloadFinalB');
+    const btnResetEditB = document.getElementById('btnResetEditB');
+
+    let selectedFile = null;
+
+    if (!uploadZoneB || !inputFileB) return;
+
+    // ファイル選択の反映
+    const handleFileSelect = (file) => {
+      if (!file) return;
+      if (!file.type.startsWith('video/') && !file.name.match(/\.(mp4|mov|avi|mkv|webm)$/i)) {
+        return this.showToast("動画ファイル（MP4, MOV, MKV, WebM等）を選択してください", "warning");
+      }
+      const maxSize = 500 * 1024 * 1024; // 500MB
+      if (file.size > maxSize) {
+        return this.showToast("ファイルサイズは最大500MBまでです", "error");
+      }
+
+      selectedFile = file;
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      if (fileNameB) {
+        fileNameB.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--accent-primary); font-weight: 500;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            <span>${file.name} (${sizeMb} MB)</span>
+          </div>
+        `;
+      }
+      if (btnSubmitB) {
+        btnSubmitB.disabled = false;
+      }
+      this.showToast(`動画ファイル「${file.name}」を選択しました`, "info");
+    };
+
+    // クリックでファイルダイアログオープン
+    uploadZoneB.addEventListener('click', () => {
+      inputFileB.click();
+    });
+
+    inputFileB.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleFileSelect(e.target.files[0]);
+      }
+    });
+
+    // ドラッグ＆ドロップ イベントハンドリング
+    ['dragenter', 'dragover'].forEach(eventName => {
+      uploadZoneB.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadZoneB.classList.add('dragover');
+        uploadZoneB.style.borderColor = 'var(--accent-primary)';
+        uploadZoneB.style.backgroundColor = 'rgba(0, 240, 255, 0.05)';
+      }, false);
+    });
+
+    ['dragleave', 'dragend', 'drop'].forEach(eventName => {
+      uploadZoneB.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        uploadZoneB.classList.remove('dragover');
+        uploadZoneB.style.borderColor = '';
+        uploadZoneB.style.backgroundColor = '';
+      }, false);
+    });
+
+    uploadZoneB.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length > 0) {
+        handleFileSelect(dt.files[0]);
+      }
+    });
+
+    // 編集リセット
+    const resetEditForm = () => {
+      selectedFile = null;
+      inputFileB.value = '';
+      if (fileNameB) fileNameB.innerHTML = '';
+      if (btnSubmitB) btnSubmitB.disabled = true;
+      if (execPanelB) execPanelB.style.display = 'none';
+      if (videoResultPanelB) videoResultPanelB.style.display = 'none';
+      if (formEdit) formEdit.style.display = 'block';
+      if (finalVideoPlayerB) {
+        finalVideoPlayerB.pause();
+        finalVideoPlayerB.src = '';
+      }
+    };
+
+    if (btnResetEditB) {
+      btnResetEditB.addEventListener('click', resetEditForm);
+    }
+
+    // 編集開始ボタンの送信
+    if (formEdit) {
+      formEdit.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!selectedFile) {
+          return this.showToast("動画ファイルをドラッグ＆ドロップまたは選択してください", "warning");
+        }
+
+        const jetCut = checkJetCut ? checkJetCut.checked : true;
+        const autoSubtitles = checkSubtitles ? checkSubtitles.checked : true;
+        const targetChannel = inputTargetChannelB ? inputTargetChannelB.value : "";
+
+        if (btnSubmitB) btnSubmitB.disabled = true;
+        if (formEdit) formEdit.style.display = 'none';
+        if (execPanelB) {
+          execPanelB.style.display = 'block';
+          if (execBarB) execBarB.style.width = '10%';
+          if (execTitleB) execTitleB.textContent = "動画をアップロードして解析準備中...";
+        }
+        if (videoResultPanelB) videoResultPanelB.style.display = 'none';
+
+        try {
+          this.showToast("動画のアップロードを開始しました...", "info");
+          const res = await window.apiClient.uploadAndEditVideo(selectedFile, jetCut, autoSubtitles, targetChannel);
+          const jobId = res.job_id;
+
+          if (execBarB) execBarB.style.width = '30%';
+          if (execTitleB) execTitleB.textContent = "動画処理タスクを実行中...";
+
+          // ジョブステータス監視
+          this.startJobPolling(jobId, 'B', {
+            onProgress: (job) => {
+              if (execBarB) execBarB.style.width = `${job.progress || 35}%`;
+              if (execTitleB) execTitleB.textContent = `${job.message || "処理中..."} (${job.progress || 35}%)`;
+            },
+            onComplete: (job) => {
+              if (execPanelB) execPanelB.style.display = 'none';
+              if (videoResultPanelB) videoResultPanelB.style.display = 'block';
+
+              const apiUrl = window.apiClient.baseUrl;
+              const downloadUrl = `${apiUrl}/api/download/${jobId}`;
+              if (finalVideoPlayerB) {
+                finalVideoPlayerB.src = downloadUrl;
+                finalVideoPlayerB.load();
+              }
+              if (btnDownloadFinalB) {
+                btnDownloadFinalB.href = `${downloadUrl}?download=1`;
+              }
+              this.showToast("動画の自動編集（ジェットカット＆字幕）が完了しました！", "success");
+            },
+            onError: (errMsg) => {
+              this.showToast(`編集処理エラー: ${errMsg}`, "error");
+              resetEditForm();
+            }
+          });
+
+        } catch (err) {
+          console.error("Mode B execution error:", err);
+          this.showToast(`編集の開始に失敗しました: ${err.message}`, "error");
+          resetEditForm();
         }
       });
     }

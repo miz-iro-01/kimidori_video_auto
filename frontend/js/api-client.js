@@ -555,8 +555,89 @@ class ApiClient {
     return await res.json();
   }
 
-  /** TTS 音声プレビュー試聴 */
+  /** 既存動画の自動編集（Mode B: ジェットカット・Whisper字幕生成） */
+  async uploadAndEditVideo(file, jetCut = true, autoSubtitles = true, targetChannel = "") {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("jet_cut", jetCut ? "true" : "false");
+    formData.append("auto_subtitles", autoSubtitles ? "true" : "false");
+    formData.append("target_channel", targetChannel || "");
+    formData.append("user_id", this._getUserId());
+
+    const res = await fetch(`${this.baseUrl}/api/process/mode-b/upload`, {
+      method: "POST",
+      body: formData
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `動画のアップロード・編集処理の開始に失敗しました (${res.status})`);
+    }
+
+    return await res.json();
+  }
+
+  /** TTS 音声プレビュー試聴（ローカルVOICEVOX/SHAREVOX/COEIROINK直接通信 ＆ クラウドAPI両対応） */
   async previewTTS(previewData) {
+    const engine = previewData.tts_engine || "edge";
+    const text = previewData.text || "こんにちは。";
+
+    // ローカル音声合成エンジン (VOICEVOX / SHAREVOX / COEIROINK) かつ localhost の場合はブラウザから直結実行
+    const isLocalhostUrl = (url) => url && (url.includes("localhost") || url.includes("127.0.0.1"));
+
+    if (engine === "voicevox" && isLocalhostUrl(previewData.voicevox_url)) {
+      try {
+        const baseUrl = (previewData.voicevox_url || "http://localhost:50021").replace(/\/$/, "");
+        const speaker = previewData.voice_name && /^\d+$/.test(previewData.voice_name) ? parseInt(previewData.voice_name) : 3;
+        
+        // 1. audio_query
+        const qRes = await fetch(`${baseUrl}/audio_query?text=${encodeURIComponent(text)}&speaker=${speaker}`, {
+          method: "POST"
+        });
+        if (!qRes.ok) throw new Error(`VOICEVOX audio_queryエラー (${qRes.status})`);
+        const queryJson = await qRes.json();
+        if (previewData.speaking_rate) {
+          queryJson.speedScale = parseFloat(previewData.speaking_rate) || 1.0;
+        }
+
+        // 2. synthesis
+        const sRes = await fetch(`${baseUrl}/synthesis?speaker=${speaker}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(queryJson)
+        });
+        if (!sRes.ok) throw new Error(`VOICEVOX synthesisエラー (${sRes.status})`);
+        const wavBlob = await sRes.blob();
+        return URL.createObjectURL(wavBlob);
+      } catch (localErr) {
+        console.warn("ローカルVOICEVOX直接通信失敗、バックエンドプレビューへフォールバックします:", localErr);
+      }
+    }
+
+    if (engine === "sharevox" && isLocalhostUrl(previewData.sharevox_url)) {
+      try {
+        const baseUrl = (previewData.sharevox_url || "http://localhost:50025").replace(/\/$/, "");
+        const speaker = previewData.voice_name && /^\d+$/.test(previewData.voice_name) ? parseInt(previewData.voice_name) : 0;
+        const qRes = await fetch(`${baseUrl}/audio_query?text=${encodeURIComponent(text)}&speaker=${speaker}`, { method: "POST" });
+        if (qRes.ok) {
+          const qJson = await qRes.json();
+          if (previewData.speaking_rate) qJson.speedScale = parseFloat(previewData.speaking_rate) || 1.0;
+          const sRes = await fetch(`${baseUrl}/synthesis?speaker=${speaker}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(qJson)
+          });
+          if (sRes.ok) {
+            const wavBlob = await sRes.blob();
+            return URL.createObjectURL(wavBlob);
+          }
+        }
+      } catch (localErr) {
+        console.warn("ローカルSHAREVOX通信失敗、バックエンドへフォールバックします:", localErr);
+      }
+    }
+
+    // クラウドエンジン (Edge, Google, OpenAI, ElevenLabs, Azure, Polly, etc.) またはリモートURLはバックエンドAPI経由で合成
     const res = await fetch(`${this.baseUrl}/api/tts/preview`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
