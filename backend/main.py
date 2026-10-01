@@ -1295,6 +1295,7 @@ async def generate_long_video_script_endpoint(req: LongVideoScriptRequest):
         return {"success": True, "script": script}
     except Exception as e:
         logger.error(f"長尺動画台本生成失敗: {e}")
+        raise HTTPException(status_code=500, detail=f"長尺台本生成に失敗しました: {str(e)}")
 # =============================================================================
 # TTS 統合API (完全無料・フリーミアム・有料の全エンジン対応 & 試聴プレビュー)
 # =============================================================================

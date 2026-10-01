@@ -78,10 +78,32 @@ class SettingsManager {
     this.save();
   }
 
-  // Gemini API Key Validation
+  // Gemini API Key Validation (無料枠・有料枠のいずれかが設定されていれば利用可能)
   hasGeminiKey() {
-    const key = this.get("geminiApiKey");
-    return typeof key === "string" && key.trim().length > 10;
+    const freeKey = this.get("geminiApiKey");
+    const paidKey = this.get("paidGeminiApiKey");
+    return (typeof freeKey === "string" && freeKey.trim().length > 10) ||
+           (typeof paidKey === "string" && paidKey.trim().length > 10);
+  }
+
+  // 利用可能なGemini APIキーを取得（優先指定 または フォールバック）
+  getActiveGeminiKey(preferPaid = false) {
+    const freeKey = (this.get("geminiApiKey") || "").trim();
+    const paidKey = (this.get("paidGeminiApiKey") || "").trim();
+    if (preferPaid) {
+      return paidKey || freeKey;
+    }
+    return freeKey || paidKey;
+  }
+
+  // 登録されている全有効Geminiキーをリストで取得
+  getGeminiKeys() {
+    const freeKey = (this.get("geminiApiKey") || "").trim();
+    const paidKey = (this.get("paidGeminiApiKey") || "").trim();
+    const keys = [];
+    if (freeKey && freeKey.length > 10) keys.push(freeKey);
+    if (paidKey && paidKey.length > 10 && paidKey !== freeKey) keys.push(paidKey);
+    return keys;
   }
 
   // YouTube Accounts Management (Max 5)

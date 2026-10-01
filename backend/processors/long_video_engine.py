@@ -128,6 +128,7 @@ class LongVideoEngine:
                     "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                     "generationConfig": {"temperature": 0.75, "maxOutputTokens": 8192}
                 }
+                last_err = "No response"
                 for model in models_to_try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
                     try:
@@ -135,9 +136,14 @@ class LongVideoEngine:
                             if resp.status == 200:
                                 data = await resp.json()
                                 return data["candidates"][0]["content"]["parts"][0]["text"]
-                    except Exception:
+                            else:
+                                err_txt = await resp.text()
+                                last_err = f"Model {model} returned HTTP {resp.status}: {err_txt[:100]}"
+                                logger.warning(f"Long video Gemini API fail: {last_err}")
+                    except Exception as ex:
+                        last_err = str(ex)
                         continue
-            raise RuntimeError("長尺台本のGemini生成呼び出しに失敗しました")
+            raise RuntimeError(f"長尺台本のGemini生成呼び出しに失敗しました: {last_err}")
 
         raw_text = await self.key_manager.execute_with_retry_async(_call_gemini)
         

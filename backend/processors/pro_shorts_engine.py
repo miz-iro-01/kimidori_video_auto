@@ -95,6 +95,7 @@ class ProShortsEngine:
                     "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                     "generationConfig": {"temperature": 0.75, "maxOutputTokens": 4096}
                 }
+                last_err = "No response"
                 for model in models_to_try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
                     try:
@@ -102,9 +103,14 @@ class ProShortsEngine:
                             if resp.status == 200:
                                 data = await resp.json()
                                 return data["candidates"][0]["content"]["parts"][0]["text"]
-                    except Exception:
+                            else:
+                                err_txt = await resp.text()
+                                last_err = f"Model {model} returned HTTP {resp.status}: {err_txt[:100]}"
+                                logger.warning(f"Pro shorts Gemini API fail: {last_err}")
+                    except Exception as ex:
+                        last_err = str(ex)
                         continue
-            raise RuntimeError("Pro版ショート台本の生成に失敗しました")
+            raise RuntimeError(f"Pro版ショート台本の生成に失敗しました: {last_err}")
 
         raw_text = await self.key_manager.execute_with_retry_async(_call)
 

@@ -451,36 +451,133 @@ class ApiClient {
     return await res.json();
   }
 
-  /** Pro版ショート動画の台本生成 */
+  /** Pro版ショート動画の台本生成（バックエンド ＋ 直接Gemini APIフォールバック・全キー両対応） */
   async generateProShortsScript(theme, genre = "story") {
-    const geminiKey = window.settingsManager.get("geminiApiKey");
-    if (!geminiKey) throw new Error("Gemini APIキーを設定画面で保存してください。");
+    const keys = window.settingsManager.getGeminiKeys();
+    if (!keys || keys.length === 0) {
+      throw new Error("Gemini APIキー（無料版または有料版）を設定画面で保存してください。");
+    }
 
     const payload = {
       theme: theme,
       genre: genre,
       user_id: this._getUserId(),
-      gemini_api_keys: [geminiKey]
+      gemini_api_keys: keys
     };
 
-    const res = await fetch(`${this.baseUrl}/api/pro-shorts/script`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+    // 1. まずバックエンドAPIにリクエスト
+    try {
+      const res = await fetch(`${this.baseUrl}/api/pro-shorts/script`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || `Pro版ショート動画台本生成エラー (${res.status})`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success && data.script) {
+          return data;
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.warn(`バックエンドProショート台本生成失敗 (${res.status}):`, err);
+      }
+    } catch (e) {
+      console.warn("バックエンドProショート通信エラー、直接ブラウザGeminiフォールバックへ移行:", e);
     }
 
-    return await res.json();
+    // 2. バックエンドが失敗した場合はブラウザから直結でGemini APIを実行（デュアルキー＆複数モデルフォールバック）
+    const genreNames = {
+      story: "ストーリー・ドラマ・スカッと",
+      knowledge: "ライフハック・豆知識・ノウハウ",
+      edoculture: "歴史・江戸文化・浮世絵雑学",
+      trivia: "雑学・ミステリー・驚きの事実"
+    };
+    const genreRules = {
+      story: "ナレーターによる感情移入の強い朗読または登場人物の会話。冒頭3秒で事件・葛藤が発生。",
+      knowledge: "ナレーターによる論理的で痛快な知的ショート解説。全カット動画演出。",
+      edoculture: "現代キャラ排除。浮世絵アニメーションと純粋な知的好奇心解説。",
+      trivia: "テンポの良い疑問提示と即座の解説。ダイナミック演出。"
+    };
+
+    const gName = genreNames[genre] || genreNames.story;
+    const gRule = genreRules[genre] || genreRules.story;
+
+    const prompt = `あなたはYouTube ShortsやTikTokで100万回再生を連発するショート動画のトッププロデューサーです。
+以下のテーマで、厳密に【60秒尺（全6〜7カット、各8〜10秒、合計55〜60秒）】の超高エンゲージメント動画台本を作成してください。
+
+【テーマ】: ${theme}
+【ジャンル】: ${gName}
+【演出ルール】:
+${gRule}
+・全カット【演出】：動画（ダイナミック動画演出）として構成すること。
+・各カットは8〜10秒程度（全6〜7カットで合計55〜60秒）。
+
+【出力フォーマット（厳格なJSON）】:
+必ず以下のJSON形式のみを出力してください（Markdownコードブロック \`\`\`json \`\`\` で囲んでください）。
+{
+  "title": "ショート動画タイトル",
+  "theme": "${theme}",
+  "genre": "${genre}",
+  "target_duration_seconds": 60,
+  "cuts": [
+    {
+      "cut_id": "Cut_001",
+      "time_range": "[00:00 - 00:09]",
+      "speaker": "話者名（または ナレーション）",
+      "dialogue": "セリフまたは発話テキスト（冒頭3秒で引き込むフック）",
+      "description": "画面の情景・被写体のアクション・背景描写",
+      "camera_effect": "動画 (アクション)",
+      "bgm_tag": "cheerful / warm / touching / suspense / frightening / funny / epic / neutral から選択"
+    }
+  ]
+}`;
+
+    const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+    for (const k of keys) {
+      for (const m of modelsToTry) {
+        try {
+          const directRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(k)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.75, maxOutputTokens: 4096 }
+            })
+          });
+
+          if (directRes.ok) {
+            const data = await directRes.json();
+            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (rawText) {
+              const match = rawText.match(/```(?:json)?\s*(\{.*?\})\s*```/s);
+              const jsonStr = match ? match[1] : rawText;
+              let parsed;
+              try {
+                parsed = JSON.parse(jsonStr);
+              } catch {
+                let clean = jsonStr.trim();
+                if (!clean.endsWith("}")) clean += "\n]}";
+                parsed = JSON.parse(clean);
+              }
+              return { success: true, script: parsed };
+            }
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+
+    throw new Error("Pro版ショート台本の生成に失敗しました。Gemini APIキーの設定と有効期限・残高をご確認ください。");
   }
 
-  /** 長尺動画（15〜20分）完全仕様の台本・人物シート生成 */
+  /** 長尺動画（15〜20分）完全仕様の台本・人物シート生成（バックエンド ＋ 直接Gemini APIフォールバック・全キー両対応） */
   async generateLongVideoScript(theme, genre = "story", targetMinutes = 15, researchNotes = "") {
-    const geminiKey = window.settingsManager.get("geminiApiKey");
-    if (!geminiKey) throw new Error("Gemini APIキーを設定画面で保存してください。");
+    const keys = window.settingsManager.getGeminiKeys();
+    if (!keys || keys.length === 0) {
+      throw new Error("Gemini APIキー（無料版または有料版）を設定画面で保存してください。");
+    }
 
     const payload = {
       theme: theme,
@@ -488,21 +585,115 @@ class ApiClient {
       target_minutes: parseInt(targetMinutes, 10),
       research_notes: researchNotes,
       user_id: this._getUserId(),
-      gemini_api_keys: [geminiKey]
+      gemini_api_keys: keys
     };
 
-    const res = await fetch(`${this.baseUrl}/api/long-video/script`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+    // 1. バックエンドAPI呼び出し
+    try {
+      const res = await fetch(`${this.baseUrl}/api/long-video/script`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || `長尺動画台本生成エラー (${res.status})`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success && data.script) {
+          return data;
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.warn(`バックエンド長尺台本生成失敗 (${res.status}):`, err);
+      }
+    } catch (e) {
+      console.warn("バックエンド長尺動画通信エラー、直接ブラウザGeminiフォールバックへ移行:", e);
     }
 
-    return await res.json();
+    // 2. ブラウザ直結フォールバック
+    const targetCuts = Math.max(60, Math.min(180, parseInt(targetMinutes, 10) * 8));
+    const prompt = `あなたはYouTubeで100万再生を連発する長尺動画（${targetMinutes}分動画）のプロ脚本家・構成作家です。
+以下の条件に従い、全5章からなる本格的な長尺動画台本と、登場人物の英語指示文一覧表（キャラクターシート）を作成してください。
+
+【テーマ】: ${theme}
+【ジャンル】: ${genre}
+【目標尺】: 約${targetMinutes}分（合計 ${targetCuts} カット程度、1カットあたり3〜8秒程度）
+【参考リサーチメモ】: ${researchNotes || '特になし（あなたの豊富な知識から最新の知見と大ヒット構成を展開してください）'}
+
+【出力フォーマット（厳密なJSON）】:
+必ず以下のJSON形式のみを出力してください（Markdownコードブロック \`\`\`json \`\`\` で囲んでください）。
+{
+  "title": "動画のタイトル",
+  "theme": "${theme}",
+  "genre": "${genre}",
+  "characters": [
+    {
+      "name": "登場人物の名前（例: 佐藤、健一、ナレーター）",
+      "role": "主人公 / 同僚 / 妻 / ナレーター など",
+      "appearance_prompt_en": "英語の外見・服装指示（例: a 28-year-old Japanese male office worker, short black hair, wearing a navy business suit and tie, neat appearance, anime style）"
+    }
+  ],
+  "main_locations": [
+    {
+      "name": "オフィス / 自宅リビング / 街頭 など",
+      "location_prompt_en": "英語の舞台背景指示（例: modern Tokyo office interior, desk with computer, daylight streaming through window）"
+    }
+  ],
+  "chapters": [
+    {
+      "chapter_num": 1,
+      "chapter_title": "章のタイトル",
+      "cuts": [
+        {
+          "cut_id": "Cut_001",
+          "speaker": "話者名（ナレーション または 登場人物名）",
+          "dialogue": "セリフまたはナレーション本文（1場面あたり20〜60文字程度、3〜8秒で話せる長さ）",
+          "description": "ト書き（画面の状況、人物の表情や動作、場所）",
+          "bgm_tag": "cheerful / warm / touching / suspense / frightening / funny / epic / neutral から選択",
+          "camera_effect": "固定 / ズームイン / パン左 / パン右 / 動画(アクション)",
+          "is_video_cut": false
+        }
+      ]
+    }
+  ]
+}`;
+
+    const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+    for (const k of keys) {
+      for (const m of modelsToTry) {
+        try {
+          const directRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(k)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.75, maxOutputTokens: 8192 }
+            })
+          });
+
+          if (directRes.ok) {
+            const data = await directRes.json();
+            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (rawText) {
+              const match = rawText.match(/```(?:json)?\s*(\{.*?\})\s*```/s);
+              const jsonStr = match ? match[1] : rawText;
+              let parsed;
+              try {
+                parsed = JSON.parse(jsonStr);
+              } catch {
+                let clean = jsonStr.trim();
+                if (!clean.endsWith("}")) clean += "\n}]}]}";
+                parsed = JSON.parse(clean);
+              }
+              return { success: true, script: parsed };
+            }
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+
+    throw new Error("長尺動画台本の生成に失敗しました。Gemini APIキーの設定と有効期限・残高をご確認ください。");
   }
 
   /** 管理用: 登録ユーザー一覧取得 */
