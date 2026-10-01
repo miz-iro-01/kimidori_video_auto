@@ -10,6 +10,44 @@ class ApiClient {
       : "https://kimidori-movie-auto-ey3qvn3ruq-an.a.run.app"; // 本番環境のURL
   }
 
+  /**
+   * ユーザーのGemini APIキーで利用可能な最新モデル一覧を動的に解決
+   * 廃止モデルを完全排除し、最新のFlash/Proモデルを優先
+   */
+  async getActiveGeminiModels(apiKey) {
+    const defaultModels = [
+      "gemini-2.5-flash",
+      "gemini-2.5-pro",
+      "gemini-3.5-flash",
+      "gemini-3.8-flash"
+    ];
+    if (!apiKey) return defaultModels;
+
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`, {
+        signal: AbortSignal.timeout(6000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const supported = (data.models || [])
+          .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes("generateContent"))
+          .map(m => (m.name || "").replace("models/", ""));
+
+        if (supported.length > 0) {
+          const priority = ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.5-pro"];
+          const matched = priority.filter(p => supported.includes(p));
+          const flashOthers = supported.filter(s => s.toLowerCase().includes("flash") && !matched.includes(s));
+          const allOthers = supported.filter(s => !matched.includes(s) && !flashOthers.includes(s));
+          const result = [...matched, ...flashOthers, ...allOthers];
+          if (result.length > 0) return result;
+        }
+      }
+    } catch (e) {
+      console.warn("動的モデル取得スキップ（デフォルトを使用）:", e);
+    }
+    return defaultModels;
+  }
+
   /** モードA: 動画生成ジョブの発行 */
   async generateVideo(theme, style, duration, targetChannelId, scriptData = null, autoPost = false, bgmOptions = {}) {
     const geminiKey = window.settingsManager.get("geminiApiKey");
@@ -128,12 +166,8 @@ class ApiClient {
     }
 
     // ブラウザ直接フォールバック
-    const modelsToTry = [
-      "gemini-2.5-flash",
-      "gemini-2.0-flash",
-      "gemini-1.5-flash",
-      "gemini-1.5-flash-8b"
-    ];
+    const modelsToTry = await this.getActiveGeminiModels(geminiKey);
+    let lastErrDetail = "";
 
     const targetSec = parseInt(duration) || 60;
     const prompt = `あなたはYouTubeで100万回再生されるショート動画のプロ脚本家です。
@@ -175,13 +209,17 @@ class ApiClient {
               return { title: theme, scenes: [{ scene_number: 1, narration: rawText, image_prompt: theme }] };
             }
           }
+        } else {
+          const errJson = await directRes.json().catch(() => ({}));
+          lastErrDetail = errJson.error?.message || `HTTP ${directRes.status}`;
         }
       } catch (err) {
+        lastErrDetail = err.message;
         continue;
       }
     }
 
-    throw new Error("台本プレビューの生成に失敗しました。Gemini APIキーをご確認ください。");
+    throw new Error(`台本プレビューの生成に失敗しました: ${lastErrDetail || 'APIキーの有効性をご確認ください'}`);
   }
 
   /** トレンドリサーチの実行（無料API・有料API完全両対応・デュアルエンジン） */
@@ -212,12 +250,7 @@ class ApiClient {
     }
 
     // 2. バックエンドが古い/エラーの場合は、ブラウザから直接Gemini APIを呼び出す（無料・有料API完全両対応）
-    const modelsToTry = [
-      "gemini-2.5-flash",
-      "gemini-2.0-flash",
-      "gemini-1.5-flash",
-      "gemini-1.5-flash-8b"
-    ];
+    const modelsToTry = await this.getActiveGeminiModels(geminiKey);
 
     const prompt = `あなたはYouTubeで100万回再生を連発するトッププロデューサー・トレンドアナリストです。
 テーマ・キーワード「${keyword}」について、現在YouTubeショートやTikTokでバズる動画の傾向を徹底的に分析し、具体的な台本構成と戦略を提案してください。
@@ -253,15 +286,15 @@ class ApiClient {
             };
           }
         } else {
-          const errData = await directRes.text();
-          lastErr = `HTTP ${directRes.status}: ${errData}`;
+          const errData = await directRes.json().catch(() => ({}));
+          lastErr = errData.error?.message || `HTTP ${directRes.status}`;
         }
       } catch (err) {
         lastErr = err.message;
       }
     }
 
-    throw new Error(`リサーチに失敗しました: お手元のGemini APIキーでアクセス可能なモデルが見つかりませんでした (${lastErr})。APIキーをご確認ください。`);
+    throw new Error(`リサーチに失敗しました: ${lastErr || "APIキーをご確認ください"}`);
   }
 
   // ===== BGM管理 API =====
@@ -533,8 +566,9 @@ ${gRule}
   ]
 }`;
 
-    const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+    let lastErrDetail = "";
     for (const k of keys) {
+      const modelsToTry = await this.getActiveGeminiModels(k);
       for (const m of modelsToTry) {
         try {
           const directRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(k)}`, {
@@ -562,14 +596,18 @@ ${gRule}
               }
               return { success: true, script: parsed };
             }
+          } else {
+            const errJson = await directRes.json().catch(() => ({}));
+            lastErrDetail = errJson.error?.message || `HTTP ${directRes.status}`;
           }
         } catch (e) {
+          lastErrDetail = e.message;
           continue;
         }
       }
     }
 
-    throw new Error("Pro版ショート台本の生成に失敗しました。Gemini APIキーの設定と有効期限・残高をご確認ください。");
+    throw new Error(`Pro版ショート台本の生成に失敗しました: ${lastErrDetail || 'APIキーの有効期限または残高をご確認ください'}`);
   }
 
   /** 長尺動画（15〜20分）完全仕様の台本・人物シート生成（バックエンド ＋ 直接Gemini APIフォールバック・全キー両対応） */
@@ -657,8 +695,9 @@ ${gRule}
   ]
 }`;
 
-    const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+    let lastLongErrDetail = "";
     for (const k of keys) {
+      const modelsToTry = await this.getActiveGeminiModels(k);
       for (const m of modelsToTry) {
         try {
           const directRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(k)}`, {
@@ -686,14 +725,18 @@ ${gRule}
               }
               return { success: true, script: parsed };
             }
+          } else {
+            const errJson = await directRes.json().catch(() => ({}));
+            lastLongErrDetail = errJson.error?.message || `HTTP ${directRes.status}`;
           }
         } catch (e) {
+          lastLongErrDetail = e.message;
           continue;
         }
       }
     }
 
-    throw new Error("長尺動画台本の生成に失敗しました。Gemini APIキーの設定と有効期限・残高をご確認ください。");
+    throw new Error(`長尺動画台本の生成に失敗しました: ${lastLongErrDetail || 'APIキーの有効期限または残高をご確認ください'}`);
   }
 
   /** 管理用: 登録ユーザー一覧取得 */

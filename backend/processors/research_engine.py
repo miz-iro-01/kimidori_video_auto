@@ -26,10 +26,9 @@ class ResearchEngine:
         """フォールバックモデルを含めてGemini APIを高信頼性で呼び出す"""
         models_to_try = [
             "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-8b",
-            "gemini-2.0-flash-lite"
+            "gemini-2.5-pro",
+            "gemini-3.5-flash",
+            "gemini-3.8-flash",
         ]
         
         last_error = None

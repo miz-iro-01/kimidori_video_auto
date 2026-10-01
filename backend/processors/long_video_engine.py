@@ -119,17 +119,40 @@ class LongVideoEngine:
   ]
 }}
 """
-        models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"]
+        models_to_try = [
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-3.5-flash",
+            "gemini-3.8-flash",
+        ]
         import aiohttp
 
         async def _call_gemini(key: str) -> str:
             async with aiohttp.ClientSession() as session:
+                active_models = list(models_to_try)
+                try:
+                    async with session.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={key}", timeout=10) as m_resp:
+                        if m_resp.status == 200:
+                            m_data = await m_resp.json()
+                            supported = [
+                                m["name"].replace("models/", "")
+                                for m in m_data.get("models", [])
+                                if "generateContent" in m.get("supportedGenerationMethods", [])
+                            ]
+                            if supported:
+                                prioritized = [m for m in ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.5-pro"] if m in supported]
+                                other_flashes = [m for m in supported if "flash" in m.lower() and m not in prioritized]
+                                other_supported = [m for m in supported if m not in prioritized and m not in other_flashes]
+                                active_models = prioritized + other_flashes + other_supported
+                except Exception as ex:
+                    logger.warning(f"長尺モデル動的取得スキップ: {ex}")
+
                 payload = {
                     "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                     "generationConfig": {"temperature": 0.75, "maxOutputTokens": 8192}
                 }
                 last_err = "No response"
-                for model in models_to_try:
+                for model in active_models:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
                     try:
                         async with session.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=60) as resp:
@@ -138,7 +161,7 @@ class LongVideoEngine:
                                 return data["candidates"][0]["content"]["parts"][0]["text"]
                             else:
                                 err_txt = await resp.text()
-                                last_err = f"Model {model} returned HTTP {resp.status}: {err_txt[:100]}"
+                                last_err = f"Model {model} returned HTTP {resp.status}: {err_txt[:120]}"
                                 logger.warning(f"Long video Gemini API fail: {last_err}")
                     except Exception as ex:
                         last_err = str(ex)

@@ -1815,9 +1815,9 @@ class AppController {
 - MP4 faststart化: FFmpegの \`-movflags +faststart\` を適用し、moov atom（動画メタデータ）を先頭配置。
 - HTTP 206 Partial Content: バックエンドにStarlette FileResponse を採用し、HTML5 <video> のバイト範囲リクエスト（Range）に対応。読み込み待ちゼロで即座にプレビュー再生が可能に。
 
-## 6. デュアルGemini API自動フォールバック
+## 6. デュアルGemini API自動フォールバック＆最新モデル動的検出
 - 無料版APIキー（AQ.A... / AI Studio）と有料版APIキー（AIza... / Cloud Console）の両方に完全対応。
-- レート制限（429）やエラー時も、複数モデル（gemini-2.5-flash / 2.0-flash / 1.5-flash）へシームレスに自動フォールバック。
+- レート制限（429）やエラー時も、最新現行モデル（gemini-3.8-flash / 3.5-flash / 2.5-flash）を動的検出しシームレスに自動フォールバック。
 `;
 
     copyBtn.addEventListener('click', async () => {
