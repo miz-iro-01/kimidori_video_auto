@@ -1525,7 +1525,7 @@ class AppController {
   async loadAdminStats() {
     const serverUrlEl = document.getElementById('adminServerUrl');
     if (serverUrlEl) {
-      serverUrlEl.textContent = window.apiClient ? window.apiClient.baseUrl : "https://kimidori-movie-auto-ey3qvn3ruq-an.a.run.app";
+      serverUrlEl.textContent = window.apiClient ? window.apiClient.baseUrl : "https://kimidori-movie-auto-xfl36wickq-an.a.run.app";
     }
 
     const jobCountEl = document.getElementById('adminJobCount');

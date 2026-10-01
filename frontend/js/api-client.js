@@ -7,7 +7,7 @@ class ApiClient {
   constructor() {
     this.baseUrl = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
       ? `http://${window.location.hostname}:8080` 
-      : "https://kimidori-movie-auto-ey3qvn3ruq-an.a.run.app"; // 本番環境のURL
+      : "https://kimidori-movie-auto-xfl36wickq-an.a.run.app"; // 本番環境のURL
   }
 
   /**
