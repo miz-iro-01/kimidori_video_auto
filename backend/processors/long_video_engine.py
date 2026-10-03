@@ -79,9 +79,12 @@ class LongVideoEngine:
 【テーマ】: {theme}
 【ジャンル】: {genre_spec['label']}（{genre_spec['description']}）
 【目標尺】: 約{target_minutes}分（合計 {target_cuts} カット程度、1カットあたり3〜8秒程度）
-【参考リサーチメモ】: {research_notes or '特になし（あなたの豊富な知識から最新の知見と大ヒット構成を展開してください）'}
+【参考リサーチメモ】: {research_notes or '特になし（一次情報・具体的ファクトに基づいて構成してください）'}
+【禁止事項】：
+・使い古された定番ステレオタイプ（江戸＝うんち換金、都市伝説＝頭の上の余命数字、ビジネス＝45歳佐藤さん等）は【絶対に使用禁止】。
+・登場人物の名前はテーマや舞台にふさわしい独自の自然な名前を動的に命名すること（「佐藤」「健一」等の安易な定番名の流用は禁止）。
 
-【出力フォーマット（厳密なJSON）】:
+【出力フォーマット（厳格なJSON）】:
 必ず以下のJSON形式のみを出力してください（Markdownコードブロック ```json ``` で囲んでください）。
 {{
   "title": "動画のタイトル",
@@ -89,15 +92,15 @@ class LongVideoEngine:
   "genre": "{genre}",
   "characters": [
     {{
-      "name": "登場人物の名前（例: 佐藤、健一、ナレーター）",
-      "role": "主人公 / 同僚 / 妻 / ナレーター など",
-      "appearance_prompt_en": "英語の外見・服装指示（例: a 28-year-old Japanese male office worker, short black hair, wearing a navy business suit and tie, neat appearance, anime style）"
+      "name": "テーマに応じた独自の登場人物名",
+      "role": "主人公 / 同僚 / 専門家 / ナレーター など",
+      "appearance_prompt_en": "英語の外見・服装指示（例: a 32-year-old Japanese male researcher, glasses, wearing modern casual workwear, anime style）"
     }}
   ],
   "main_locations": [
     {{
-      "name": "オフィス / 自宅リビング / 街頭 など",
-      "location_prompt_en": "英語の舞台背景指示（例: modern Tokyo office interior, desk with computer, daylight streaming through window）"
+      "name": "舞台となる具体的な場所（例: 研究所、老舗和菓子工房、近代オフィスなど）",
+      "location_prompt_en": "英語の舞台背景指示（例: bright modern Japanese laboratory with equipment and warm lighting）"
     }}
   ],
   "chapters": [

@@ -105,11 +105,12 @@ class MockDocumentReference:
 
     def update(self, data):
         all_data = self.collection.db._load_data()
-        if self.collection.name in all_data and self.id in all_data[self.collection.name]:
-            all_data[self.collection.name][self.id].update(data)
-            self.collection.db._save_data(all_data)
-        else:
-            raise ValueError(f"Document {self.id} does not exist to update")
+        if self.collection.name not in all_data:
+            all_data[self.collection.name] = {}
+        if self.id not in all_data[self.collection.name]:
+            all_data[self.collection.name][self.id] = {}
+        all_data[self.collection.name][self.id].update(data)
+        self.collection.db._save_data(all_data)
 
     def delete(self):
         all_data = self.collection.db._load_data()
@@ -233,20 +234,25 @@ class FirestoreService:
         logger.info(f"ジョブ作成: {job_id} (モード{mode})")
         return job_id
 
-    def update_job(self, job_id: str, **kwargs) -> None:
+    def update_job(self, job_id: str, updates: Optional[dict] = None, **kwargs) -> None:
         """
         ジョブドキュメントを更新する
 
         Args:
             job_id: ジョブID
-            **kwargs: 更新するフィールド
+            updates: 更新するフィールドの辞書（オプショナル）
+            **kwargs: 更新するフィールド（キーワード引数）
         """
-        kwargs["updated_at"] = datetime.utcnow().isoformat()
-        self.collection.document(job_id).update(kwargs)
+        data = {}
+        if updates and isinstance(updates, dict):
+            data.update(updates)
+        data.update(kwargs)
+        data["updated_at"] = datetime.utcnow().isoformat()
+        self.collection.document(job_id).update(data)
 
-        status = kwargs.get("status", "")
-        progress = kwargs.get("progress", "")
-        message = kwargs.get("message", "")
+        status = data.get("status", "")
+        progress = data.get("progress", "")
+        message = data.get("message", "")
         logger.debug(f"ジョブ更新: {job_id} status={status} progress={progress} {message}")
 
     def get_job(self, job_id: str) -> Optional[dict]:

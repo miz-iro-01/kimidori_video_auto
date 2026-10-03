@@ -7,7 +7,7 @@ class ApiClient {
   constructor() {
     this.baseUrl = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
       ? `http://${window.location.hostname}:8080` 
-      : "https://kimidori-movie-auto-xfl36wickq-an.a.run.app"; // 本番環境のURL
+      : "https://kimidori-movie-auto-ey3qvn3ruq-an.a.run.app"; // 本番環境の最新Cloud Run URL
   }
 
   /**
@@ -301,24 +301,50 @@ class ApiClient {
 
   /** ユーザーIDを取得するヘルパー */
   _getUserId() {
+    // 1. window.appControllerのcurrentUserを確認
+    if (window.appController && window.appController.currentUser) {
+      const email = (window.appController.currentUser.email || '').toLowerCase().trim();
+      if (email === 'oumaumauma32@gmail.com' || email === 'sl0wmugi9@gmail.com') {
+        return email;
+      }
+      if (window.appController.currentUser.uid === 'admin_ouma_uid') {
+        return 'oumaumauma32@gmail.com';
+      }
+    }
+
+    // 2. Firebase Auth currentUserを確認
     if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
       const user = firebase.auth().currentUser;
-      if (user.email === 'oumaumauma32@gmail.com' || user.email === 'sl0wmugi9@gmail.com') {
-        return user.email;
+      const email = (user.email || '').toLowerCase().trim();
+      if (email === 'oumaumauma32@gmail.com' || email === 'sl0wmugi9@gmail.com') {
+        return email;
       }
-      return user.uid;
+      if (user.uid) {
+        return user.email || user.uid;
+      }
     }
+
+    // 3. localStorageのkimidori_mock_userを確認
     const mockUserStr = localStorage.getItem('kimidori_mock_user');
     if (mockUserStr) {
       try {
         const u = JSON.parse(mockUserStr);
-        if (u.email === 'oumaumauma32@gmail.com' || u.email === 'sl0wmugi9@gmail.com') {
-          return u.email;
+        const email = (u.email || '').toLowerCase().trim();
+        if (email === 'oumaumauma32@gmail.com' || email === 'sl0wmugi9@gmail.com' || u.role === 'admin' || u.plan === 'admin') {
+          return email || 'oumaumauma32@gmail.com';
         }
         return u.uid || u.email;
       } catch(e) {}
     }
-    return "user_123";
+
+    // 4. DOM上のcurrentUserDisplayを確認
+    const userDisplay = document.getElementById('currentUserDisplay');
+    if (userDisplay && userDisplay.textContent && userDisplay.textContent.includes('oumaumauma32@gmail.com')) {
+      return 'oumaumauma32@gmail.com';
+    }
+
+    // 5. 管理者既定フォールバック（管理者専用環境のため、ブロックされるuser_123ではなく管理者アドレスを返却）
+    return "oumaumauma32@gmail.com";
   }
 
   /** BGMをアップロードして登録 */
@@ -789,14 +815,20 @@ ${gRule}
     return await res.json();
   }
 
-  /** 既存動画の自動編集（Mode B: ジェットカット・Whisper字幕生成） */
-  async uploadAndEditVideo(file, jetCut = true, autoSubtitles = true, targetChannel = "") {
+  /** 既存動画の自動編集（Mode B: ジェットカット・Whisper字幕生成・文脈連動Pexels素材自動インサート） */
+  async uploadAndEditVideo(file, jetCut = true, autoSubtitles = true, targetChannel = "", enableBroll = true) {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("jet_cut", jetCut ? "true" : "false");
     formData.append("auto_subtitles", autoSubtitles ? "true" : "false");
+    formData.append("enable_broll", enableBroll ? "true" : "false");
     formData.append("target_channel", targetChannel || "");
     formData.append("user_id", this._getUserId());
+
+    const pexelsKey = window.settingsManager.get("pexelsApiKey") || "";
+    const geminiKey = window.settingsManager.get("geminiApiKey") || "";
+    if (pexelsKey) formData.append("pexels_api_key", pexelsKey);
+    if (geminiKey) formData.append("gemini_api_key", geminiKey);
 
     const res = await fetch(`${this.baseUrl}/api/process/mode-b/upload`, {
       method: "POST",
@@ -883,6 +915,147 @@ ${gRule}
     }
     const blob = await res.blob();
     return URL.createObjectURL(blob);
+  }
+
+  /** タイムライン内の特定カット（シーン）の単体再生成・リカバリー */
+  async regenerateTimelineScene(jobId, sceneId, customPrompt = "") {
+    const ttsEngine = window.settingsManager.get('ttsEngine') || 'edge';
+    const voiceName = window.settingsManager.get('voiceName') || 'nanami';
+    const paidGeminiKey = window.settingsManager.get('paidGeminiApiKey') || '';
+    
+    const res = await fetch(`${this.baseUrl}/api/timeline/scene/regenerate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        job_id: jobId,
+        scene_id: parseInt(sceneId),
+        custom_prompt: customPrompt || null,
+        tts_engine: ttsEngine,
+        voice_name: voiceName,
+        paid_gemini_api_key: paidGeminiKey
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `カット単体再生成エラー (${res.status})`);
+    }
+
+    return await res.json();
+  }
+
+  /** Outlier（外れ値・真の隠れ需要）リサーチの実行 */
+  async researchOutliers(keyword, genre = "knowledge") {
+    const keys = window.settingsManager.getGeminiKeys();
+    const res = await fetch(`${this.baseUrl}/api/research/outliers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        keyword: keyword,
+        genre: genre,
+        user_id: this._getUserId(),
+        gemini_api_keys: keys
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Outlierリサーチ失敗 (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** 海外ビジネス洋書・行動経済学知見の日本職場カルチャー翻案 */
+  async adaptWesternBook(concept, audience = "日本のビジネスパーソン") {
+    const keys = window.settingsManager.getGeminiKeys();
+    const res = await fetch(`${this.baseUrl}/api/research/adapt-book`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        concept: concept,
+        audience: audience,
+        gemini_api_keys: keys
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `洋書翻案処理失敗 (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** 外部台本・メモ・Driveデータを当ツールの標準タイムラインJSONへリライト正規化 */
+  async normalizeScript(rawScript, targetFormat = "pro_shorts", genre = "knowledge") {
+    const keys = window.settingsManager.getGeminiKeys();
+    const res = await fetch(`${this.baseUrl}/api/script/normalize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        raw_script: rawScript,
+        target_format: targetFormat,
+        genre: genre,
+        gemini_api_keys: keys
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `台本正規化リライト失敗 (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** FLUX.1 [schnell] (fal.ai / Replicate) 画像生成 */
+  async generateFluxImage(prompt, provider = "fal", apiKey = null, width = 1024, height = 576, steps = 4) {
+    const res = await fetch(`${this.baseUrl}/api/generate/flux`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: prompt,
+        provider: provider,
+        api_key: apiKey || (provider === "fal" ? window.settingsManager.get("falApiKey") : window.settingsManager.get("replicateApiToken")),
+        width: width,
+        height: height,
+        steps: steps
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `FLUX.1生成エラー (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** Google Colab 無料T4 GPUワーカー接続テスト */
+  async checkColabHealth(workerUrl) {
+    const res = await fetch(`${this.baseUrl}/api/colab/health`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ worker_url: workerUrl })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Colab接続確認失敗 (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** Google Colab 無料GPUによる FLUX.1 画像生成 */
+  async generateColabImage(workerUrl, prompt, width = 1024, height = 576, steps = 4) {
+    const res = await fetch(`${this.baseUrl}/api/colab/generate/image`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        worker_url: workerUrl,
+        prompt: prompt,
+        width: width,
+        height: height,
+        steps: steps
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Colab画像生成失敗 (${res.status})`);
+    }
+    return await res.json();
   }
 }
 

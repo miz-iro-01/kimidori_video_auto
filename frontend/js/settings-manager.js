@@ -35,7 +35,12 @@ class SettingsManager {
       coefontId: "",
       youtubeClientId: "",
       youtubeClientSecret: "",
-      youtubeAccounts: [] 
+      youtubeAccounts: [],
+      fluxProvider: "fal",
+      falApiKey: "",
+      replicateApiToken: "",
+      colabWorkerUrl: "",
+      googleDriveSync: false
     };
     this.settings = this.load();
   }

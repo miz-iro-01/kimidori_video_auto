@@ -49,22 +49,61 @@ class ProShortsEngine:
     def __init__(self, key_manager: Optional[KeyManager] = None):
         self.key_manager = key_manager or KeyManager([config.GEMINI_API_KEY] if config.GEMINI_API_KEY else [])
 
-    async def generate_pro_shorts_script(self, theme: str, genre: str = "story") -> Dict[str, Any]:
+    async def generate_pro_shorts_script(
+        self,
+        theme: str,
+        genre: str = "story",
+        research_context: Optional[str] = None,
+        outlier_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
-        60秒尺（全6〜7カット・各8〜10秒・全カット動画演出）の高密度台本をGeminiで生成
+        60秒尺（全6〜7カット・各8〜10秒・全カット動画演出）の高密度台本をGeminiで生成。
+        外部リサーチデータ・隠れ需要インサイトを注入し、安易なステレオタイプ（偏り）を完全排除する。
         """
         genre_info = PRO_SHORTS_GENRES.get(genre, PRO_SHORTS_GENRES["story"])
 
+        # リサーチコンテキストがない場合、Outlierリサーチを自動実行
+        dynamic_research_section = ""
+        if research_context:
+            dynamic_research_section = f"\n【一次情報・リサーチデータ】:\n{research_context}\n"
+        elif outlier_data:
+            insight = outlier_data.get("hidden_demand_insight", "")
+            hooks = outlier_data.get("proven_hooks", [])
+            forbidden = outlier_data.get("forbidden_tropes", [])
+            dynamic_research_section = (
+                f"\n【外れ値（Outlier）ヒット動画から抽出された隠れ需要】:\n{insight}\n"
+                f"【実証済みフック参考】: {', '.join(hooks)}\n"
+                f"【使用禁止ステレオタイプ】: {', '.join(forbidden)}\n"
+            )
+        else:
+            try:
+                from processors.outlier_research_engine import OutlierResearchEngine
+                outlier_engine = OutlierResearchEngine(key_manager=self.key_manager)
+                videos = outlier_engine.search_outlier_topics(theme, limit=4)
+                analysis = await outlier_engine.analyze_and_extract_hidden_angles(theme, videos, genre)
+                insight = analysis.get("hidden_demand_insight", "")
+                hooks = analysis.get("proven_hooks", [])
+                forbidden = analysis.get("forbidden_tropes", [])
+                dynamic_research_section = (
+                    f"\n【外れ値（Outlier）リアルタイム検索結果から抽出された隠れ需要】:\n{insight}\n"
+                    f"【実証済みフック参考】: {', '.join(hooks)}\n"
+                    f"【使用禁止ステレオタイプ】: {', '.join(forbidden)}\n"
+                )
+            except Exception as e:
+                logger.warning(f"自動Outlierリサーチスキップ: {e}")
+
         prompt = f"""
 あなたはYouTube ShortsやTikTokで100万回再生を連発するショート動画のトッププロデューサーです。
-以下のテーマで、厳密に【60秒尺（全6〜7カット、各8〜10秒、合計55〜60秒）】の超高エンゲージメント動画台本を作成してください。
+以下のテーマとリサーチ情報に基づき、厳密に【60秒尺（全6〜7カット、各8〜10秒、合計55〜60秒）】の超高エンゲージメント動画台本を作成してください。
 
 【テーマ】: {theme}
 【ジャンル】: {genre_info['name']}
+{dynamic_research_section}
 【演出ルール】:
 {genre_info['rule']}
 ・全カット【演出】：動画（ダイナミック動画演出）として構成すること。
 ・各カットは8〜10秒程度（全6〜7カットで合計55〜60秒）。
+・【最重要厳守】：定番の使い古されたステレオタイプ（江戸＝うんち換金、都市伝説＝頭の上の余命数字、ビジネス＝45歳佐藤さん等）は【絶対に使用禁止】。一次情報・独自の意外なファクトに基づいて展開すること。
 
 【出力フォーマット（厳格なJSON）】:
 必ず以下のJSON形式のみを出力してください（```json ``` で囲んでください）。

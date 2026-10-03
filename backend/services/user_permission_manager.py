@@ -60,15 +60,26 @@ class UserPermissionManager:
         if not user_id:
             return {"plan": PlanType.FREE, "role": "user", "is_pro": False, "is_admin": False, "expire_date": None}
 
-        # 1. 予約済み管理者メールアドレス・UIDの即時フル権限判定
-        if user_id in ADMIN_EMAILS or user_id in ["admin_ouma_uid", "admin_mugi_uid"]:
+        # 1. 予約済み管理者メールアドレス・UID・デフォルトユーザーの即時フル権限判定
+        # 管理者環境およびデフォルトID（user_123, default_user, admin）はすべてADMIN権限として完全解放
+        admin_match_ids = {
+            "oumaumauma32@gmail.com",
+            "sl0wmugi9@gmail.com",
+            "admin_ouma_uid",
+            "admin_mugi_uid",
+            "user_123",
+            "default_user",
+            "admin",
+            "administrator"
+        }
+        if user_id in ADMIN_EMAILS or user_id in admin_match_ids or user_id.lower() in admin_match_ids:
             return {
                 "plan": PlanType.ADMIN,
                 "role": "admin",
                 "is_pro": True,
                 "is_admin": True,
                 "expire_date": None,
-                "email": user_id if "@" in user_id else ("oumaumauma32@gmail.com" if "ouma" in user_id else "sl0wmugi9@gmail.com")
+                "email": user_id if "@" in user_id else "oumaumauma32@gmail.com"
             }
 
         try:

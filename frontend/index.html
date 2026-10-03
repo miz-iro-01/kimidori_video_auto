@@ -373,7 +373,24 @@
 
           <div class="form-group">
             <label class="form-label">動画のテーマ・題材</label>
-            <input type="text" id="inputProShortsTheme" class="form-input" placeholder="例: 9割が知らない睡眠の真実、スカッとする話、浮世絵の歴史">
+            <div class="input-action-wrapper" style="gap: 0.5rem;">
+              <input type="text" id="inputProShortsTheme" class="form-input" placeholder="例: 9割が知らない睡眠の真実、スカッとする話、浮世絵の歴史">
+              <button class="btn btn-outline" id="btnProShortsOutlier" style="white-space: nowrap; display: flex; align-items: center; gap: 4px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                外れ値・隠れ需要リサーチ
+              </button>
+            </div>
+          </div>
+
+          <!-- Outlierリサーチ結果＆多角的な切り口（Angles）表示エリア -->
+          <div id="proShortsOutlierResultArea" class="guide-box" style="display: none; margin-bottom: 1.25rem; border-left: 3px solid var(--accent-primary); background: rgba(57, 255, 20, 0.04);">
+            <div style="font-weight: 600; font-size: 0.85rem; color: var(--accent-primary); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 6px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              アカウントの人気に依存しない「真の隠れ需要」を発掘しました
+            </div>
+            <p id="proShortsOutlierInsight" style="font-size: 0.82rem; margin: 0 0 0.6rem 0; color: var(--text-primary); line-height: 1.4;"></p>
+            <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem;">多角的な切り口（選択してテーマに適用）:</div>
+            <div id="proShortsAnglesContainer" style="display: flex; flex-direction: column; gap: 0.4rem;"></div>
           </div>
 
           <div class="form-group">
@@ -390,6 +407,36 @@
 
           <div class="action-footer">
             <button class="btn btn-primary btn-large" id="btnRunProShortsScript">1. 60秒カット割り台本を生成</button>
+          </div>
+
+          <!-- 外部台本の直接入力 / ファイルアップロード / Google Drive連携 ＆ 自動リライト -->
+          <div style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px dashed var(--border-color);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                自前の台本を直接入力・アップロード・Drive連携
+              </span>
+              <span class="badge" style="font-size: 0.72rem;">当ツール標準フォーマットへ自動リライト</span>
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+              <label class="btn btn-outline" style="cursor: pointer; padding: 0.4rem 0.8rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 5px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                ファイル選択 (.txt / .md / .json)
+                <input type="file" id="fileImportProShorts" accept=".txt,.md,.json" style="display: none;">
+              </label>
+              <button class="btn btn-outline" id="btnDriveImportProShorts" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 5px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"></path><path d="M7 7h.01"></path></svg>
+                Google Driveから読み込み
+              </button>
+            </div>
+
+            <textarea id="inputRawScriptProShorts" class="form-input form-textarea" rows="4" placeholder="自作の台本、ブログ記事、メモなどを貼り付けてください。自動で当ツールの60秒カット割りJSONへリライト変換します。" style="font-size: 0.82rem; margin-bottom: 0.5rem;"></textarea>
+            
+            <button class="btn btn-outline" id="btnNormalizeProShortsScript" style="width: 100%; border-color: var(--accent-primary); color: var(--accent-primary); display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
+              当ツール標準フォーマット(60秒)へ自動リライト
+            </button>
           </div>
         </div>
 
@@ -440,7 +487,25 @@
 
           <div class="form-group">
             <label class="form-label">動画テーマ・題材または要約したい原案資料</label>
-            <textarea id="inputLongVideoTheme" class="form-input form-textarea" rows="4" placeholder="例: 日本の知られざる歴史、漫画風スカッとドラマ、世界経済の大転換"></textarea>
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-outline" id="btnLongVideoOutlier" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 4px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                外れ値・隠れ需要リサーチ
+              </button>
+              <button class="btn btn-outline" id="btnLongVideoAdaptBook" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 4px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10"></path><path d="M6 10h10"></path></svg>
+                海外ビジネス洋書を日本の職場に翻案
+              </button>
+            </div>
+            <textarea id="inputLongVideoTheme" class="form-input form-textarea" rows="4" placeholder="例: 日本の知られざる歴史、漫画風スカッとドラマ、世界経済の大転換、行動経済学のナッジ理論"></textarea>
+          </div>
+
+          <!-- Outlierリサーチ＆洋書翻案結果表示エリア -->
+          <div id="longVideoOutlierResultArea" class="guide-box" style="display: none; margin-bottom: 1.25rem; border-left: 3px solid var(--accent-primary); background: rgba(57, 255, 20, 0.04);">
+            <div id="longVideoOutlierTitle" style="font-weight: 600; font-size: 0.85rem; color: var(--accent-primary); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 6px;">
+              リサーチ結果
+            </div>
+            <div id="longVideoOutlierContent" style="font-size: 0.82rem; color: var(--text-primary); line-height: 1.5;"></div>
           </div>
 
           <div class="form-grid-2">
@@ -471,6 +536,36 @@
           <div class="action-footer">
             <button class="btn btn-primary btn-large" id="btnRunLongVideoScript">1. 全5章台本＆人物シートを生成</button>
           </div>
+
+          <!-- 自前台本の入力・アップロード・Drive連携 ＆ 自動リライト -->
+          <div style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px dashed var(--border-color);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                自前の台本を直接入力・アップロード・Drive連携
+              </span>
+              <span class="badge" style="font-size: 0.72rem;">当ツール標準フォーマットへ自動リライト</span>
+            </div>
+
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+              <label class="btn btn-outline" style="cursor: pointer; padding: 0.4rem 0.8rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 5px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                ファイル選択 (.txt / .md / .json)
+                <input type="file" id="fileImportLongVideo" accept=".txt,.md,.json" style="display: none;">
+              </label>
+              <button class="btn btn-outline" id="btnDriveImportLongVideo" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 5px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"></path><path d="M7 7h.01"></path></svg>
+                Google Driveから読み込み
+              </button>
+            </div>
+
+            <textarea id="inputRawScriptLongVideo" class="form-input form-textarea" rows="5" placeholder="小説原稿、メモ、ブログ記事、外部台本などを貼り付けてください。自動で当ツールの長尺全5章カット割りJSONへリライト変換します。" style="font-size: 0.82rem; margin-bottom: 0.5rem;"></textarea>
+
+            <button class="btn btn-outline" id="btnNormalizeLongVideoScript" style="width: 100%; border-color: var(--accent-primary); color: var(--accent-primary); display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M3 22v-6h6"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path></svg>
+              当ツール標準フォーマット(15分全5章)へ自動リライト
+            </button>
+          </div>
         </div>
 
         <!-- 台本・登場人物シート確認エリア -->
@@ -485,11 +580,83 @@
         </div>
 
         <!-- リアルタイム進行・素材一覧・プレビューエリア -->
-        <div id="longVideoProgressArea" class="glass-card main-form-card" style="display: none; margin-top: 1.5rem; text-align: center;">
-          <h3 id="longVideoProgressStatusTitle">素材を小分け生成中...</h3>
-          <div class="premium-progress-bar" style="margin: 1.5rem 0;"><div id="longVideoProgressFill" class="premium-progress-fill" style="width: 5%;"></div></div>
-          <p id="longVideoProgressMessage" style="color: var(--text-secondary);">音声を先行測定中...</p>
-          <div id="longVideoResult" style="display: none; margin-top: 1.5rem;">
+        <div id="longVideoProgressArea" class="glass-card main-form-card" style="display: none; margin-top: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;">
+            <h3 id="longVideoProgressStatusTitle" style="margin-bottom: 0;">長尺動画生成タスクを準備中...</h3>
+            <span id="longVideoProgressPercent" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-primary);">0%</span>
+          </div>
+
+          <div class="premium-progress-bar" style="margin: 0.5rem 0 1.5rem 0;">
+            <div id="longVideoProgressFill" class="premium-progress-fill" style="width: 0%;"></div>
+            <div class="premium-progress-glow"></div>
+          </div>
+          <p id="longVideoProgressMessage" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">タイムライン設計書の構築を開始します...</p>
+
+          <!-- ステップ進行バー (Step 1〜5) -->
+          <div class="stepper-container" id="stepperContainerLong">
+            <div class="stepper-progress-line" id="stepperLineLong" style="width: 0%;"></div>
+            <div class="stepper-step active" id="stepLong1">
+              <div class="step-circle">1</div>
+              <div class="step-title">タイムライン設計</div>
+            </div>
+            <div class="stepper-step" id="stepLong2">
+              <div class="step-circle">2</div>
+              <div class="step-title">アセット生成</div>
+            </div>
+            <div class="stepper-step" id="stepLong3">
+              <div class="step-circle">3</div>
+              <div class="step-title">0.3秒演出切り替え</div>
+            </div>
+            <div class="stepper-step" id="stepLong4">
+              <div class="step-circle">4</div>
+              <div class="step-title">BGMクロスフェード</div>
+            </div>
+            <div class="stepper-step" id="stepLong5">
+              <div class="step-circle">5</div>
+              <div class="step-title">最終結合</div>
+            </div>
+          </div>
+
+          <!-- リアルタイムログコンソール -->
+          <div style="margin-top: 1.5rem; text-align: left;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">リアルタイム処理ログ</span>
+              <span style="font-size: 0.75rem; color: var(--accent-primary);" id="logStatusBadgeLong">PROCESSING</span>
+            </div>
+            <div class="exec-log-console" id="execLogsLong" style="max-height: 160px; overflow-y: auto;">
+              <div class="log-line">
+                <span class="log-badge info">STANDBY</span>
+                <span class="log-text">待機中... ジョブが開始されるとリアルタイムログを表示します</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- タイムライン全カットのステータス一覧グリッド（リカバリー機構） -->
+          <div id="scenesGridAreaLong" style="margin-top: 1.5rem; text-align: left; display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">カット別ステータス一覧（リカバリー機構）</span>
+              <span style="font-size: 0.75rem; color: var(--text-muted);" id="scenesCountLabelLong">全 0 カット</span>
+            </div>
+            <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: rgba(0,0,0,0.2);">
+              <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left;">
+                <thead>
+                  <tr style="border-bottom: 1px solid var(--border-color); background: rgba(255,255,255,0.03); color: var(--text-muted);">
+                    <th style="padding: 0.5rem 0.75rem; width: 12%;">Cut #</th>
+                    <th style="padding: 0.5rem 0.75rem; width: 15%;">演出種別</th>
+                    <th style="padding: 0.5rem 0.75rem; width: 18%;">ステータス</th>
+                    <th style="padding: 0.5rem 0.75rem; width: 40%;">セリフ / 情景</th>
+                    <th style="padding: 0.5rem 0.75rem; width: 15%; text-align: center;">再生成</th>
+                  </tr>
+                </thead>
+                <tbody id="scenesTableLong">
+                  <!-- 動的に更新 -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 完成動画プレビュー＆保存パネル -->
+          <div id="longVideoResult" style="display: none; margin-top: 1.5rem; text-align: center;">
             <video id="longVideoPreview" controls playsinline preload="metadata" style="max-width: 100%; max-height: 480px; border-radius: 8px;"></video>
             <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
               <button class="btn btn-outline" id="btnResetLongVideo" style="display: inline-flex; align-items: center; gap: 6px;">
@@ -539,6 +706,24 @@
               </div>
             </div>
 
+            <div class="form-grid-1" style="margin-top: 1rem;">
+              <div class="toggle-group">
+                <label class="toggle-label">
+                  <div>
+                    <span class="toggle-text" style="display: flex; align-items: center; gap: 8px;">
+                      文脈・感情連動型 Pexels Bロール自動インサート
+                      <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: var(--accent-primary); border: 1px solid var(--accent-primary);">AI最適化</span>
+                    </span>
+                    <span style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-top: 2px;">
+                      Whisper文字起こしをGeminiで解析し、感情転換点にHD動画/画像素材を自動でディゾルブ挿入します
+                    </span>
+                  </div>
+                  <input type="checkbox" id="checkBroll" checked>
+                  <span class="toggle-switch"></span>
+                </label>
+              </div>
+            </div>
+
             <div class="form-group" style="margin-top: 1.5rem;">
               <label class="form-label">YouTube 投稿先</label>
               <div class="custom-select-wrapper">
@@ -556,11 +741,54 @@
             </div>
           </form>
 
-          <div class="execution-panel" id="execPanelB">
-            <h3 class="exec-title" id="execTitleB">処理を準備中...</h3>
+          <div class="execution-panel" id="execPanelB" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem;">
+              <h3 class="exec-title" id="execTitleB" style="margin-bottom: 0;">処理を準備中...</h3>
+              <span id="execPercentB" style="font-size: 1.1rem; font-weight: 700; color: var(--accent-primary);">0%</span>
+            </div>
+
             <div class="premium-progress-bar">
-              <div class="premium-progress-fill" id="execBarB"></div>
+              <div class="premium-progress-fill" id="execBarB" style="width: 0%;"></div>
               <div class="premium-progress-glow" id="execGlowB"></div>
+            </div>
+
+            <!-- ステップ進行バー (Step 1〜5) -->
+            <div class="stepper-container" id="stepperContainerB">
+              <div class="stepper-progress-line" id="stepperLineB" style="width: 0%;"></div>
+              <div class="stepper-step active" id="stepB1">
+                <div class="step-circle">1</div>
+                <div class="step-title">アップロード</div>
+              </div>
+              <div class="stepper-step" id="stepB2">
+                <div class="step-circle">2</div>
+                <div class="step-title">文字起こし</div>
+              </div>
+              <div class="stepper-step" id="stepB3">
+                <div class="step-circle">3</div>
+                <div class="step-title">ジェットカット</div>
+              </div>
+              <div class="stepper-step" id="stepB4">
+                <div class="step-circle">4</div>
+                <div class="step-title">文脈・Pexels</div>
+              </div>
+              <div class="stepper-step" id="stepB5">
+                <div class="step-circle">5</div>
+                <div class="step-title">字幕レンダリング</div>
+              </div>
+            </div>
+
+            <!-- リアルタイムログコンソール -->
+            <div style="margin-top: 1.5rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">リアルタイム処理ログ</span>
+                <span style="font-size: 0.75rem; color: var(--accent-primary);">AUTO STREAMING</span>
+              </div>
+              <div class="exec-log-console" id="execLogsB">
+                <div class="log-line">
+                  <span class="log-badge info">STANDBY</span>
+                  <span class="log-text">待機中... 動画ファイルがドロップされるとリアルタイムログを開始します</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -899,6 +1127,76 @@
             </div>
 
             <button class="btn btn-primary" id="btnSaveVoice" style="width: 100%; margin-top: 1rem;">ナレーション設定を保存</button>
+          </div>
+
+          <!-- FLUX.1 [schnell] 低コスト画像生成 (fal.ai / Replicate) -->
+          <div class="glass-card">
+            <div class="card-header-icon" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <h3>FLUX.1 [schnell] (高速・安価API)</h3>
+              </div>
+              <span class="badge" style="background: rgba(57, 255, 20, 0.15); color: var(--accent-primary); padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">1枚 約0.003ドル</span>
+            </div>
+            <p class="card-desc">1〜4ステップで超高品質な画像を生成する最速・最安の画像モデルです。fal.ai または Replicate のAPIキーを設定して使用します。</p>
+
+            <div class="form-group" style="margin-top: 1rem;">
+              <label class="form-label">プロバイダー選択</label>
+              <select id="setFluxProvider" class="form-input form-select">
+                <option value="fal">fal.ai（推奨・超高速）</option>
+                <option value="replicate">Replicate</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="groupFalKey">
+              <label class="form-label">fal.ai API Key</label>
+              <div class="input-action-wrapper">
+                <input type="password" id="setFalApiKey" class="form-input" placeholder="Key ID:Secret">
+                <button class="btn btn-outline" id="btnSaveFalKey">保存</button>
+              </div>
+            </div>
+
+            <div class="form-group" id="groupReplicateKey" style="display: none;">
+              <label class="form-label">Replicate API Token</label>
+              <div class="input-action-wrapper">
+                <input type="password" id="setReplicateKey" class="form-input" placeholder="r8_...">
+                <button class="btn btn-outline" id="btnSaveReplicateKey">保存</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Google Colab 無料T4 GPU API ワーカー -->
+          <div class="glass-card">
+            <div class="card-header-icon" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #00d2ff;"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h10v10H7z"/><path d="M10 10h4v4h-4z"/></svg>
+                <h3>Google Colab 無料T4 GPUワーカー</h3>
+              </div>
+              <span class="badge" style="background: rgba(0, 210, 255, 0.15); color: #00d2ff; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">完全無料 / 負荷ゼロ</span>
+            </div>
+            <p class="card-desc">Google Colabの無料枠（T4 GPU / 16GB VRAM）を活用し、完全無料で FLUX.1 [schnell] 画像生成や動画生成を実行します。</p>
+
+            <div class="guide-box" style="border-left: 3px solid #00d2ff; background: rgba(0, 210, 255, 0.03);">
+              <p style="font-size: 0.82rem; color: var(--text-primary); margin: 0; line-height: 1.5;">
+                <strong>ワンクリック起動手順:</strong><br>
+                1. Google Colabで「T4 GPU」を選択し、付属のNotebookを実行。<br>
+                2. 出力された公開URL（https://xxxx.trycloudflare.com 等）を下に貼り付けて「接続テスト」を押してください。<br>
+                <a href="/colab_worker/kimidori_colab_gpu_worker.ipynb" download="kimidori_colab_gpu_worker.ipynb" style="color: #00d2ff; text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                  Colab Notebook (.ipynb) をダウンロード
+                </a>
+              </p>
+            </div>
+
+            <div class="form-group" style="margin-top: 1rem;">
+              <label class="form-label">Colab ワーカー公開URL</label>
+              <div class="input-action-wrapper">
+                <input type="text" id="setColabWorkerUrl" class="form-input" placeholder="https://xxxx.trycloudflare.com">
+                <button class="btn btn-outline" id="btnTestColab" style="white-space: nowrap;">接続テスト</button>
+                <button class="btn btn-primary" id="btnSaveColab">保存</button>
+              </div>
+              <div id="colabStatusMsg" style="font-size: 0.8rem; margin-top: 0.5rem; color: var(--text-secondary);">ステータス: 未接続</div>
+            </div>
           </div>
 
         </div>

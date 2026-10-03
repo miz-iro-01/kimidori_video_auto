@@ -26,6 +26,28 @@ class BatchAssetGenerator:
         self.cache_manager = cache_manager or AssetCacheManager()
         self.tts_manager = TTSManager()
 
+    def _get_font(self, size: int) -> ImageFont.ImageFont:
+        """プラットフォームに応じた最適な日本語対応フォントを取得"""
+        candidates = [
+            getattr(config, "SUBTITLE_FONT", None),
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "C:\\Windows\\Fonts\\meiryo.ttc",
+            "C:\\Windows\\Fonts\\YuGothM.ttc",
+            "arial.ttf",
+        ]
+        for font_path in candidates:
+            if font_path and Path(str(font_path)).exists():
+                try:
+                    return ImageFont.truetype(str(font_path), size=size)
+                except Exception:
+                    pass
+        try:
+            return ImageFont.truetype("arial.ttf", size=size)
+        except Exception:
+            return ImageFont.load_default()
+
     def _create_manga_bubble_overlay(
         self,
         width: int,
@@ -72,10 +94,7 @@ class BatchAssetGenerator:
                 fill=(40, 120, 220, 255)
             )
             # スピーカー名描画
-            try:
-                font_tag = ImageFont.truetype("arial.ttf", size=int(tag_h * 0.6))
-            except Exception:
-                font_tag = ImageFont.load_default()
+            font_tag = self._get_font(size=int(tag_h * 0.6))
             draw.text((tag_x0 + 12, tag_y0 + 4), speaker, fill=(255, 255, 255, 255), font=font_tag)
 
         # セリフテキストの折り返し処理
@@ -85,10 +104,7 @@ class BatchAssetGenerator:
 
         # 本文描画
         text_content = "\n".join(lines[:4])  # 最大4行
-        try:
-            font_main = ImageFont.truetype("arial.ttf", size=int(height * 0.038))
-        except Exception:
-            font_main = ImageFont.load_default()
+        font_main = self._get_font(size=int(height * 0.038))
 
         draw.text(
             (bubble_x0 + 25, bubble_y0 + 25),
@@ -111,11 +127,7 @@ class BatchAssetGenerator:
         for i in range(0, width, 40):
             draw.line([(i, 0), (width - i, height)], fill=(45, 50, 65), width=2)
 
-        try:
-            font = ImageFont.truetype("arial.ttf", size=int(height * 0.04))
-        except Exception:
-            font = ImageFont.load_default()
-
+        font = self._get_font(size=int(height * 0.04))
         text_str = f"Scene #{scene_num}\nPrompt: {prompt[:30]}..."
         draw.text((width // 10, height // 3), text_str, fill=(220, 220, 230), font=font)
         return img
@@ -127,7 +139,9 @@ class BatchAssetGenerator:
         tts_engine: str = "edge",
         voice_name: Optional[str] = None,
         image_size: Tuple[int, int] = (1080, 1920),
-        tts_params: Optional[Dict[str, Any]] = None
+        tts_params: Optional[Dict[str, Any]] = None,
+        paid_gemini_api_key: Optional[str] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         """
         1シーン分の音声・ベース画像・吹き出しオーバーレイ画像を生成（キャッシュ優先）
@@ -228,7 +242,9 @@ class BatchAssetGenerator:
         tts_engine: str = "edge",
         voice_name: Optional[str] = None,
         image_size: Tuple[int, int] = (1080, 1920),
-        tts_params: Optional[Dict[str, Any]] = None
+        tts_params: Optional[Dict[str, Any]] = None,
+        paid_gemini_api_key: Optional[str] = None,
+        **kwargs
     ) -> List[Dict[str, Any]]:
         """
         全シーンのアセットをバッチ生成するメインメソッド
@@ -246,7 +262,8 @@ class BatchAssetGenerator:
                 tts_engine=tts_engine,
                 voice_name=voice_name,
                 image_size=image_size,
-                tts_params=tts_params
+                tts_params=tts_params,
+                paid_gemini_api_key=paid_gemini_api_key
             )
             for scene in scenes
         ]

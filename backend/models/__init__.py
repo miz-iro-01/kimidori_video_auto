@@ -1,0 +1,3 @@
+"""
+KIMIDORI Movie Auto - データモデルパッケージ
+"""
