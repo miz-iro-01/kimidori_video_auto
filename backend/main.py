@@ -171,6 +171,10 @@ class MangaVideoGenerateRequest(BaseModel):
     auto_post: bool = Field(False, description="完全自動投稿フラグ")
     # TTS Parameters
     tts_params: Optional[Dict[str, Any]] = Field(None, description="詳細なTTS設定パラメータ")
+    colab_worker_url: Optional[str] = Field("", description="Google Colab 無料T4 GPUワーカーURL")
+    fal_api_key: Optional[str] = Field("", description="fal.ai FLUX APIキー")
+    replicate_api_token: Optional[str] = Field("", description="Replicate APIトークン")
+    pexels_api_key: Optional[str] = Field("", description="Pexels APIキー")
 
 
 class TTSPreviewRequest(BaseModel):
@@ -242,7 +246,11 @@ async def run_manga_video_job(
     bgm_map: dict,
     watermark_required: bool,
     paid_gemini_api_key: str = "",
-    tts_params: Optional[dict] = None
+    tts_params: Optional[dict] = None,
+    colab_worker_url: Optional[str] = "",
+    fal_api_key: Optional[str] = "",
+    replicate_api_token: Optional[str] = "",
+    pexels_api_key: Optional[str] = ""
 ):
     """長尺漫画動画・Pro版ショート動画の統合バックグラウンド合成タスク（タイムラインJSON & コスト最適化）"""
     try:
@@ -257,8 +265,13 @@ async def run_manga_video_job(
             watermark_required=watermark_required,
             paid_gemini_api_key=paid_gemini_api_key,
             tts_params=tts_params,
-            firestore_client=firestore
+            firestore_client=firestore,
+            colab_worker_url=colab_worker_url,
+            fal_api_key=fal_api_key,
+            replicate_api_token=replicate_api_token,
+            pexels_api_key=pexels_api_key
         )
+
     except Exception as e:
         logger.error(f"Manga video job {job_id} failed: {e}\n{traceback.format_exc()}")
         firestore.update_job(
@@ -1309,9 +1322,14 @@ async def generate_manga_video_endpoint(req: MangaVideoGenerateRequest, backgrou
         bgm_map=req.bgm_map,
         watermark_required=access["watermark_required"],
         paid_gemini_api_key=req.paid_gemini_api_key or "",
-        tts_params=req.tts_params
+        tts_params=req.tts_params,
+        colab_worker_url=req.colab_worker_url or "",
+        fal_api_key=req.fal_api_key or "",
+        replicate_api_token=req.replicate_api_token or "",
+        pexels_api_key=req.pexels_api_key or ""
     )
     return {"job_id": job_id, "status": "PROCESSING"}
+
 
 
 class SceneRegenerateRequest(BaseModel):
@@ -1754,7 +1772,7 @@ async def preview_tts(req: TTSPreviewRequest):
         preview_dir.mkdir(parents=True, exist_ok=True)
         preview_file = preview_dir / f"preview_{int(datetime.utcnow().timestamp() * 1000)}.mp3"
 
-        await tts_mgr.synthesize_single_text(text, preview_file)
+        await tts_mgr.synthesize_single_text(text, preview_file, is_preview=True)
 
         if not preview_file.exists() or preview_file.stat().st_size == 0:
             raise RuntimeError("音声ファイルの生成に失敗しました")

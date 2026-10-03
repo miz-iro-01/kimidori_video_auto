@@ -493,8 +493,13 @@ class ApiClient {
       tts_engine: ttsEngine,
       voice_name: voiceName,
       bgm_map: bgmMap,
-      tts_params: ttsParams
+      tts_params: ttsParams,
+      colab_worker_url: window.settingsManager.get("colabWorkerUrl") || "",
+      fal_api_key: window.settingsManager.get("falApiKey") || "",
+      replicate_api_token: window.settingsManager.get("replicateApiToken") || "",
+      pexels_api_key: window.settingsManager.get("pexelsApiKey") || ""
     };
+
 
     const res = await fetch(`${this.baseUrl}/api/manga/generate`, {
       method: "POST",

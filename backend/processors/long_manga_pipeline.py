@@ -169,7 +169,11 @@ async def run_long_manga_pipeline(
     watermark_required: bool,
     paid_gemini_api_key: str = "",
     tts_params: Optional[Dict[str, Any]] = None,
-    firestore_client: Any = None
+    firestore_client: Any = None,
+    colab_worker_url: Optional[str] = "",
+    fal_api_key: Optional[str] = "",
+    replicate_api_token: Optional[str] = "",
+    pexels_api_key: Optional[str] = ""
 ) -> str:
     """
     長尺漫画動画の全体生成パイプライン実行メイン関数。
@@ -268,21 +272,28 @@ async def run_long_manga_pipeline(
                     tts_engine=tts_engine,
                     voice_name=voice_name,
                     tts_params=tts_params,
-                    paid_gemini_api_key=paid_gemini_api_key
+                    paid_gemini_api_key=paid_gemini_api_key,
+                    colab_worker_url=colab_worker_url,
+                    fal_api_key=fal_api_key,
+                    replicate_api_token=replicate_api_token,
+                    pexels_api_key=pexels_api_key,
+                    characters=project.characters,
+                    genre=project.genre
                 )
                 scene.status = "generated"
                 scene_assets.append(asset_res)
             except Exception as scene_err:
                 logger.warning(f"Scene {scene_num} asset generation warning: {scene_err}")
                 scene.status = "failed"
-                # 安全なフォールバック
-                pil_ph = batch_gen._generate_placeholder_image(1080, 1920, scene.description, scene_num)
+                # 安全な美麗フォールバック
+                pil_ph = batch_gen._generate_artistic_backdrop(1080, 1920, scene.description, scene_num, genre=project.genre)
                 ph_path = assets_dir / f"bg_{scene_num:03d}.png"
                 pil_ph.save(ph_path, "PNG")
 
-                pil_ov = batch_gen._create_manga_bubble_overlay(1080, 1920, scene.speaker, scene.narration)
+                pil_ov = batch_gen._create_manga_bubble_overlay(1080, 1920, scene.speaker, scene.narration, genre=project.genre)
                 ov_path = assets_dir / f"overlay_{scene_num:03d}.png"
                 pil_ov.save(ov_path, "PNG")
+
 
                 scene_assets.append({
                     "scene_number": scene_num,

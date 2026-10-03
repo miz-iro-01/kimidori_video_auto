@@ -299,59 +299,9 @@
             </div>
 
           </div>
-
-          <!-- 簡易ショート動画 高精度化の仕組み・技術仕様まとめ（ワンクリックコピー機能） -->
-          <div class="glass-card" style="margin-top: 2rem; border: 1px solid rgba(0, 240, 255, 0.3); background: rgba(0, 240, 255, 0.02);">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 0.75rem;">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                <h3 style="margin: 0; font-size: 1.05rem; color: var(--accent-primary);">簡易ショート動画 高精度化の仕組み・技術仕様まとめ</h3>
-              </div>
-              <button class="btn btn-outline" id="btnCopyShortsTechSummary" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 0.45rem 0.9rem; border-color: var(--accent-primary); color: var(--accent-primary); cursor: pointer;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                まとめ内容をコピー
-              </button>
-            </div>
-            <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem; line-height: 1.5;">
-              テロップの自然改行（最大14文字制限・最大3行分割）、文脈スコアリング、黒フチ描画、HTTP 206部分ストリーミングによる超高速プレビューなど、本ツールで達成した高精度化の仕様全容です。ボタン一つでクリップボードにコピーできます。
-            </p>
-            <details class="guide-accordion" open style="border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; background: rgba(0,0,0,0.25);">
-              <summary style="font-size: 0.85rem; font-weight: bold; cursor: pointer; color: var(--accent-secondary); display: flex; align-items: center; gap: 0.5rem; outline: none; list-style: none;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                <span>技術仕様・設計概要（クリックで開閉）</span>
-              </summary>
-              <div id="shortsTechSummaryContent" style="font-size: 0.82rem; line-height: 1.65; color: var(--text-secondary); margin-top: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
-                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
-                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">1. 自然言語解析と文脈分割</strong>
-                    単語の途中切断（「気/遣う」「先/生は」等）を完全撲滅。句読点（100点）、カギ括弧（75点）、助詞・接続詞（25〜45点）の重み付けで、意味が通る自然な文節単位で自動改行。
-                  </div>
-                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
-                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">2. 厳格な行頭・行末禁則処理</strong>
-                    閉じ括弧「」や句読点が次の行頭に来る「ぶら下がり」や、1〜2文字だけの孤立行（「は」「。」等）を自動検知して前後の行にバランスよく再配分。
-                  </div>
-                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
-                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">3. 横幅14文字 × 最大3行カード分割</strong>
-                    スマホ縦画面の1行を最大14文字・最大3行に厳格制限。セリフ量が多い場合も同じ背景尺の中で1〜3枚のテロップカードに時間等分分割し流れるように演出。
-                  </div>
-                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
-                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">4. 視認性重視のデザインと余白</strong>
-                    62px太字フォント＋5pxのアンチエイリアス黒フチを採用。画面左右に106pxのセーフティマージンを確保し、スマホ端やSNS UIに隠れない設計。
-                  </div>
-                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
-                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">5. MP4 faststart & HTTP 206 ストリーミング</strong>
-                    動画先頭にmoovアトムを配置（-movflags +faststart）し、Starlette FileResponse によるバイト範囲リクエストに対応。プレビュー再生の待ち時間をゼロ化。
-                  </div>
-                  <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 6px; border-left: 3px solid var(--accent-primary);">
-                    <strong style="color: var(--text-primary); display: block; margin-bottom: 0.3rem;">6. デュアルGemini API自動フォールバック</strong>
-                    無料版API（AQ.A...）と有料版API（AIza...）の両方に完全対応。エラー時も複数モデルへの自動フォールバックで生成を確実に完遂。
-                  </div>
-                </div>
-              </div>
-            </details>
-          </div>
         </div>
       </section>
+
 
       <!-- ==================== Pro版ショート動画 (60秒・全カット動画演出) ==================== -->
       <section class="view-section" id="view-pro-shorts" style="display: none;">

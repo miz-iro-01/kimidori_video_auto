@@ -1965,57 +1965,11 @@ class AppController {
     }
   }
 
-  // 簡易ショート動画 高精度化まとめコピー機能
+  // 簡易ショート動画 高精度化まとめコピー機能（削除済み）
   initShortsSummaryHandler() {
-    const copyBtn = document.getElementById('btnCopyShortsTechSummary');
-    if (!copyBtn) return;
-
-    const summaryText = `# 簡易ショート動画 高精度化・プロンプト＆映像設計仕様まとめ
-
-## 1. 日本語形態素・自然文脈分割 (Semantic Segmentation)
-- 課題: 固定文字数（14文字）の機械的改行により、「気 / 遣う」「先 / 生は」等の単語途中切断が発生していた。
-- 解決策: 文末句読点（100点）、カギ括弧（75点）、2文字助詞（45点）、1文字助詞（25点）の文法スコアリングを実装し、意味が通る自然な文節単位で自動改行。
-
-## 2. 厳格な行頭・行末禁則処理 (Kinsoku Shori)
-- 行頭禁則: 閉じ括弧（」』）)）や句読点（。、？！?!）が行頭にぶら下がることを完全禁止。
-- 行末禁則: 開き括弧（「『（(）が行末に来ることを禁止。
-- 孤立行撲滅: 1〜2文字だけの「ぶら下がり行（例: 「は」「。」）」を検知し、前後の行と自然に結合・再配分。
-
-## 3. 横幅14文字制限 × 最大3行カード時間等分分割
-- スマホ縦画面（1080×1920）において、1行を最大14文字・最大3行に厳格制限。
-- 長いセリフがある場合、同じ背景画像の尺の中で1〜3枚のテロップカードに時間等分分割（カード1 → カード2 → カード3）し、テンポよく切り替えて表示。
-
-## 4. 映像デザイン＆テロップ視認性最適化
-- フォント: Noto Sans JP（太字 62px）
-- 輪郭線: 高精細な黒ストローク（幅 5px）による視認性向上。
-- セーフティマージン: 左右に106pxずつの余白を確保し、スマホ画面端やSNS UIとの文字被りを防止。
-- 動的演出: ケンバーンズ効果（ズーム・パン）と滑らかなフェードトランジションを適用。
-
-## 5. 超高速プレビュー＆ストリーミング再生
-- MP4 faststart化: FFmpegの \`-movflags +faststart\` を適用し、moov atom（動画メタデータ）を先頭配置。
-- HTTP 206 Partial Content: バックエンドにStarlette FileResponse を採用し、HTML5 <video> のバイト範囲リクエスト（Range）に対応。読み込み待ちゼロで即座にプレビュー再生が可能に。
-
-## 6. デュアルGemini API自動フォールバック＆最新モデル動的検出
-- 無料版APIキー（AQ.A... / AI Studio）と有料版APIキー（AIza... / Cloud Console）の両方に完全対応。
-- レート制限（429）やエラー時も、最新現行モデル（gemini-3.8-flash / 3.5-flash / 2.5-flash）を動的検出しシームレスに自動フォールバック。
-`;
-
-    copyBtn.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(summaryText);
-        this.showToast("簡易ショート動画の高精度化まとめをコピーしました！", "success");
-      } catch (err) {
-        // フォールバック
-        const ta = document.createElement('textarea');
-        ta.value = summaryText;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        this.showToast("簡易ショート動画の高精度化まとめをコピーしました！", "success");
-      }
-    });
+    // 開発技術サマリーはユーザー向け画面から完全撤去済み
   }
+
 
   // --- トースト通知 ---
   showToast(message, type = "info") {

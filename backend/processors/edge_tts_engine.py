@@ -13,13 +13,13 @@ logger = logging.getLogger(__name__)
 
 # 利用可能な日本語音声一覧
 JAPANESE_VOICES = {
-    "nanami": {"id": "ja-JP-NanamiNeural", "label": "七海（女性・標準）", "gender": "female"},
-    "keita": {"id": "ja-JP-KeitaNeural", "label": "慶太（男性・標準）", "gender": "male"},
-    "aoi": {"id": "ja-JP-AoiNeural", "label": "あおい（女性・若い）", "gender": "female"},
-    "daichi": {"id": "ja-JP-DaichiNeural", "label": "大地（男性・落ち着き）", "gender": "male"},
-    "mayu": {"id": "ja-JP-MayuNeural", "label": "まゆ（女性・明るい）", "gender": "female"},
-    "naoki": {"id": "ja-JP-NaokiNeural", "label": "直樹（男性・若い）", "gender": "male"},
-    "shiori": {"id": "ja-JP-ShioriNeural", "label": "しおり（女性・柔らか）", "gender": "female"},
+    "nanami": {"id": "ja-JP-NanamiNeural", "label": "七海（女性・標準）", "gender": "female", "pitch": "+0Hz", "rate_offset": 0},
+    "keita": {"id": "ja-JP-KeitaNeural", "label": "慶太（男性・標準）", "gender": "male", "pitch": "+0Hz", "rate_offset": 0},
+    "aoi": {"id": "ja-JP-NanamiNeural", "label": "あおい（女性・明るい高め）", "gender": "female", "pitch": "+9Hz", "rate_offset": 4},
+    "daichi": {"id": "ja-JP-KeitaNeural", "label": "大地（男性・落ち着き低音）", "gender": "male", "pitch": "-9Hz", "rate_offset": -4},
+    "mayu": {"id": "ja-JP-NanamiNeural", "label": "まゆ（女性・アニメ調・元気）", "gender": "female", "pitch": "+15Hz", "rate_offset": 7},
+    "naoki": {"id": "ja-JP-KeitaNeural", "label": "直樹（男性・若々しい青年）", "gender": "male", "pitch": "+8Hz", "rate_offset": 4},
+    "shiori": {"id": "ja-JP-NanamiNeural", "label": "しおり（女性・落ち着きお姉さん）", "gender": "female", "pitch": "-5Hz", "rate_offset": -4},
 }
 
 DEFAULT_VOICE = "nanami"
@@ -33,7 +33,7 @@ class EdgeTTSEngine:
     - APIキー不要
     - 課金なし（Microsoft Edge と同じ音声エンジン）
     - 高品質な Neural 音声
-    - 日本語対応（7種類以上の声）
+    - 日本語対応（ピッチ・速度モジュレーションによる7キャラボイス）
     """
 
     def __init__(self, voice_name: str = DEFAULT_VOICE, speaking_rate: float = 1.0):
@@ -44,12 +44,14 @@ class EdgeTTSEngine:
         """
         voice_info = JAPANESE_VOICES.get(voice_name, JAPANESE_VOICES[DEFAULT_VOICE])
         self.voice_id = voice_info["id"]
-        self.rate = self._format_rate(speaking_rate)
+        self.pitch = voice_info.get("pitch", "+0Hz")
+        rate_offset = voice_info.get("rate_offset", 0)
+        self.rate = self._format_rate(speaking_rate, rate_offset)
 
     @staticmethod
-    def _format_rate(rate: float) -> str:
+    def _format_rate(rate: float, offset_percent: int = 0) -> str:
         """速度をEdge TTSの形式に変換（例: +20%, -10%）"""
-        percent = int((rate - 1.0) * 100)
+        percent = int((rate - 1.0) * 100) + offset_percent
         if percent >= 0:
             return f"+{percent}%"
         return f"{percent}%"
@@ -71,11 +73,13 @@ class EdgeTTSEngine:
             text=text,
             voice=self.voice_id,
             rate=self.rate,
+            pitch=self.pitch,
         )
 
         await communicate.save(str(output_path))
-        logger.info(f"Edge TTS 音声生成完了: {output_path.name}")
+        logger.info(f"Edge TTS 音声生成完了: {output_path.name} (voice={self.voice_id}, pitch={self.pitch})")
         return output_path
+
 
     async def synthesize_all_scenes(
         self, scenes: list[dict], job_dir: Path

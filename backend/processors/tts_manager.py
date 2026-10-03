@@ -108,10 +108,10 @@ class TTSManager:
         self.polly_voice = polly_voice or "Mizuki"
 
         self.voicevox_url = voicevox_url.rstrip("/") if voicevox_url else "http://localhost:50021"
-        self.voicevox_speaker = int(voicevox_speaker) if str(voicevox_speaker).isdigit() else 3
+        self.voicevox_speaker = int(self.voice_name) if str(self.voice_name).isdigit() else (int(voicevox_speaker) if str(voicevox_speaker).isdigit() else 3)
 
         self.sharevox_url = sharevox_url.rstrip("/") if sharevox_url else "http://localhost:50025"
-        self.sharevox_speaker = int(sharevox_speaker) if str(sharevox_speaker).isdigit() else 0
+        self.sharevox_speaker = int(self.voice_name) if str(self.voice_name).isdigit() else (int(sharevox_speaker) if str(sharevox_speaker).isdigit() else 0)
 
         self.coeiroink_url = coeiroink_url.rstrip("/") if coeiroink_url else "http://localhost:50031"
         self.coeiroink_speaker = coeiroink_speaker
@@ -145,14 +145,14 @@ class TTSManager:
                 continue
 
             output_path = audio_dir / f"scene_{i:03d}.mp3"
-            await self.synthesize_single_text(narration, output_path)
+            await self.synthesize_single_text(narration, output_path, is_preview=False)
             audio_paths.append(output_path)
 
         logger.info(f"全{len(audio_paths)}シーンの音声合成完了 (エンジン: {self.engine})")
         return audio_paths
 
-    async def synthesize_single_text(self, text: str, output_path: Path) -> Path:
-        """単一のテキストを音声ファイルに合成する（自動フォールバック付き）"""
+    async def synthesize_single_text(self, text: str, output_path: Path, is_preview: bool = False) -> Path:
+        """単一のテキストを音声ファイルに合成する（試聴時は明確なエラー通知、本番合成時は自動フォールバック）"""
         output_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             if self.engine == "gtts":
@@ -185,6 +185,10 @@ class TTSManager:
                 # デフォルト: Edge TTS (完全無料)
                 await self.edge_engine.synthesize_scene(text, output_path)
         except Exception as e:
+            if is_preview:
+                logger.error(f"TTS試聴プレビュー失敗 ({self.engine}): {e}")
+                raise RuntimeError(f"{self.engine.upper()} での音声生成に失敗しました: {e}")
+
             logger.error(f"TTS合成エラー ({self.engine}): {e}")
             logger.warning("完全無料の Edge TTS へ自動フォールバックします...")
             try:
@@ -192,6 +196,7 @@ class TTSManager:
             except Exception as fb_err:
                 logger.error(f"Edge TTS フォールバック失敗: {fb_err}. gTTS へ緊急フォールバック...")
                 await self._synthesize_gtts(text, output_path)
+
 
         return output_path
 
