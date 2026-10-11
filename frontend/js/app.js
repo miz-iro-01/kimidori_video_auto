@@ -6,16 +6,26 @@
 class AppController {
   constructor() {
     this.adminUsers = [];
+    this.proShortsRefImages = [];
+    this.longVideoRefImages = [];
+    this.currentProShortsJobId = localStorage.getItem('kimidori_last_pro_shorts_job') || null;
+    this.currentLongVideoJobId = localStorage.getItem('kimidori_last_long_video_job') || null;
+    this.editorState = null;
+    this.editorJobId = null;
+    this.editorSourceMode = null;
+    this.editorActiveCutIndex = 0;
     this.initViews();
     this.initForms();
     this.initEditForm();
     this.initMangaForm();
+    this.initProVideoEditor();
     this.initSettings();
     this.renderSettings();
     this.validateForms();
     this.initShortsSummaryHandler();
     this.initAdminUserHandlers();
     this.initAuth();
+    setTimeout(() => this.initSavedVideoStocksAndRestore(), 250);
   }
 
   // --- ビュー（画面）切り替え ---
@@ -37,6 +47,13 @@ class AppController {
         if (targetSec) {
           targetSec.classList.add('active');
           targetSec.style.display = 'block';
+        }
+
+        // Pro版ショート動画または長尺動画タブを開いた際は、保存済み5本ストックを最新化
+        if (target === 'pro-shorts') {
+          this.loadSavedVideoStock('pro_shorts', false);
+        } else if (target === 'long-video') {
+          this.loadSavedVideoStock('long_video', false);
         }
 
         // 簡易ショート動画（generate）タブが選択され、かつ生成完了画面が表示中の場合は初期画面にリセット
@@ -2980,8 +2997,12 @@ class AppController {
           telopFontSize: telopFontSize,
           telopFont: telopFont,
           bgmChoice: bgmChoice,
-          bgmVolume: bgmVolume
+          bgmVolume: bgmVolume,
+          customReferenceImages: this.proShortsRefImages && this.proShortsRefImages.length > 0 ? this.proShortsRefImages : null,
+          videoMode: 'pro_shorts'
         };
+
+        localStorage.setItem('kimidori_draft_pro_shorts_script', jsonStr);
 
         const originalGenHtml = btnGenProShorts.innerHTML;
         btnGenProShorts.disabled = true;
@@ -3007,6 +3028,8 @@ class AppController {
 
         try {
           const res = await window.apiClient.generateMangaVideo(scriptData, ttsEngine, voiceName, {}, videoOptions);
+          this.currentProShortsJobId = res.job_id;
+          localStorage.setItem('kimidori_last_pro_shorts_job', res.job_id);
 
           this.startJobPolling(res.job_id, 'PRO_SHORTS', {
             onProgress: (job) => {
@@ -3017,14 +3040,16 @@ class AppController {
             onComplete: (job) => {
               if (titleEl) titleEl.textContent = "Pro版ショート動画が完成しました！";
               if (fillEl) fillEl.style.width = "100%";
-              if (msgEl) msgEl.textContent = "生成完了";
-              if (job.video_path) {
-                if (resEl) resEl.style.display = 'block';
-                const dlUrl = `${window.apiClient.baseUrl}/api/video/download?path=${encodeURIComponent(job.video_path)}`;
-                if (previewEl) previewEl.src = dlUrl;
-                const dlBtn = document.getElementById('btnDownloadProShorts');
-                if (dlBtn) dlBtn.href = dlUrl;
+              if (msgEl) msgEl.textContent = "生成完了（保存済みストックにも自動保存されました）";
+              const dlUrl = `${window.apiClient.baseUrl}/api/download/${res.job_id}?t=${Date.now()}`;
+              if (resEl) resEl.style.display = 'block';
+              if (previewEl) {
+                previewEl.src = dlUrl;
+                previewEl.load();
               }
+              const dlBtn = document.getElementById('btnDownloadProShorts');
+              if (dlBtn) dlBtn.href = `${window.apiClient.baseUrl}/api/download/${res.job_id}?download=1`;
+              this.loadSavedVideoStock('pro_shorts', false);
               btnGenProShorts.disabled = false;
               btnGenProShorts.classList.remove('is-loading');
               btnGenProShorts.innerHTML = originalGenHtml;
@@ -3061,7 +3086,8 @@ class AppController {
       if (themeInput) { themeInput.value = ''; themeInput.focus(); }
       const jsonArea = document.getElementById('inputProShortsScriptJson');
       if (jsonArea) jsonArea.value = '';
-      this.showToast("最初から新しく作成する画面に戻りました", "info");
+      localStorage.removeItem('kimidori_draft_pro_shorts_script');
+      this.showToast("最初から新しく作成する画面に戻りました（保存済みストックはそのまま保持されています）", "info");
     });
 
     // 2. 長尺動画（15〜20分）完全仕様
@@ -3120,7 +3146,9 @@ class AppController {
 
           if (scriptObj) {
             scriptObj.visual_style = visualStyle;
-            document.getElementById('inputLongVideoScriptJson').value = JSON.stringify(scriptObj, null, 2);
+            const jsonText = JSON.stringify(scriptObj, null, 2);
+            document.getElementById('inputLongVideoScriptJson').value = jsonText;
+            localStorage.setItem('kimidori_draft_long_video_script', jsonText);
             longScriptArea.style.display = 'block';
             updateLongVideoBgmTags(scriptObj);
             if (refreshLongVideoTelop) refreshLongVideoTelop();
@@ -3269,7 +3297,9 @@ class AppController {
           const res = await window.apiClient.normalizeScript(text, 'long_video', genre, visualStyle);
           if (res.success && res.timeline) {
             res.timeline.visual_style = visualStyle;
-            document.getElementById('inputLongVideoScriptJson').value = JSON.stringify(res.timeline, null, 2);
+            const jsonText = JSON.stringify(res.timeline, null, 2);
+            document.getElementById('inputLongVideoScriptJson').value = jsonText;
+            localStorage.setItem('kimidori_draft_long_video_script', jsonText);
             longScriptArea.style.display = 'block';
             updateLongVideoBgmTags(res.timeline);
             if (refreshLongVideoTelop) refreshLongVideoTelop();
@@ -3319,8 +3349,12 @@ class AppController {
           telopFontSize: telopFontSize,
           telopFont: telopFont,
           bgmChoice: bgmChoice,
-          bgmVolume: bgmVolume
+          bgmVolume: bgmVolume,
+          customReferenceImages: this.longVideoRefImages && this.longVideoRefImages.length > 0 ? this.longVideoRefImages : null,
+          videoMode: 'long_video'
         };
+
+        localStorage.setItem('kimidori_draft_long_video_script', jsonStr);
 
         const origGenHtml = btnGenLong.innerHTML;
         btnGenLong.disabled = true;
@@ -3443,6 +3477,8 @@ class AppController {
         try {
           const res = await window.apiClient.generateMangaVideo(scriptData, ttsEngine, voiceName, {}, videoOptions);
           const jobId = res.job_id;
+          this.currentLongVideoJobId = jobId;
+          localStorage.setItem('kimidori_last_long_video_job', jobId);
 
           this.startJobPolling(jobId, 'LONG_VIDEO', {
             onProgress: (job) => {
@@ -3457,14 +3493,16 @@ class AppController {
               if (percentEl) percentEl.textContent = "100%";
               if (fillEl) fillEl.style.width = "100%";
               if (titleEl) titleEl.textContent = "長尺動画の作成が完了しました！";
-              if (msgEl) msgEl.textContent = "高画質長尺動画のレンダリングが完了しました。プレビューまたはダウンロードが可能です。";
+              if (msgEl) msgEl.textContent = "高画質長尺動画のレンダリングが完了しました（保存済みストックにも自動保存されました）。";
 
-              if (job.video_path) {
-                const downloadUrl = `${window.apiClient.baseUrl}/api/video/download?path=${encodeURIComponent(job.video_path)}`;
-                if (resEl) resEl.style.display = 'block';
-                if (previewEl) previewEl.src = downloadUrl;
-                if (downloadBtn) downloadBtn.href = downloadUrl;
+              const downloadUrl = `${window.apiClient.baseUrl}/api/download/${jobId}?t=${Date.now()}`;
+              if (resEl) resEl.style.display = 'block';
+              if (previewEl) {
+                previewEl.src = downloadUrl;
+                previewEl.load();
               }
+              if (downloadBtn) downloadBtn.href = `${window.apiClient.baseUrl}/api/download/${jobId}?download=1`;
+              this.loadSavedVideoStock('long_video', false);
               btnGenLong.disabled = false;
               btnGenLong.classList.remove('is-loading');
               btnGenLong.innerHTML = origGenHtml;
@@ -3503,6 +3541,7 @@ class AppController {
       if (themeInput) { themeInput.value = ''; themeInput.focus(); }
       const jsonArea = document.getElementById('inputLongVideoScriptJson');
       if (jsonArea) jsonArea.value = '';
+      localStorage.removeItem('kimidori_draft_long_video_script');
 
       const execLogsLong = document.getElementById('execLogsLong');
       if (execLogsLong) {
@@ -3527,7 +3566,31 @@ class AppController {
       const scenesTableLong = document.getElementById('scenesTableLong');
       if (scenesTableLong) scenesTableLong.innerHTML = '';
 
-      this.showToast("最初から新しく作成する画面に戻りました", "info");
+      this.showToast("最初から新しく作成する画面に戻りました（保存済みストックはそのまま保持されています）", "info");
+    });
+
+    // リファレンス画像アップロード＆保存済みストック更新＆「編集する」ボタンのイベント登録
+    this.setupReferenceUploadControl('proShorts', 'fileRefImagesProShorts', 'inputRefLabelProShorts', 'btnClearRefImagesProShorts', 'proShortsRefGallery');
+    this.setupReferenceUploadControl('longVideo', 'fileRefImagesLongVideo', 'inputRefLabelLongVideo', 'btnClearRefImagesLongVideo', 'longVideoRefGallery');
+
+    document.getElementById('btnRefreshProShortsStock')?.addEventListener('click', () => {
+      this.loadSavedVideoStock('pro_shorts', true);
+    });
+    document.getElementById('btnRefreshLongVideoStock')?.addEventListener('click', () => {
+      this.loadSavedVideoStock('long_video', true);
+    });
+
+    document.getElementById('btnEditProShortsVideo')?.addEventListener('click', () => {
+      if (!this.currentProShortsJobId) {
+        return this.showToast('編集対象の動画ジョブが見つかりません。ストック一覧の「編集する」から開いてください。', 'error');
+      }
+      this.openProVideoEditor(this.currentProShortsJobId, 'pro_shorts');
+    });
+    document.getElementById('btnEditLongVideo')?.addEventListener('click', () => {
+      if (!this.currentLongVideoJobId) {
+        return this.showToast('編集対象の長尺動画ジョブが見つかりません。ストック一覧の「編集する」から開いてください。', 'error');
+      }
+      this.openProVideoEditor(this.currentLongVideoJobId, 'long_video');
     });
   }
 
@@ -3544,6 +3607,1306 @@ class AppController {
       this.showToast(`Cut #${sceneId} 再生成エラー: ${err.message}`, "error");
     }
   }
+
+  // =========================================================================
+  // 1. ユーザー側リファレンス画像アップロード制御（Pro版ショート & 長尺動画共通）
+  // =========================================================================
+  setupReferenceUploadControl(modeKey, fileInputId, labelInputId, clearBtnId, galleryId) {
+    const fileInput = document.getElementById(fileInputId);
+    const labelInput = document.getElementById(labelInputId);
+    const clearBtn = document.getElementById(clearBtnId);
+    const gallery = document.getElementById(galleryId);
+    if (!fileInput || !gallery) return;
+
+    const getList = () => (modeKey === 'proShorts' ? this.proShortsRefImages : this.longVideoRefImages);
+    const setList = (arr) => {
+      if (modeKey === 'proShorts') {
+        this.proShortsRefImages = arr;
+      } else {
+        this.longVideoRefImages = arr;
+      }
+    };
+
+    const renderGallery = () => {
+      const list = getList();
+      if (!list || list.length === 0) {
+        gallery.style.display = 'none';
+        gallery.innerHTML = '';
+        if (clearBtn) clearBtn.style.display = 'none';
+        return;
+      }
+      gallery.style.display = 'grid';
+      if (clearBtn) clearBtn.style.display = 'inline-flex';
+      gallery.innerHTML = list.map((item, idx) => `
+        <div class="ref-image-chip">
+          <img src="${item.data_base64}" alt="${this._escapeHtml(item.name || '共通')}" />
+          <div class="ref-image-chip-meta">
+            <input type="text" class="form-input ref-chip-label-input" data-ref-idx="${idx}" value="${this._escapeHtml(item.name || '共通')}" title="対象キャラクター名または『共通』" style="padding: 2px 6px; font-size: 0.74rem; height: 24px;" />
+            <span style="font-size: 0.68rem; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this._escapeHtml(item.filename || 'reference.png')}</span>
+          </div>
+          <button type="button" class="ref-image-chip-remove" data-remove-idx="${idx}" title="このリファレンス画像を削除">&times;</button>
+        </div>
+      `).join('');
+
+      gallery.querySelectorAll('.ref-chip-label-input').forEach(inp => {
+        inp.addEventListener('change', (ev) => {
+          const i = parseInt(ev.target.dataset.refIdx, 10);
+          const arr = getList();
+          if (arr[i]) {
+            arr[i].name = ev.target.value.trim() || '共通';
+          }
+        });
+      });
+
+      gallery.querySelectorAll('.ref-image-chip-remove').forEach(btn => {
+        btn.addEventListener('click', (ev) => {
+          const i = parseInt(ev.currentTarget.dataset.removeIdx, 10);
+          const arr = getList();
+          arr.splice(i, 1);
+          setList(arr);
+          renderGallery();
+        });
+      });
+    };
+
+    fileInput.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length === 0) return;
+      const targetLabel = labelInput?.value?.trim() || '共通';
+      const arr = getList();
+
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) continue;
+        if (arr.length >= 8) {
+          this.showToast('リファレンス画像は最大8枚まで登録できます', 'info');
+          break;
+        }
+        const dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => resolve(ev.target?.result || '');
+          reader.readAsDataURL(file);
+        });
+        if (dataUrl) {
+          arr.push({
+            name: targetLabel,
+            filename: file.name,
+            data_base64: dataUrl
+          });
+        }
+      }
+      setList(arr);
+      fileInput.value = '';
+      renderGallery();
+      this.showToast(`リファレンス画像（${targetLabel}）を登録しました。画像生成・アニメーション化の基準として使用します。`, 'success');
+    });
+
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        setList([]);
+        renderGallery();
+        this.showToast('リファレンス画像をクリアしました', 'info');
+      });
+    }
+  }
+
+  // =========================================================================
+  // 2. 保存済み動画ストック（最大5本保持）＆ リロード時の自動復元機構
+  // =========================================================================
+  async initSavedVideoStocksAndRestore() {
+    // 1. ローカル保存されていた作成中台本JSONがあれば自動復元
+    const savedProScript = localStorage.getItem('kimidori_draft_pro_shorts_script');
+    if (savedProScript) {
+      const proJsonEl = document.getElementById('inputProShortsScriptJson');
+      const proAreaEl = document.getElementById('proShortsScriptArea');
+      if (proJsonEl && !proJsonEl.value.trim()) {
+        proJsonEl.value = savedProScript;
+        if (proAreaEl) proAreaEl.style.display = 'block';
+      }
+    }
+
+    const savedLongScript = localStorage.getItem('kimidori_draft_long_video_script');
+    if (savedLongScript) {
+      const longJsonEl = document.getElementById('inputLongVideoScriptJson');
+      const longAreaEl = document.getElementById('longVideoScriptArea');
+      if (longJsonEl && !longJsonEl.value.trim()) {
+        longJsonEl.value = savedLongScript;
+        if (longAreaEl) longAreaEl.style.display = 'block';
+      }
+    }
+
+    // 2. Pro版ショート・長尺それぞれの保存済みストック（最大5本）をロードし、最新完成動画をプレイヤーにも自動セット
+    await Promise.allSettled([
+      this.loadSavedVideoStock('pro_shorts', false, true),
+      this.loadSavedVideoStock('long_video', false, true)
+    ]);
+  }
+
+  async loadSavedVideoStock(mode = 'pro_shorts', showNotification = false, autoRestoreLatest = false) {
+    const isProShorts = mode === 'pro_shorts';
+    const listEl = document.getElementById(isProShorts ? 'proShortsSavedStockList' : 'longVideoSavedStockList');
+    const badgeEl = document.getElementById(isProShorts ? 'proShortsStockCountBadge' : 'longVideoStockCountBadge');
+    if (!listEl) return;
+
+    try {
+      const res = await window.apiClient.listSavedVideos(mode, 5);
+      let items = res.videos || [];
+      // もし該当モードが0件の場合は、全モードの完成動画ストック（最大5本）をフォールバック表示して見失いを防止
+      if (items.length === 0) {
+        const allRes = await window.apiClient.listSavedVideos(null, 5);
+        items = allRes.videos || [];
+      }
+
+      if (badgeEl) {
+        badgeEl.textContent = `${items.length} / 5本 保存済`;
+      }
+
+      if (items.length === 0) {
+        listEl.innerHTML = `
+          <div style="grid-column: 1 / -1; padding: 0.75rem 1rem; border-radius: 8px; background: rgba(15, 23, 42, 0.55); border: 1px dashed rgba(148, 163, 184, 0.25); color: var(--text-secondary); font-size: 0.82rem;">
+            まだ完成した保存済み動画はありません。動画を生成するとここに最大5本まで自動保存され、リロードしてもいつでも再生・MP4保存・タイムライン編集が可能です。
+          </div>
+        `;
+        return;
+      }
+
+      const baseUrl = window.apiClient.baseUrl;
+      listEl.innerHTML = items.map((v, idx) => {
+        const thumbUrl = v.thumbnail_url ? `${baseUrl}${v.thumbnail_url}` : '';
+        const dlUrl = `${baseUrl}/api/download/${encodeURIComponent(v.job_id)}?download=1`;
+        const durLabel = v.duration_sec ? `${parseFloat(v.duration_sec).toFixed(1)}秒` : '--秒';
+        const sizeLabel = v.file_size_mb ? `${v.file_size_mb}MB` : '';
+        const styleLabel = v.visual_style === 'ukiyoe' ? '本格浮世絵' : (v.visual_style || 'Pro');
+        const dateStr = v.created_at ? v.created_at.replace('T', ' ').slice(5, 16) : '';
+
+        return `
+          <div class="saved-stock-item-card" data-job-id="${this._escapeHtml(v.job_id)}">
+            <div class="saved-stock-thumb-wrap" onclick="window.appController.loadStockVideoIntoPlayer('${mode}', '${v.job_id}')">
+              ${thumbUrl
+                ? `<img src="${thumbUrl}" alt="thumb" loading="lazy" onerror="this.style.display='none'" />`
+                : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#64748b;">PREVIEW</div>`
+              }
+              <span class="saved-stock-badge-num">#${idx + 1}</span>
+              <span class="saved-stock-badge-dur">${durLabel}</span>
+            </div>
+            <div class="saved-stock-body">
+              <div class="saved-stock-title" title="${this._escapeHtml(v.title || '無題の動画')}">${this._escapeHtml(v.title || '完成動画')}</div>
+              <div class="saved-stock-meta">
+                <span>${this._escapeHtml(styleLabel)}</span>
+                <span>・全${v.scene_count || 0}カット</span>
+                ${sizeLabel ? `<span>・${sizeLabel}</span>` : ''}
+                ${dateStr ? `<span>・${dateStr}</span>` : ''}
+              </div>
+              <div class="saved-stock-actions">
+                <button type="button" class="btn btn-outline" style="padding: 0.3rem 0.55rem; font-size: 0.74rem;" onclick="window.appController.loadStockVideoIntoPlayer('${mode}', '${v.job_id}')">再生・表示</button>
+                <button type="button" class="btn btn-primary" style="padding: 0.3rem 0.65rem; font-size: 0.74rem; background: linear-gradient(135deg, #00d2ff 0%, #0284c7 100%); border-color: #38bdf8; color: #fff; font-weight: 700;" onclick="window.appController.openProVideoEditor('${v.job_id}', '${mode}')">編集する</button>
+                <a href="${dlUrl}" download="${this._escapeHtml((v.title || 'video').slice(0, 24))}.mp4" class="btn btn-outline" style="padding: 0.3rem 0.55rem; font-size: 0.74rem; border-color: var(--accent-primary); color: var(--accent-primary);">MP4保存</a>
+                <button type="button" class="btn btn-text" style="padding: 0.25rem 0.4rem; font-size: 0.72rem; color: #f87171; margin-left: auto;" onclick="window.appController.deleteStockVideo('${mode}', '${v.job_id}')" title="ストック一覧から削除">削除</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // リロード時、直近の完成動画を自動的にプレイヤー枠へ復元表示（消えない仕様の徹底）
+      if (autoRestoreLatest && items.length > 0) {
+        const targetJobId = (isProShorts ? this.currentProShortsJobId : this.currentLongVideoJobId) || items[0].job_id;
+        const matched = items.find(it => it.job_id === targetJobId) || items[0];
+        if (matched) {
+          this.loadStockVideoIntoPlayer(mode, matched.job_id, true);
+        }
+      }
+
+      if (showNotification) {
+        this.showToast(`保存済み動画ストック（${items.length}本）を更新しました`, 'info');
+      }
+    } catch (err) {
+      console.warn('保存済み動画ストック読み込みエラー:', err);
+      if (badgeEl) badgeEl.textContent = '0 / 5本';
+    }
+  }
+
+  async loadStockVideoIntoPlayer(mode, jobId, silent = false) {
+    if (!jobId) return;
+    const isProShorts = mode === 'pro_shorts';
+    const baseUrl = window.apiClient.baseUrl;
+    const streamUrl = `${baseUrl}/api/download/${encodeURIComponent(jobId)}?t=${Date.now()}`;
+    const dlUrl = `${baseUrl}/api/download/${encodeURIComponent(jobId)}?download=1`;
+
+    if (isProShorts) {
+      this.currentProShortsJobId = jobId;
+      localStorage.setItem('kimidori_last_pro_shorts_job', jobId);
+      const progArea = document.getElementById('proShortsProgressArea');
+      const titleEl = document.getElementById('proShortsProgressTitle');
+      const fillEl = document.getElementById('proShortsProgressFill');
+      const msgEl = document.getElementById('proShortsProgressMsg');
+      const resEl = document.getElementById('proShortsVideoResult');
+      const previewEl = document.getElementById('proShortsVideoPreview');
+      const dlBtn = document.getElementById('btnDownloadProShorts');
+
+      if (progArea) progArea.style.display = 'block';
+      if (titleEl) titleEl.textContent = '保存済みストック動画を読み込みました（再生・編集・保存が可能）';
+      if (fillEl) fillEl.style.width = '100%';
+      if (msgEl) msgEl.textContent = `Job ID: ${jobId}`;
+      if (resEl) resEl.style.display = 'block';
+      if (previewEl) {
+        previewEl.src = streamUrl;
+        previewEl.load();
+      }
+      if (dlBtn) dlBtn.href = dlUrl;
+      if (!silent && resEl) {
+        resEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        this.showToast('ストック動画をプレイヤーに読み込みました。「編集する」でタイムライン編集も可能です。', 'success');
+      }
+    } else {
+      this.currentLongVideoJobId = jobId;
+      localStorage.setItem('kimidori_last_long_video_job', jobId);
+      const progArea = document.getElementById('longVideoProgressArea');
+      const titleEl = document.getElementById('longVideoProgressStatusTitle');
+      const percentEl = document.getElementById('longVideoProgressPercent');
+      const fillEl = document.getElementById('longVideoProgressFill');
+      const msgEl = document.getElementById('longVideoProgressMessage');
+      const resEl = document.getElementById('longVideoResult');
+      const previewEl = document.getElementById('longVideoPreview');
+      const dlBtn = document.getElementById('btnDownloadLongVideo');
+
+      if (progArea) progArea.style.display = 'block';
+      if (titleEl) titleEl.textContent = '保存済みストック動画を読み込みました（再生・編集・保存が可能）';
+      if (percentEl) percentEl.textContent = '100%';
+      if (fillEl) fillEl.style.width = '100%';
+      if (msgEl) msgEl.textContent = `Job ID: ${jobId} — 下のプレイヤーで再生、または「編集する」でカット・テロップ・音声・SEを編集できます。`;
+      if (resEl) resEl.style.display = 'block';
+      if (previewEl) {
+        previewEl.src = streamUrl;
+        previewEl.load();
+      }
+      if (dlBtn) dlBtn.href = dlUrl;
+      if (!silent && resEl) {
+        resEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        this.showToast('ストック動画をプレイヤーに読み込みました。「編集する」でタイムライン編集も可能です。', 'success');
+      }
+    }
+  }
+
+  async deleteStockVideo(mode, jobId) {
+    if (!jobId) return;
+    if (!confirm('この動画を保存済みストック一覧から削除しますか？')) return;
+    try {
+      await window.apiClient.deleteSavedVideo(jobId, false);
+      this.showToast('保存済みストックから削除しました', 'info');
+      await this.loadSavedVideoStock(mode, false);
+    } catch (err) {
+      this.showToast('削除エラー: ' + err.message, 'error');
+    }
+  }
+
+  // =========================================================================
+  // 3. Pro動画タイムライン編集スタジオ (Remotion / Filmcraft アーキテクチャ準拠)
+  // =========================================================================
+  initProVideoEditor() {
+    const modal = document.getElementById('proVideoEditorModal');
+    if (!modal) return;
+
+    // 閉じるボタン
+    document.getElementById('btnCloseProEditor')?.addEventListener('click', () => {
+      this.stopEditorPlayback();
+      modal.style.display = 'none';
+    });
+
+    // 4つのインスペクタータブ切り替え (1.テロップ / 2.ナレーション / 3.カット作業 / 4.効果音・BGM)
+    modal.querySelectorAll('.pro-editor-tab').forEach(tabBtn => {
+      tabBtn.addEventListener('click', () => {
+        modal.querySelectorAll('.pro-editor-tab').forEach(b => b.classList.remove('active'));
+        tabBtn.classList.add('active');
+        const tabKey = tabBtn.dataset.editorTab;
+        const tabMap = {
+          telop: 'editorTabTelop',
+          narration: 'editorTabNarration',
+          cut: 'editorTabCut',
+          audio: 'editorTabAudio'
+        };
+        Object.values(tabMap).forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.style.display = 'none';
+        });
+        const activeEl = document.getElementById(tabMap[tabKey]);
+        if (activeEl) activeEl.style.display = 'block';
+      });
+    });
+
+    // プレビューモード切替（カット別ライブ編集 vs 完成MP4全体再生）
+    const btnModeCut = document.getElementById('btnSwitchPreviewModeCut');
+    const btnModeFull = document.getElementById('btnSwitchPreviewModeFullMp4');
+    const liveStage = document.getElementById('editorLiveCutStage');
+    const fullPlayer = document.getElementById('editorFullMp4Player');
+
+    if (btnModeCut && btnModeFull) {
+      btnModeCut.addEventListener('click', () => {
+        if (fullPlayer) { fullPlayer.pause(); fullPlayer.style.display = 'none'; }
+        if (liveStage) liveStage.style.display = 'block';
+        btnModeCut.style.borderColor = '#00d2ff';
+        btnModeCut.style.color = '#00d2ff';
+        btnModeFull.style.borderColor = '';
+        btnModeFull.style.color = '';
+      });
+      btnModeFull.addEventListener('click', () => {
+        this.stopEditorPlayback();
+        if (liveStage) liveStage.style.display = 'none';
+        if (fullPlayer) {
+          fullPlayer.style.display = 'block';
+          if (this.editorJobId) {
+            const mp4Url = `${window.apiClient.baseUrl}/api/download/${encodeURIComponent(this.editorJobId)}?t=${Date.now()}`;
+            if (!fullPlayer.src || !fullPlayer.src.includes(this.editorJobId)) {
+              fullPlayer.src = mp4Url;
+            }
+          }
+        }
+        btnModeFull.style.borderColor = '#00d2ff';
+        btnModeFull.style.color = '#00d2ff';
+        btnModeCut.style.borderColor = '';
+        btnModeCut.style.color = '';
+      });
+    }
+
+    // ステージ上のテロップ直接上下ドラッグ移動
+    const draggableTelop = document.getElementById('editorDraggableTelopBox');
+    const stageWrapper = document.getElementById('editorLiveCutStage');
+    if (draggableTelop && stageWrapper) {
+      let isDragging = false;
+      const onPointerMove = (clientY) => {
+        if (!isDragging) return;
+        const rect = stageWrapper.getBoundingClientRect();
+        if (rect.height <= 0) return;
+        const relY = ((clientY - rect.top) / rect.height) * 100;
+        const clampedPct = Math.round(Math.min(90, Math.max(10, relY)));
+        draggableTelop.style.top = `${clampedPct}%`;
+        const ySlider = document.getElementById('editorCutTelopYSlider');
+        const yLabel = document.getElementById('editorTelopYLabel');
+        if (ySlider) ySlider.value = String(clampedPct);
+        if (yLabel) yLabel.textContent = `${clampedPct}%`;
+        const cut = this.getActiveEditorCut();
+        if (cut) {
+          cut.telop_y_pct = clampedPct;
+          this.renderEditorTimelineTracks();
+        }
+      };
+
+      draggableTelop.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        e.preventDefault();
+      });
+      window.addEventListener('mousemove', (e) => onPointerMove(e.clientY));
+      window.addEventListener('mouseup', () => { isDragging = false; });
+
+      draggableTelop.addEventListener('touchstart', () => { isDragging = true; }, { passive: true });
+      window.addEventListener('touchmove', (e) => {
+        if (isDragging && e.touches?.[0]) onPointerMove(e.touches[0].clientY);
+      }, { passive: true });
+      window.addEventListener('touchend', () => { isDragging = false; });
+    }
+
+    // --- Tab 1: テロップ設定イベント ---
+    document.getElementById('editorCutTelopText')?.addEventListener('input', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      cut.telop_text = e.target.value;
+      this.updateEditorLiveStage();
+      this.renderEditorTimelineTracks();
+    });
+
+    document.getElementById('editorCutTelopFont')?.addEventListener('change', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      cut.telop_font = e.target.value;
+      this.updateEditorLiveStage();
+      this.renderEditorTimelineTracks();
+    });
+
+    document.getElementById('editorCutTelopStyle')?.addEventListener('change', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      cut.telop_style = e.target.value;
+      this.updateEditorLiveStage();
+      this.renderEditorTimelineTracks();
+    });
+
+    document.getElementById('editorCutTelopYSlider')?.addEventListener('input', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      const pct = parseInt(e.target.value, 10) || 76;
+      cut.telop_y_pct = pct;
+      const yLabel = document.getElementById('editorTelopYLabel');
+      if (yLabel) yLabel.textContent = `${pct}%`;
+      this.updateEditorLiveStage();
+      this.renderEditorTimelineTracks();
+    });
+
+    modal.querySelectorAll('.btn-telop-pos-preset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pct = parseInt(btn.dataset.yPct, 10) || 76;
+        const cut = this.getActiveEditorCut();
+        if (!cut) return;
+        cut.telop_y_pct = pct;
+        const ySlider = document.getElementById('editorCutTelopYSlider');
+        const yLabel = document.getElementById('editorTelopYLabel');
+        if (ySlider) ySlider.value = String(pct);
+        if (yLabel) yLabel.textContent = `${pct}%`;
+        this.updateEditorLiveStage();
+        this.renderEditorTimelineTracks();
+      });
+    });
+
+    document.getElementById('editorCutTelopSizeKey')?.addEventListener('change', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      cut.telop_font_size = e.target.value;
+      this.updateEditorLiveStage();
+    });
+
+    document.getElementById('editorCutTelopScaleSlider')?.addEventListener('input', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      const sc = parseInt(e.target.value, 10) || 100;
+      cut.telop_scale = sc;
+      const scLabel = document.getElementById('editorTelopScaleLabel');
+      if (scLabel) scLabel.textContent = `${sc}%`;
+      this.updateEditorLiveStage();
+    });
+
+    document.getElementById('btnApplyTelopToAllCuts')?.addEventListener('click', () => {
+      const cut = this.getActiveEditorCut();
+      if (!cut || !this.editorState?.scenes) return;
+      this.editorState.scenes.forEach(sc => {
+        sc.telop_font = cut.telop_font;
+        sc.telop_style = cut.telop_style;
+        sc.telop_font_size = cut.telop_font_size;
+        sc.telop_y_pct = cut.telop_y_pct;
+        sc.telop_scale = cut.telop_scale;
+      });
+      this.editorState.global_telop_font = cut.telop_font;
+      this.editorState.global_telop_style = cut.telop_style;
+      this.editorState.global_telop_font_size = cut.telop_font_size;
+      this.editorState.global_telop_y_pct = cut.telop_y_pct;
+      this.editorState.global_telop_scale = cut.telop_scale;
+      this.renderEditorTimelineTracks();
+      this.showToast(`全 ${this.editorState.scenes.length} カットにテロップ書体・配色・位置(${cut.telop_y_pct}%)を一括適用しました`, 'success');
+    });
+
+    // --- Tab 2: ナレーション変更＆その場再合成イベント ---
+    document.getElementById('editorCutSpeaker')?.addEventListener('input', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      cut.speaker = e.target.value;
+      const spkLabel = document.getElementById('editorActiveSpeakerLabel');
+      if (spkLabel) spkLabel.textContent = cut.speaker || 'ナレーション';
+      this.renderEditorTimelineTracks();
+    });
+
+    document.getElementById('editorCutNarration')?.addEventListener('input', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      cut.narration = e.target.value;
+      const syncCheck = document.getElementById('editorSyncTelopWithNarration');
+      if (syncCheck && syncCheck.checked) {
+        cut.telop_text = e.target.value;
+        const telopInput = document.getElementById('editorCutTelopText');
+        if (telopInput) telopInput.value = e.target.value;
+        this.updateEditorLiveStage();
+      }
+      this.renderEditorTimelineTracks();
+    });
+
+    document.getElementById('editorCutTtsEngine')?.addEventListener('change', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (cut) cut.tts_engine = e.target.value;
+    });
+
+    document.getElementById('editorCutVoiceName')?.addEventListener('change', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (cut) cut.voice_name = e.target.value;
+    });
+
+    document.getElementById('editorCutSpeakingRate')?.addEventListener('input', (e) => {
+      const cut = this.getActiveEditorCut();
+      const val = parseFloat(e.target.value) || 1.0;
+      if (cut) cut.speaking_rate = val;
+      const lbl = document.getElementById('editorCutRateLabel');
+      if (lbl) lbl.textContent = `${val.toFixed(2)}x`;
+    });
+
+    const btnResynth = document.getElementById('btnEditorResynthesizeTts');
+    if (btnResynth) {
+      btnResynth.addEventListener('click', async () => {
+        const cut = this.getActiveEditorCut();
+        if (!cut || !this.editorJobId) return;
+        const narration = (document.getElementById('editorCutNarration')?.value || cut.narration || '').trim();
+        if (!narration) return this.showToast('ナレーションテキストを入力してください', 'error');
+
+        const origHtml = btnResynth.innerHTML;
+        btnResynth.disabled = true;
+        btnResynth.innerHTML = '<span class="btn-spinner"></span><span>音声を再合成中...</span>';
+
+        try {
+          const res = await window.apiClient.resynthesizeCutTts(this.editorJobId, {
+            sceneId: cut.scene_id,
+            narration: narration,
+            speaker: cut.speaker || 'ナレーション',
+            ttsEngine: document.getElementById('editorCutTtsEngine')?.value || cut.tts_engine || 'edge',
+            voiceName: document.getElementById('editorCutVoiceName')?.value || cut.voice_name || 'nanami',
+            speakingRate: parseFloat(document.getElementById('editorCutSpeakingRate')?.value || cut.speaking_rate || 1.0)
+          });
+          if (res.success) {
+            cut.audio_url = `${res.audio_url}?t=${Date.now()}`;
+            cut.duration = res.duration;
+            const durSlider = document.getElementById('editorCutDurationSlider');
+            const durInput = document.getElementById('editorCutDurationInput');
+            const durLabel = document.getElementById('editorCutDurationLabel');
+            if (durSlider) durSlider.value = String(res.duration);
+            if (durInput) durInput.value = String(res.duration);
+            if (durLabel) durLabel.textContent = `${res.duration}s`;
+
+            this.renderEditorTimelineTracks();
+            this.updateEditorProjectHeader();
+            const audioEl = document.getElementById('editorCutAudioEl');
+            if (audioEl) {
+              audioEl.src = `${window.apiClient.baseUrl}${cut.audio_url}`;
+              audioEl.play().catch(() => {});
+            }
+            this.showToast(`Cut #${cut.scene_id} のナレーション音声を再合成しました（新尺: ${res.duration}秒）`, 'success');
+          }
+        } catch (err) {
+          this.showToast('ナレーション再合成エラー: ' + err.message, 'error');
+        } finally {
+          btnResynth.disabled = false;
+          btnResynth.innerHTML = origHtml;
+        }
+      });
+    }
+
+    // カスタム音声ファイル差替 (.mp3/.wav)
+    document.getElementById('fileEditorCutAudioUpload')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      const cut = this.getActiveEditorCut();
+      if (!file || !cut || !this.editorJobId) return;
+      try {
+        this.showToast(`Cut #${cut.scene_id} の音声ファイルをアップロード中...`, 'info');
+        const res = await window.apiClient.uploadCutMedia(this.editorJobId, {
+          sceneId: cut.scene_id,
+          mediaType: 'audio',
+          file: file
+        });
+        if (res.success) {
+          cut.audio_url = `${res.asset_url}?t=${Date.now()}`;
+          if (res.duration) cut.duration = res.duration;
+          this.selectEditorCut(this.editorActiveCutIndex);
+          this.renderEditorTimelineTracks();
+          this.showToast(`Cut #${cut.scene_id} のナレーション音声を差し替えました`, 'success');
+        }
+      } catch (err) {
+        this.showToast('音声ファイル差替失敗: ' + err.message, 'error');
+      } finally {
+        e.target.value = '';
+      }
+    });
+
+    // --- Tab 3: カット作業（有効化・尺調整・トリミング・分割・複製・移動・削除・背景差替） ---
+    document.getElementById('editorCutEnabledToggle')?.addEventListener('change', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      cut.enabled = e.target.checked;
+      this.renderEditorTimelineTracks();
+      this.updateEditorProjectHeader();
+    });
+
+    const syncDurationChange = (val) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      const num = Math.max(0.5, Math.min(60.0, parseFloat(val) || 5.0));
+      cut.duration = Math.round(num * 100) / 100;
+      const sl = document.getElementById('editorCutDurationSlider');
+      const inp = document.getElementById('editorCutDurationInput');
+      const lbl = document.getElementById('editorCutDurationLabel');
+      if (sl) sl.value = String(cut.duration);
+      if (inp) inp.value = String(cut.duration);
+      if (lbl) lbl.textContent = `${cut.duration.toFixed(1)}s`;
+      this.renderEditorTimelineTracks();
+      this.updateEditorProjectHeader();
+    };
+
+    document.getElementById('editorCutDurationSlider')?.addEventListener('input', (e) => syncDurationChange(e.target.value));
+    document.getElementById('editorCutDurationInput')?.addEventListener('change', (e) => syncDurationChange(e.target.value));
+
+    document.getElementById('editorCutTrimStartSlider')?.addEventListener('input', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      const trimVal = parseFloat(e.target.value) || 0.0;
+      cut.trim_start = Math.round(trimVal * 10) / 10;
+      const lbl = document.getElementById('editorCutTrimStartLabel');
+      if (lbl) lbl.textContent = `${cut.trim_start.toFixed(1)}s`;
+    });
+
+    // カットを2分割
+    document.getElementById('btnEditorSplitCut')?.addEventListener('click', () => {
+      const scenes = this.editorState?.scenes;
+      const idx = this.editorActiveCutIndex;
+      if (!scenes || !scenes[idx]) return;
+      const orig = scenes[idx];
+      const halfDur = Math.max(1.0, Math.round((orig.duration / 2) * 10) / 10);
+      const text = orig.narration || orig.telop_text || '';
+      const mid = Math.ceil(text.length / 2);
+      const firstText = text.slice(0, mid) || text;
+      const secondText = text.slice(mid) || text;
+
+      const cloned = JSON.parse(JSON.stringify(orig));
+      orig.duration = halfDur;
+      orig.narration = firstText;
+      orig.telop_text = firstText;
+
+      cloned.duration = halfDur;
+      cloned.trim_start = Math.round(((orig.trim_start || 0) + halfDur) * 10) / 10;
+      cloned.narration = secondText;
+      cloned.telop_text = secondText;
+
+      scenes.splice(idx + 1, 0, cloned);
+      scenes.forEach((sc, i) => { sc.order = i + 1; });
+      this.selectEditorCut(idx);
+      this.renderEditorTimelineTracks();
+      this.updateEditorProjectHeader();
+      this.showToast(`Cut #${orig.scene_id} を前半・後半の2カットに分割しました`, 'success');
+    });
+
+    // カットを複製
+    document.getElementById('btnEditorDuplicateCut')?.addEventListener('click', () => {
+      const scenes = this.editorState?.scenes;
+      const idx = this.editorActiveCutIndex;
+      if (!scenes || !scenes[idx]) return;
+      const cloned = JSON.parse(JSON.stringify(scenes[idx]));
+      scenes.splice(idx + 1, 0, cloned);
+      scenes.forEach((sc, i) => { sc.order = i + 1; });
+      this.selectEditorCut(idx + 1);
+      this.renderEditorTimelineTracks();
+      this.updateEditorProjectHeader();
+      this.showToast('カットを複製しました', 'info');
+    });
+
+    // 前のカットと入替
+    document.getElementById('btnEditorMoveCutLeft')?.addEventListener('click', () => {
+      const scenes = this.editorState?.scenes;
+      const idx = this.editorActiveCutIndex;
+      if (!scenes || idx <= 0) return;
+      const tmp = scenes[idx - 1];
+      scenes[idx - 1] = scenes[idx];
+      scenes[idx] = tmp;
+      scenes.forEach((sc, i) => { sc.order = i + 1; });
+      this.selectEditorCut(idx - 1);
+      this.renderEditorTimelineTracks();
+    });
+
+    // 次のカットと入替
+    document.getElementById('btnEditorMoveCutRight')?.addEventListener('click', () => {
+      const scenes = this.editorState?.scenes;
+      const idx = this.editorActiveCutIndex;
+      if (!scenes || idx >= scenes.length - 1) return;
+      const tmp = scenes[idx + 1];
+      scenes[idx + 1] = scenes[idx];
+      scenes[idx] = tmp;
+      scenes.forEach((sc, i) => { sc.order = i + 1; });
+      this.selectEditorCut(idx + 1);
+      this.renderEditorTimelineTracks();
+    });
+
+    // このカットを削除
+    document.getElementById('btnEditorDeleteCut')?.addEventListener('click', () => {
+      const scenes = this.editorState?.scenes;
+      const idx = this.editorActiveCutIndex;
+      if (!scenes || scenes.length <= 1) {
+        return this.showToast('最低1カットは残す必要があります', 'error');
+      }
+      scenes.splice(idx, 1);
+      scenes.forEach((sc, i) => { sc.order = i + 1; });
+      const nextIdx = Math.min(idx, scenes.length - 1);
+      this.selectEditorCut(nextIdx);
+      this.renderEditorTimelineTracks();
+      this.updateEditorProjectHeader();
+      this.showToast('カットを削除しました', 'info');
+    });
+
+    // 背景画像・動画クリップの差し替えアップロード
+    document.getElementById('fileEditorCutImageUpload')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      const cut = this.getActiveEditorCut();
+      if (!file || !cut || !this.editorJobId) return;
+      try {
+        this.showToast(`Cut #${cut.scene_id} の背景画像をアップロード中...`, 'info');
+        const res = await window.apiClient.uploadCutMedia(this.editorJobId, {
+          sceneId: cut.scene_id,
+          mediaType: 'image',
+          file: file
+        });
+        if (res.success) {
+          cut.image_url = `${res.asset_url}?t=${Date.now()}`;
+          cut.clip_url = '';
+          cut.type = 'image';
+          this.updateEditorLiveStage();
+          this.renderEditorTimelineTracks();
+          this.showToast(`Cut #${cut.scene_id} の背景画像を差し替えました`, 'success');
+        }
+      } catch (err) {
+        this.showToast('画像アップロードエラー: ' + err.message, 'error');
+      } finally {
+        e.target.value = '';
+      }
+    });
+
+    document.getElementById('fileEditorCutVideoUpload')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      const cut = this.getActiveEditorCut();
+      if (!file || !cut || !this.editorJobId) return;
+      try {
+        this.showToast(`Cut #${cut.scene_id} の動画クリップをアップロード中...`, 'info');
+        const res = await window.apiClient.uploadCutMedia(this.editorJobId, {
+          sceneId: cut.scene_id,
+          mediaType: 'video',
+          file: file
+        });
+        if (res.success) {
+          cut.clip_url = `${res.asset_url}?t=${Date.now()}`;
+          cut.type = 'video';
+          this.updateEditorLiveStage();
+          this.renderEditorTimelineTracks();
+          this.showToast(`Cut #${cut.scene_id} の動画クリップを差し替えました`, 'success');
+        }
+      } catch (err) {
+        this.showToast('動画アップロードエラー: ' + err.message, 'error');
+      } finally {
+        e.target.value = '';
+      }
+    });
+
+    // --- Tab 4: 効果音（SE）追加 ＆ BGM変更 ---
+    document.getElementById('editorCutSeSelect')?.addEventListener('change', (e) => {
+      const cut = this.getActiveEditorCut();
+      if (!cut) return;
+      cut.se_id = e.target.value;
+      this.renderEditorTimelineTracks();
+    });
+
+    document.getElementById('editorCutSeDelaySlider')?.addEventListener('input', (e) => {
+      const cut = this.getActiveEditorCut();
+      const d = parseFloat(e.target.value) || 0.0;
+      if (cut) cut.se_delay = d;
+      const lbl = document.getElementById('editorCutSeDelayLabel');
+      if (lbl) lbl.textContent = `${d.toFixed(1)}s`;
+    });
+
+    document.getElementById('editorCutSeVolumeSlider')?.addEventListener('input', (e) => {
+      const cut = this.getActiveEditorCut();
+      const pct = parseInt(e.target.value, 10) || 70;
+      if (cut) cut.se_volume = pct / 100;
+      const lbl = document.getElementById('editorCutSeVolumeLabel');
+      if (lbl) lbl.textContent = `${pct}%`;
+    });
+
+    document.getElementById('btnEditorPreviewSe')?.addEventListener('click', () => {
+      const seId = document.getElementById('editorCutSeSelect')?.value || 'none';
+      if (!seId || seId === 'none') {
+        return this.showToast('試聴する効果音（SE）を選択してください', 'info');
+      }
+      const seAudio = document.getElementById('editorCutSeAudioEl');
+      if (seAudio) {
+        seAudio.src = window.apiClient.getSeFileUrl(seId);
+        const volPct = parseInt(document.getElementById('editorCutSeVolumeSlider')?.value || '70', 10);
+        seAudio.volume = Math.min(1.0, Math.max(0.05, volPct / 100));
+        seAudio.currentTime = 0;
+        seAudio.play().catch(err => this.showToast('SE再生エラー: ' + err.message, 'error'));
+      }
+    });
+
+    document.getElementById('fileEditorUploadCustomSe')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const res = await window.apiClient.uploadCustomSe(file);
+        if (res.success && res.se) {
+          const sel = document.getElementById('editorCutSeSelect');
+          if (sel) {
+            const opt = document.createElement('option');
+            opt.value = res.se.se_id;
+            opt.textContent = `${res.se.name} (カスタムSE)`;
+            sel.appendChild(opt);
+            sel.value = res.se.se_id;
+          }
+          const cut = this.getActiveEditorCut();
+          if (cut) cut.se_id = res.se.se_id;
+          this.renderEditorTimelineTracks();
+          this.showToast(`カスタム効果音「${res.se.name}」を追加・設定しました`, 'success');
+        }
+      } catch (err) {
+        this.showToast('カスタムSE追加エラー: ' + err.message, 'error');
+      } finally {
+        e.target.value = '';
+      }
+    });
+
+    document.getElementById('editorGlobalBgmSelect')?.addEventListener('change', (e) => {
+      if (this.editorState) this.editorState.bgm_choice = e.target.value;
+    });
+
+    document.getElementById('editorGlobalBgmVolSlider')?.addEventListener('input', (e) => {
+      const pct = parseInt(e.target.value, 10) || 20;
+      if (this.editorState) this.editorState.bgm_volume = pct / 100;
+      const lbl = document.getElementById('editorGlobalBgmVolLabel');
+      if (lbl) lbl.textContent = `${pct}%`;
+      const bgmAudio = document.getElementById('editorBgmAudioEl');
+      if (bgmAudio) bgmAudio.volume = Math.min(1.0, Math.max(0.02, pct / 100));
+    });
+
+    document.getElementById('btnEditorPreviewBgm')?.addEventListener('click', () => {
+      const val = document.getElementById('editorGlobalBgmSelect')?.value || 'auto_script';
+      const bgmAudio = document.getElementById('editorBgmAudioEl');
+      if (!bgmAudio) return;
+      if (val === 'none') {
+        bgmAudio.pause();
+        return this.showToast('「BGMなし」が選択されています', 'info');
+      }
+      if (!bgmAudio.paused) {
+        bgmAudio.pause();
+        return this.showToast('BGM試聴を停止しました', 'info');
+      }
+      let presetId = 'edo_ukiyoe';
+      if (val.startsWith('builtin:')) {
+        presetId = val;
+      } else if (this.editorState?.visual_style !== 'ukiyoe') {
+        presetId = 'corporate_clean';
+      }
+      bgmAudio.src = window.apiClient.getBuiltinBgmPreviewUrl(presetId);
+      const pct = parseInt(document.getElementById('editorGlobalBgmVolSlider')?.value || '20', 10);
+      bgmAudio.volume = Math.min(1.0, Math.max(0.05, pct / 100));
+      bgmAudio.play().catch(err => this.showToast('BGM再生失敗: ' + err.message, 'error'));
+      this.showToast('BGMを試聴再生中（もう一度押すと停止）', 'info');
+    });
+
+    // --- トランスポート操作（前後のカット移動・カット再生） ---
+    document.getElementById('btnEditorPrevCut')?.addEventListener('click', () => {
+      if (this.editorActiveCutIndex > 0) {
+        this.selectEditorCut(this.editorActiveCutIndex - 1);
+      }
+    });
+    document.getElementById('btnEditorNextCut')?.addEventListener('click', () => {
+      const scenes = this.editorState?.scenes || [];
+      if (this.editorActiveCutIndex < scenes.length - 1) {
+        this.selectEditorCut(this.editorActiveCutIndex + 1);
+      }
+    });
+    document.getElementById('btnEditorPlayPauseCut')?.addEventListener('click', () => {
+      this.playPauseEditorCut();
+    });
+
+    // --- 一時保存 ＆ MP4再書き出し ---
+    const btnSaveDraft = document.getElementById('btnEditorSaveDraft');
+    if (btnSaveDraft) {
+      btnSaveDraft.addEventListener('click', async () => {
+        if (!this.editorJobId || !this.editorState) return;
+        btnSaveDraft.disabled = true;
+        try {
+          await window.apiClient.saveEditorState(this.editorJobId, this.editorState);
+          this.showToast('タイムライン編集状態を保存しました', 'success');
+        } catch (err) {
+          this.showToast('一時保存エラー: ' + err.message, 'error');
+        } finally {
+          btnSaveDraft.disabled = false;
+        }
+      });
+    }
+
+    const btnRenderFinal = document.getElementById('btnEditorRenderFinal');
+    if (btnRenderFinal) {
+      btnRenderFinal.addEventListener('click', async () => {
+        if (!this.editorJobId || !this.editorState) return;
+        this.stopEditorPlayback();
+
+        const banner = document.getElementById('editorRenderStatusBanner');
+        const bannerText = document.getElementById('editorRenderStatusText');
+        const origHtml = btnRenderFinal.innerHTML;
+        btnRenderFinal.disabled = true;
+        btnRenderFinal.innerHTML = '<span class="btn-spinner"></span><span>FFmpeg再書き出し中...</span>';
+        if (banner) banner.style.display = 'flex';
+        if (bannerText) bannerText.textContent = '編集内容（テロップ・ナレーション・カット尺・SE・BGM）を反映してMP4を再レンダリングしています...';
+
+        try {
+          const res = await window.apiClient.renderEditedTimeline(this.editorJobId, this.editorState);
+          if (res.success) {
+            const newMp4Url = `${window.apiClient.baseUrl}/api/download/${encodeURIComponent(this.editorJobId)}?t=${Date.now()}`;
+            const dlMp4Url = `${window.apiClient.baseUrl}/api/download/${encodeURIComponent(this.editorJobId)}?download=1`;
+
+            const dlBtn = document.getElementById('btnEditorDownloadMp4');
+            if (dlBtn) dlBtn.href = dlMp4Url;
+
+            // 全体再生プレイヤーへ切替えて即座に確認可能にする
+            const fullPlayer = document.getElementById('editorFullMp4Player');
+            const liveStage = document.getElementById('editorLiveCutStage');
+            if (liveStage) liveStage.style.display = 'none';
+            if (fullPlayer) {
+              fullPlayer.style.display = 'block';
+              fullPlayer.src = newMp4Url;
+              fullPlayer.load();
+              fullPlayer.play().catch(() => {});
+            }
+
+            // 元の画面のプレイヤーと5本ストックも同期更新
+            await this.loadStockVideoIntoPlayer(this.editorSourceMode || 'pro_shorts', this.editorJobId, true);
+            await this.loadSavedVideoStock('pro_shorts', false);
+            await this.loadSavedVideoStock('long_video', false);
+
+            this.showToast('編集内容を反映した新しいMP4動画の書き出しが完了しました！', 'success');
+          }
+        } catch (err) {
+          this.showToast('再書き出しエラー: ' + err.message, 'error');
+        } finally {
+          btnRenderFinal.disabled = false;
+          btnRenderFinal.innerHTML = origHtml;
+          if (banner) banner.style.display = 'none';
+        }
+      });
+    }
+  }
+
+  async openProVideoEditor(jobId, sourceMode = 'pro_shorts') {
+    if (!jobId) return;
+    const modal = document.getElementById('proVideoEditorModal');
+    if (!modal) return;
+
+    this.editorJobId = jobId;
+    this.editorSourceMode = sourceMode;
+    this.stopEditorPlayback();
+
+    try {
+      this.showToast('タイムライン編集スタジオを起動中...', 'info');
+      const [editorRes, seRes] = await Promise.all([
+        window.apiClient.getEditorState(jobId),
+        window.apiClient.listSePresets().catch(() => ({ se_presets: [] }))
+      ]);
+
+      if (!editorRes.success || !editorRes.editor) {
+        throw new Error('編集データの取得に失敗しました');
+      }
+
+      this.editorState = editorRes.editor;
+
+      // SEプルダウンの同期
+      const seSelect = document.getElementById('editorCutSeSelect');
+      if (seSelect && Array.isArray(seRes.se_presets) && seRes.se_presets.length > 0) {
+        seSelect.innerHTML = '<option value="none">効果音なし</option>' + seRes.se_presets.map(sp => (
+          `<option value="${this._escapeHtml(sp.se_id)}">${this._escapeHtml(sp.name)} (${this._escapeHtml(sp.category || 'SE')})</option>`
+        )).join('');
+      }
+
+      // グローバルBGM初期値反映
+      const bgmSel = document.getElementById('editorGlobalBgmSelect');
+      if (bgmSel && this.editorState.bgm_choice) {
+        bgmSel.value = this.editorState.bgm_choice;
+      }
+      const bgmVolSlider = document.getElementById('editorGlobalBgmVolSlider');
+      const bgmVolLabel = document.getElementById('editorGlobalBgmVolLabel');
+      const bgmPct = Math.round((parseFloat(this.editorState.bgm_volume ?? 0.20)) * 100);
+      if (bgmVolSlider) bgmVolSlider.value = String(bgmPct);
+      if (bgmVolLabel) bgmVolLabel.textContent = `${bgmPct}%`;
+
+      // MP4ダウンロードリンク
+      const dlBtn = document.getElementById('btnEditorDownloadMp4');
+      if (dlBtn) {
+        dlBtn.href = `${window.apiClient.baseUrl}/api/download/${encodeURIComponent(jobId)}?download=1`;
+      }
+
+      // ステージのアスペクト比設定（ショートは9:16、長尺16:9も対応）
+      const stageWrapper = document.getElementById('editorStageWrapper');
+      if (stageWrapper) {
+        if (this.editorState.aspect_ratio === '16:9') {
+          stageWrapper.style.aspectRatio = '16 / 9';
+          stageWrapper.style.maxWidth = '460px';
+        } else {
+          stageWrapper.style.aspectRatio = '9 / 16';
+          stageWrapper.style.maxWidth = '270px';
+        }
+      }
+
+      // カット別ライブ表示モードを初期選択
+      const liveStage = document.getElementById('editorLiveCutStage');
+      const fullPlayer = document.getElementById('editorFullMp4Player');
+      if (liveStage) liveStage.style.display = 'block';
+      if (fullPlayer) { fullPlayer.pause(); fullPlayer.style.display = 'none'; }
+
+      modal.style.display = 'flex';
+      this.updateEditorProjectHeader();
+      this.selectEditorCut(0);
+      this.renderEditorTimelineTracks();
+    } catch (err) {
+      this.showToast('動画編集スタジオ起動エラー: ' + err.message, 'error');
+    }
+  }
+
+  getActiveEditorCut() {
+    const scenes = this.editorState?.scenes || [];
+    return scenes[this.editorActiveCutIndex] || null;
+  }
+
+  updateEditorProjectHeader() {
+    if (!this.editorState) return;
+    const titleEl = document.getElementById('editorProjectTitle');
+    const metaEl = document.getElementById('editorProjectMeta');
+    const summaryEl = document.getElementById('editorTimelineSummaryText');
+    const scenes = (this.editorState.scenes || []).filter(s => s.enabled !== false);
+    const totalSec = scenes.reduce((acc, s) => acc + (parseFloat(s.duration) || 0), 0);
+
+    if (titleEl) titleEl.textContent = `Pro 動画編集スタジオ — ${this.editorState.title || '完成動画プロジェクト'}`;
+    if (metaEl) metaEl.textContent = `Job ID: ${this.editorJobId} | 有効 ${scenes.length} カット | 総尺 ${totalSec.toFixed(1)}秒`;
+    if (summaryEl) summaryEl.textContent = `Total: ${scenes.length} cuts (${totalSec.toFixed(1)}s)`;
+  }
+
+  selectEditorCut(index) {
+    const scenes = this.editorState?.scenes || [];
+    if (scenes.length === 0) return;
+    this.stopEditorPlayback();
+
+    const clamped = Math.max(0, Math.min(scenes.length - 1, index));
+    this.editorActiveCutIndex = clamped;
+    const cut = scenes[clamped];
+
+    const cutBadge = document.getElementById('editorActiveCutBadge');
+    const spkLabel = document.getElementById('editorActiveSpeakerLabel');
+    if (cutBadge) cutBadge.textContent = `Cut #${clamped + 1} (ID:${cut.scene_id})`;
+    if (spkLabel) spkLabel.textContent = cut.speaker || 'ナレーション';
+
+    // Tab 1: テロップ欄へ反映
+    const telopTextEl = document.getElementById('editorCutTelopText');
+    const telopFontEl = document.getElementById('editorCutTelopFont');
+    const telopStyleEl = document.getElementById('editorCutTelopStyle');
+    const telopYSlider = document.getElementById('editorCutTelopYSlider');
+    const telopYLabel = document.getElementById('editorTelopYLabel');
+    const telopSizeKeyEl = document.getElementById('editorCutTelopSizeKey');
+    const telopScaleSlider = document.getElementById('editorCutTelopScaleSlider');
+    const telopScaleLabel = document.getElementById('editorTelopScaleLabel');
+
+    if (telopTextEl) telopTextEl.value = cut.telop_text ?? cut.narration ?? '';
+    if (telopFontEl) telopFontEl.value = cut.telop_font || 'DelaGothicOne';
+    if (telopStyleEl) telopStyleEl.value = cut.telop_style || 'shorts_impact_yellow';
+    const yPct = parseInt(cut.telop_y_pct ?? 76, 10);
+    if (telopYSlider) telopYSlider.value = String(yPct);
+    if (telopYLabel) telopYLabel.textContent = `${yPct}%`;
+    if (telopSizeKeyEl) telopSizeKeyEl.value = cut.telop_font_size || 'medium';
+    const scPct = parseInt(cut.telop_scale ?? 100, 10);
+    if (telopScaleSlider) telopScaleSlider.value = String(scPct);
+    if (telopScaleLabel) telopScaleLabel.textContent = `${scPct}%`;
+
+    // Tab 2: ナレーション欄へ反映
+    const spkEl = document.getElementById('editorCutSpeaker');
+    const narEl = document.getElementById('editorCutNarration');
+    const ttsEngEl = document.getElementById('editorCutTtsEngine');
+    const voiceEl = document.getElementById('editorCutVoiceName');
+    const rateSlider = document.getElementById('editorCutSpeakingRate');
+    const rateLabel = document.getElementById('editorCutRateLabel');
+
+    if (spkEl) spkEl.value = cut.speaker || 'ナレーション';
+    if (narEl) narEl.value = cut.narration || '';
+    if (ttsEngEl) ttsEngEl.value = cut.tts_engine || 'edge';
+    if (voiceEl) voiceEl.value = cut.voice_name || 'nanami';
+    const rateVal = parseFloat(cut.speaking_rate || 1.0);
+    if (rateSlider) rateSlider.value = String(rateVal);
+    if (rateLabel) rateLabel.textContent = `${rateVal.toFixed(2)}x`;
+
+    // Tab 3: カット作業欄へ反映
+    const enToggle = document.getElementById('editorCutEnabledToggle');
+    const mediaBadge = document.getElementById('editorCutMediaTypeBadge');
+    const durSlider = document.getElementById('editorCutDurationSlider');
+    const durInput = document.getElementById('editorCutDurationInput');
+    const durLabel = document.getElementById('editorCutDurationLabel');
+    const trimSlider = document.getElementById('editorCutTrimStartSlider');
+    const trimLabel = document.getElementById('editorCutTrimStartLabel');
+
+    if (enToggle) enToggle.checked = cut.enabled !== false;
+    if (mediaBadge) mediaBadge.textContent = cut.clip_url ? 'AI動画クリップ' : '高精細画像 (Ken Burns)';
+    const durVal = parseFloat(cut.duration || 5.0);
+    if (durSlider) durSlider.value = String(durVal);
+    if (durInput) durInput.value = String(durVal);
+    if (durLabel) durLabel.textContent = `${durVal.toFixed(1)}s`;
+    const trimVal = parseFloat(cut.trim_start || 0.0);
+    if (trimSlider) trimSlider.value = String(trimVal);
+    if (trimLabel) trimLabel.textContent = `${trimVal.toFixed(1)}s`;
+
+    // Tab 4: 効果音 (SE) へ反映
+    const seSel = document.getElementById('editorCutSeSelect');
+    const seDelaySlider = document.getElementById('editorCutSeDelaySlider');
+    const seDelayLabel = document.getElementById('editorCutSeDelayLabel');
+    const seVolSlider = document.getElementById('editorCutSeVolumeSlider');
+    const seVolLabel = document.getElementById('editorCutSeVolumeLabel');
+
+    if (seSel) seSel.value = cut.se_id || 'none';
+    const seDelay = parseFloat(cut.se_delay || 0.0);
+    if (seDelaySlider) seDelaySlider.value = String(seDelay);
+    if (seDelayLabel) seDelayLabel.textContent = `${seDelay.toFixed(1)}s`;
+    const seVolPct = Math.round(parseFloat(cut.se_volume ?? 0.70) * 100);
+    if (seVolSlider) seVolSlider.value = String(seVolPct);
+    if (seVolLabel) seVolLabel.textContent = `${seVolPct}%`;
+
+    const tcEl = document.getElementById('editorTimecodeDisplay');
+    if (tcEl) tcEl.textContent = `00:00.0 / 00:${durVal.toFixed(1).padStart(4, '0')}`;
+
+    this.updateEditorLiveStage();
+    this.renderEditorTimelineTracks();
+  }
+
+  updateEditorLiveStage() {
+    const cut = this.getActiveEditorCut();
+    if (!cut) return;
+
+    const baseUrl = window.apiClient.baseUrl;
+    const videoEl = document.getElementById('editorCutVideoEl');
+    const imgEl = document.getElementById('editorCutImageEl');
+    const telopBox = document.getElementById('editorDraggableTelopBox');
+    const telopTextEl = document.getElementById('editorLiveTelopText');
+
+    if (cut.clip_url && videoEl) {
+      const fullClipUrl = cut.clip_url.startsWith('http') ? cut.clip_url : `${baseUrl}${cut.clip_url}`;
+      if (videoEl.dataset.currentSrc !== fullClipUrl) {
+        videoEl.src = fullClipUrl;
+        videoEl.dataset.currentSrc = fullClipUrl;
+      }
+      videoEl.style.display = 'block';
+      if (imgEl) imgEl.style.display = 'none';
+    } else if (cut.image_url && imgEl) {
+      const fullImgUrl = cut.image_url.startsWith('http') ? cut.image_url : `${baseUrl}${cut.image_url}`;
+      imgEl.src = fullImgUrl;
+      imgEl.style.display = 'block';
+      if (videoEl) { videoEl.pause(); videoEl.style.display = 'none'; }
+    }
+
+    if (telopBox && telopTextEl) {
+      const yPct = parseInt(cut.telop_y_pct ?? 76, 10);
+      telopBox.style.top = `${yPct}%`;
+      const txt = (cut.telop_text ?? cut.narration ?? '').trim();
+      telopTextEl.textContent = txt ? txt.slice(0, 38) : '（テロップなし）';
+
+      // スタイル配色プレビュー反映
+      const styleMap = {
+        shorts_impact_yellow: { color: '#FFE600', stroke: '#000000' },
+        shorts_crimson_flame: { color: '#FFF5D6', stroke: '#B80000' },
+        shorts_gold_luxury:   { color: '#FFD700', stroke: '#1A0F00' },
+        shorts_neon_cyber:    { color: '#00F5FF', stroke: '#04122C' },
+        shorts_clean_white:   { color: '#FFFFFF', stroke: '#0F172A' }
+      };
+      const st = styleMap[cut.telop_style] || styleMap.shorts_impact_yellow;
+      const scale = (parseInt(cut.telop_scale ?? 100, 10)) / 100;
+      telopTextEl.style.color = st.color;
+      telopTextEl.style.fontSize = `${Math.round(15 * scale)}px`;
+      telopTextEl.style.textShadow = `0 2px 0 ${st.stroke}, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000`;
+    }
+  }
+
+  stopEditorPlayback() {
+    if (this._editorSeTimer) {
+      clearTimeout(this._editorSeTimer);
+      this._editorSeTimer = null;
+    }
+    const videoEl = document.getElementById('editorCutVideoEl');
+    const audioEl = document.getElementById('editorCutAudioEl');
+    const seAudioEl = document.getElementById('editorCutSeAudioEl');
+    const playBtn = document.getElementById('btnEditorPlayPauseCut');
+    if (videoEl) videoEl.pause();
+    if (audioEl) { audioEl.pause(); audioEl.currentTime = 0; }
+    if (seAudioEl) { seAudioEl.pause(); seAudioEl.currentTime = 0; }
+    if (playBtn) playBtn.textContent = 'カット再生 (音声+SE)';
+  }
+
+  playPauseEditorCut() {
+    const cut = this.getActiveEditorCut();
+    if (!cut) return;
+    const baseUrl = window.apiClient.baseUrl;
+    const videoEl = document.getElementById('editorCutVideoEl');
+    const audioEl = document.getElementById('editorCutAudioEl');
+    const seAudioEl = document.getElementById('editorCutSeAudioEl');
+    const playBtn = document.getElementById('btnEditorPlayPauseCut');
+
+    if (audioEl && !audioEl.paused) {
+      this.stopEditorPlayback();
+      return;
+    }
+
+    if (videoEl && videoEl.style.display !== 'none') {
+      videoEl.currentTime = parseFloat(cut.trim_start || 0);
+      videoEl.play().catch(() => {});
+    }
+
+    if (cut.audio_url && audioEl) {
+      const fullAudioUrl = cut.audio_url.startsWith('http') ? cut.audio_url : `${baseUrl}${cut.audio_url}`;
+      audioEl.src = fullAudioUrl;
+      audioEl.currentTime = 0;
+      audioEl.play().catch(() => {});
+      if (playBtn) playBtn.textContent = '停止';
+      audioEl.onended = () => {
+        this.stopEditorPlayback();
+      };
+    }
+
+    if (cut.se_id && cut.se_id !== 'none' && seAudioEl) {
+      const delayMs = Math.max(0, (parseFloat(cut.se_delay || 0)) * 1000);
+      this._editorSeTimer = setTimeout(() => {
+        seAudioEl.src = window.apiClient.getSeFileUrl(cut.se_id);
+        seAudioEl.volume = Math.min(1.0, Math.max(0.05, parseFloat(cut.se_volume ?? 0.7)));
+        seAudioEl.currentTime = 0;
+        seAudioEl.play().catch(() => {});
+      }, delayMs);
+    }
+  }
+
+  renderEditorTimelineTracks() {
+    const container = document.getElementById('editorTimelineTracksContainer');
+    const scenes = this.editorState?.scenes || [];
+    if (!container) return;
+
+    const baseUrl = window.apiClient.baseUrl;
+    container.innerHTML = scenes.map((sc, idx) => {
+      const isActive = idx === this.editorActiveCutIndex;
+      const isDisabled = sc.enabled === false;
+      const thumbUrl = sc.image_url ? (sc.image_url.startsWith('http') ? sc.image_url : `${baseUrl}${sc.image_url}`) : '';
+      const dur = parseFloat(sc.duration || 5.0).toFixed(1);
+      const telopSnip = (sc.telop_text || sc.narration || '').slice(0, 16) || '（テロップなし）';
+      const narSnip = (sc.narration || '').slice(0, 16) || '（音声なし）';
+      const seBadge = (sc.se_id && sc.se_id !== 'none') ? `SE: ${sc.se_id.replace('se_', '')}` : 'SEなし';
+
+      return `
+        <div class="timeline-cut-column ${isActive ? 'active' : ''} ${isDisabled ? 'disabled' : ''}" data-cut-idx="${idx}">
+          <!-- Track 1: 映像クリップ -->
+          <div class="timeline-track-cell track-visual">
+            ${thumbUrl ? `<img src="${thumbUrl}" alt="cut" class="timeline-cut-thumb" loading="lazy" onerror="this.style.display='none'" />` : ''}
+            <div class="timeline-cut-visual-info">
+              <span style="font-weight: 700; color: #f8fafc;">Cut #${idx + 1}</span>
+              <span style="font-size: 0.68rem; color: #38bdf8;">${dur}s</span>
+            </div>
+          </div>
+          <!-- Track 2: テロップ -->
+          <div class="timeline-track-cell track-telop">
+            <span style="font-size: 0.66rem; color: #fde047; font-weight: 700;">[Y:${sc.telop_y_pct ?? 76}%]</span>
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this._escapeHtml(telopSnip)}</span>
+          </div>
+          <!-- Track 3: ナレーション -->
+          <div class="timeline-track-cell track-narration">
+            <span style="font-size: 0.66rem; color: #34d399; font-weight: 700;">${this._escapeHtml((sc.speaker || '声').slice(0, 5))}:</span>
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this._escapeHtml(narSnip)}</span>
+          </div>
+          <!-- Track 4: 効果音 (SE) -->
+          <div class="timeline-track-cell track-se ${(sc.se_id && sc.se_id !== 'none') ? 'has-se' : ''}">
+            <span>${this._escapeHtml(seBadge)}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.timeline-cut-column').forEach(col => {
+      col.addEventListener('click', () => {
+        const i = parseInt(col.dataset.cutIdx, 10);
+        this.selectEditorCut(i);
+      });
+    });
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -3551,3 +4914,4 @@ document.addEventListener('DOMContentLoaded', () => {
   // BGM管理の初期化（DOMロード後に実行）
   setTimeout(() => window.appController.initBGMManager(), 500);
 });
+

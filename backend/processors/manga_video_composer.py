@@ -58,7 +58,12 @@ class MangaVideoComposer:
         switch_delay: float = 0.3,
         video_clip_path: Optional[Union[str, Path]] = None,
         overlay_cards: Optional[List[Dict[str, Any]]] = None,
-        enable_ken_burns: bool = True
+        enable_ken_burns: bool = True,
+        trim_start: float = 0.0,
+        force_duration: Optional[float] = None,
+        se_path: Optional[Union[str, Path]] = None,
+        se_volume: float = 0.7,
+        se_delay: float = 0.0
     ) -> float:
         """
         1シーン分の動画クリップを作成する。
@@ -68,15 +73,24 @@ class MangaVideoComposer:
           Ken Burns効果 (zoompan) により、じわじわと滑らかにズームインする躍動映像へ自動変換。
         - overlay_cards がある場合:
           ナレーションの尺に合わせて複数のテロップカードを between(t, start, end) で順次切り替え。
+        - se_path がある場合:
+          ナレーション音声に効果音 (SE) を指定のディレイ・音量で amix 合成。
         """
         out_p = Path(output_clip_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
 
         has_audio = audio_path and Path(audio_path).exists()
         audio_duration = self._get_audio_duration(audio_path) if has_audio else duration
-        final_duration = max(duration, audio_duration, switch_delay + 0.5)
+        if trim_start > 0 and has_audio:
+            audio_duration = max(0.5, audio_duration - trim_start)
+
+        if force_duration is not None and force_duration > 0.3:
+            final_duration = float(force_duration)
+        else:
+            final_duration = max(duration, audio_duration, switch_delay + 0.5)
 
         has_ai_video = video_clip_path and Path(video_clip_path).exists() and Path(video_clip_path).stat().st_size > 0
+        has_se = se_path and Path(se_path).exists() and Path(se_path).stat().st_size > 0
 
         cmd = [self.ffmpeg_path, "-y", "-loglevel", "error"]
         filter_parts = []
@@ -87,6 +101,8 @@ class MangaVideoComposer:
         # ----------------------------------------------------
         if has_ai_video:
             # 動画クリップをベース映像として使用
+            if trim_start > 0:
+                cmd.extend(["-ss", str(trim_start)])
             cmd.extend(["-stream_loop", "-1", "-t", str(final_duration), "-i", str(video_clip_path)])
             filter_parts.append(
                 f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
@@ -157,35 +173,50 @@ class MangaVideoComposer:
             filter_parts.append(f"{last_v_label}null[outv];")
             last_v_label = "[outv]"
 
-        filter_complex = "".join(filter_parts).rstrip(";")
-
         # ----------------------------------------------------
-        # 3. 音声トラック設定
+        # 3. 音声トラック設定（ナレーション ＋ 効果音SEミキシング対応）
         # ----------------------------------------------------
         if has_audio:
+            if trim_start > 0:
+                cmd.extend(["-ss", str(trim_start)])
             cmd.extend(["-i", str(audio_path)])
             audio_in_idx = current_input_idx
             current_input_idx += 1
-            cmd.extend([
-                "-filter_complex", filter_complex,
-                "-map", "[outv]", "-map", f"{audio_in_idx}:a",
-                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
-                "-c:a", "aac", "-b:a", "192000",
-                "-t", str(final_duration),
-                str(out_p)
-            ])
         else:
-            cmd.extend([
-                "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-                "-filter_complex", filter_complex,
-                "-map", "[outv]", "-map", f"{current_input_idx}:a",
-                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
-                "-c:a", "aac", "-b:a", "192000",
-                "-t", str(final_duration),
-                str(out_p)
-            ])
+            cmd.extend(["-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo:d={final_duration}"])
+            audio_in_idx = current_input_idx
+            current_input_idx += 1
 
-        logger.info(f"MangaVideoComposer: Creating scene clip ({final_duration:.2f}s, AI/Stock Video: {has_ai_video}, Cards: {len(valid_cards)}) -> {out_p.name}")
+        if has_se:
+            cmd.extend(["-i", str(se_path)])
+            se_in_idx = current_input_idx
+            current_input_idx += 1
+            delay_ms = max(0, int(float(se_delay or 0.0) * 1000))
+            vol_se = max(0.0, min(2.0, float(se_volume if se_volume is not None else 0.7)))
+            filter_parts.append(
+                f"[{audio_in_idx}:a]apad=whole_dur={final_duration},atrim=0:{final_duration},asetpts=PTS-STARTPTS[amain];"
+                f"[{se_in_idx}:a]volume={vol_se:.2f},adelay={delay_ms}|{delay_ms},apad=whole_dur={final_duration},atrim=0:{final_duration},asetpts=PTS-STARTPTS[ase];"
+                f"[amain][ase]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[outa];"
+            )
+            audio_map_target = "[outa]"
+        else:
+            filter_parts.append(
+                f"[{audio_in_idx}:a]apad=whole_dur={final_duration},atrim=0:{final_duration},asetpts=PTS-STARTPTS[outa];"
+            )
+            audio_map_target = "[outa]"
+
+        filter_complex = "".join(filter_parts).rstrip(";")
+
+        cmd.extend([
+            "-filter_complex", filter_complex,
+            "-map", "[outv]", "-map", audio_map_target,
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
+            "-c:a", "aac", "-b:a", "192000",
+            "-t", str(final_duration),
+            str(out_p)
+        ])
+
+        logger.info(f"MangaVideoComposer: Creating scene clip ({final_duration:.2f}s, AI/Stock Video: {has_ai_video}, SE: {bool(has_se)}, Cards: {len(valid_cards)}) -> {out_p.name}")
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if res.returncode != 0:
             raise RuntimeError(f"FFmpeg scene clip creation failed: {res.stderr}")
@@ -313,7 +344,12 @@ class MangaVideoComposer:
                 height=height,
                 video_clip_path=scene.get("video_path"),
                 overlay_cards=scene.get("overlay_cards"),
-                enable_ken_burns=True
+                enable_ken_burns=True,
+                trim_start=float(scene.get("trim_start", 0.0) or 0.0),
+                force_duration=scene.get("force_duration"),
+                se_path=scene.get("se_path"),
+                se_volume=float(scene.get("se_volume", 0.7) if scene.get("se_volume") is not None else 0.7),
+                se_delay=float(scene.get("se_delay", 0.0) or 0.0)
             )
 
             clip_paths.append(clip_file)

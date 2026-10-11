@@ -182,6 +182,8 @@ class MangaVideoGenerateRequest(BaseModel):
     telop_mode: Optional[str] = Field("sequential", description="テロップ表示方式")
     telop_font_size: Optional[str] = Field("medium", description="テロップ文字サイズ")
     telop_font: Optional[str] = Field("DelaGothicOne", description="テロップフォント（YouTube定番8種）")
+    custom_reference_images: Optional[List[dict]] = Field(None, description="ユーザーアップロードのカスタムリファレンス画像リスト")
+    video_mode: Optional[str] = Field(None, description="pro_shorts または long_video")
 
 
 class TTSPreviewRequest(BaseModel):
@@ -267,7 +269,9 @@ async def run_manga_video_job(
     telop_font_size: Optional[str] = "medium",
     telop_font: Optional[str] = "DelaGothicOne",
     bgm_choice: Optional[str] = "auto_script",
-    bgm_volume: float = 0.20
+    bgm_volume: float = 0.20,
+    custom_reference_images: Optional[List[dict]] = None,
+    video_mode: Optional[str] = None
 ):
     """長尺漫画動画・Pro版ショート動画の統合バックグラウンド合成タスク（タイムラインJSON & チェックポイント自動再開対応）"""
     ACTIVE_RUNNING_JOBS.add(job_id)
@@ -294,7 +298,9 @@ async def run_manga_video_job(
             telop_font_size=telop_font_size,
             telop_font=telop_font,
             bgm_choice=bgm_choice or "auto_script",
-            bgm_volume=float(bgm_volume or 0.20)
+            bgm_volume=float(bgm_volume or 0.20),
+            custom_reference_images=custom_reference_images,
+            video_mode=video_mode
         )
 
     except Exception as e:
@@ -701,18 +707,9 @@ async def download_video(job_id: str, download: int = 0):
     """
     from fastapi.responses import FileResponse, RedirectResponse
     try:
-        job = firestore.get_job(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="ジョブが見つかりません")
-        if job.get("status") != "completed":
-            raise HTTPException(status_code=400, detail="動画がまだ完成していません")
-
-        storage_path = job.get("storage_url")
-        if not storage_path:
-            raise HTTPException(status_code=404, detail="動画ファイルが見つかりません")
-
-        # 1. ローカルの一時ディレクトリにファイルが残っているかチェック (同一インスタンスでの即時プレビュー)
+        # 1. ローカルの一時ディレクトリにファイルが残っているか最優先チェック (Pro版ショート・長尺・簡易版すべて対応)
         local_candidates = [
+            config.TMP_DIR / job_id / "manga_video_final.mp4",
             config.TMP_DIR / job_id / "final_with_bgm.mp4",
             config.TMP_DIR / job_id / "final_output.mp4",
             config.TMP_DIR / f"cache_{job_id}.mp4",
@@ -723,22 +720,32 @@ async def download_video(job_id: str, download: int = 0):
                 local_video = cand
                 break
 
-        # 2. ローカルにない場合はCloud Storageからローカルキャッシュに1回だけ取得
+        # 2. ローカルにない場合はFirestoreのstorage_url/video_pathを確認
         if not local_video:
-            if storage_path.startswith("http"):
-                return RedirectResponse(url=storage_path)
-
-            blob = storage.bucket.blob(storage_path)
-            if not blob.exists():
-                raise HTTPException(status_code=404, detail="Storage上にファイルが見つかりません")
-
-            cache_path = config.TMP_DIR / f"cache_{job_id}.mp4"
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            blob.download_to_filename(str(cache_path))
-            local_video = cache_path
+            job = firestore.get_job(job_id)
+            if not job:
+                raise HTTPException(status_code=404, detail="ジョブまたは動画ファイルが見つかりません")
+            v_path = job.get("video_path")
+            if v_path and Path(v_path).exists() and Path(v_path).stat().st_size > 0:
+                local_video = Path(v_path)
+            else:
+                storage_path = job.get("storage_url")
+                if not storage_path:
+                    raise HTTPException(status_code=404, detail="動画ファイルが見つかりません")
+                if Path(storage_path).exists() and Path(storage_path).stat().st_size > 0:
+                    local_video = Path(storage_path)
+                elif storage_path.startswith("http"):
+                    return RedirectResponse(url=storage_path)
+                else:
+                    blob = storage.bucket.blob(storage_path)
+                    if not blob.exists():
+                        raise HTTPException(status_code=404, detail="Storage上にファイルが見つかりません")
+                    cache_path = config.TMP_DIR / f"cache_{job_id}.mp4"
+                    cache_path.parent.mkdir(parents=True, exist_ok=True)
+                    blob.download_to_filename(str(cache_path))
+                    local_video = cache_path
 
         # 3. Starlette FileResponse を返却
-        # FileResponse は内部で Accept-Ranges: bytes, 206 Partial Content, Content-Length, Content-Range を完全自動処理
         disposition = "attachment" if download == 1 else "inline"
         filename = f"kimidori_video_{job_id}.mp4"
 
@@ -749,7 +756,7 @@ async def download_video(job_id: str, download: int = 0):
             filename=filename if disposition == "attachment" else None,
             headers={
                 "Accept-Ranges": "bytes",
-                "Cache-Control": "public, max-age=86400",
+                "Cache-Control": "no-cache",
             }
         )
     except HTTPException:
@@ -1432,12 +1439,16 @@ async def generate_manga_video_endpoint(req: MangaVideoGenerateRequest, backgrou
         telop_font_size=req.telop_font_size or "medium",
         telop_font=req.telop_font or "DelaGothicOne",
         bgm_choice=req.bgm_choice or "auto_script",
-        bgm_volume=float(req.bgm_volume if req.bgm_volume is not None else 0.20)
+        bgm_volume=float(req.bgm_volume if req.bgm_volume is not None else 0.20),
+        custom_reference_images=req.custom_reference_images,
+        video_mode=req.video_mode
     )
     try:
         j_dir = config.TMP_DIR / job_id
         j_dir.mkdir(parents=True, exist_ok=True)
-        (j_dir / "job_params.json").write_text(json.dumps(job_kwargs, ensure_ascii=False, indent=2), encoding="utf-8")
+        # Base64画像を含むとjob_params.jsonが肥大化するため除外して保存
+        slim_kwargs = {k: v for k, v in job_kwargs.items() if k != "custom_reference_images"}
+        (j_dir / "job_params.json").write_text(json.dumps(slim_kwargs, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as jp_err:
         logger.warning(f"Failed to save job_params.json: {jp_err}")
 
@@ -2013,6 +2024,284 @@ async def get_custom_bgm_file(bgm_id: str):
 
 
 # =============================================================================
+# 保存済み動画ストック管理（最大5本保持・リロード復元対応）& 効果音(SE) & 動画編集スタジオ API
+# =============================================================================
+@app.get("/api/videos/saved")
+async def list_saved_videos_endpoint(mode: Optional[str] = None, limit: int = 5):
+    """生成済み動画の保存ストック一覧を取得（リロードしても最大5本まで保持・即時復元）"""
+    try:
+        from services.video_stock_service import VideoStockAndEditorService
+        svc = VideoStockAndEditorService()
+        videos = svc.list_saved_videos(mode=mode, limit=max(1, min(limit, 10)))
+        return {"success": True, "videos": videos, "max_saved": 5}
+    except Exception as e:
+        logger.error(f"保存済み動画一覧取得エラー: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/videos/saved/{job_id}")
+async def delete_saved_video_endpoint(job_id: str, delete_files: bool = False):
+    """保存済み動画ストックから指定ジョブを削除"""
+    try:
+        from services.video_stock_service import VideoStockAndEditorService
+        svc = VideoStockAndEditorService()
+        removed = svc.delete_saved_video(job_id=job_id, delete_files=delete_files)
+        return {"success": True, "removed": removed}
+    except Exception as e:
+        logger.error(f"保存済み動画削除エラー: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/jobs/{job_id}/asset/{filename}")
+async def get_job_asset_file(job_id: str, filename: str):
+    """ジョブディレクトリ内の個別アセット（bg_xxx.png, clip_xxx.mp4, speech_xxx.mp3, overlay_xxx.png 等）を配信"""
+    from fastapi.responses import FileResponse
+    safe_name = Path(filename).name
+    candidates = [
+        config.TMP_DIR / job_id / "assets" / safe_name,
+        config.TMP_DIR / job_id / "assets" / "characters" / safe_name,
+        config.TMP_DIR / job_id / "work" / safe_name,
+        config.TMP_DIR / job_id / safe_name,
+    ]
+    for p in candidates:
+        if p.exists() and p.is_file():
+            ext = p.suffix.lower()
+            media_type = "application/octet-stream"
+            if ext == ".png":
+                media_type = "image/png"
+            elif ext in (".jpg", ".jpeg"):
+                media_type = "image/jpeg"
+            elif ext == ".mp4":
+                media_type = "video/mp4"
+            elif ext == ".mp3":
+                media_type = "audio/mpeg"
+            elif ext == ".wav":
+                media_type = "audio/wav"
+            return FileResponse(
+                path=str(p),
+                media_type=media_type,
+                headers={"Accept-Ranges": "bytes", "Cache-Control": "no-cache"}
+            )
+    raise HTTPException(status_code=404, detail=f"アセットが見つかりません: {safe_name}")
+
+
+@app.get("/api/se/list")
+async def list_se_presets_endpoint():
+    """動画編集スタジオで利用可能な効果音（SE）プリセット＆カスタムSE一覧を取得"""
+    try:
+        from services.video_stock_service import VideoStockAndEditorService
+        svc = VideoStockAndEditorService()
+        return {"success": True, "se_list": svc.list_se_presets()}
+    except Exception as e:
+        logger.error(f"SE一覧取得エラー: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/se/file/{se_id}")
+async def get_se_audio_file_endpoint(se_id: str):
+    """効果音（SE）の試聴・再生用オーディオファイルを返す"""
+    from fastapi.responses import FileResponse
+    try:
+        from services.video_stock_service import VideoStockAndEditorService
+        svc = VideoStockAndEditorService()
+        se_path = svc.ensure_se_file(se_id)
+        if not se_path or not se_path.exists():
+            raise HTTPException(status_code=404, detail=f"効果音ファイルが見つかりません: {se_id}")
+        media_type = "audio/wav" if se_path.suffix.lower() == ".wav" else "audio/mpeg"
+        return FileResponse(path=str(se_path), media_type=media_type, filename=se_path.name)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"SEファイル取得エラー: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/se/upload")
+async def upload_custom_se_endpoint(file: UploadFile = File(...)):
+    """カスタム効果音（MP3/WAV等）をアップロードしてSEライブラリに追加"""
+    try:
+        from services.video_stock_service import VideoStockAndEditorService
+        svc = VideoStockAndEditorService()
+        ext = Path(file.filename or "se.mp3").suffix.lower()
+        if ext not in (".mp3", ".wav", ".ogg", ".m4a"):
+            ext = ".mp3"
+        safe_stem = "".join(c for c in Path(file.filename or "custom_se").stem if c.isalnum() or c in ("_", "-"))[:32] or "custom_se"
+        out_name = f"{safe_stem}_{int(datetime.utcnow().timestamp())}{ext}"
+        out_path = svc.se_dir / out_name
+        content = await file.read()
+        out_path.write_bytes(content)
+        return {
+            "success": True,
+            "se": {
+                "id": f"custom:{out_name}",
+                "name": f"カスタム: {Path(file.filename or out_name).stem}",
+                "category": "カスタム",
+                "duration": 2.0,
+                "url": f"/api/se/file/custom:{out_name}"
+            }
+        }
+    except Exception as e:
+        logger.error(f"カスタムSEアップロードエラー: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class EditorSaveRequest(BaseModel):
+    editor_state: Dict[str, Any]
+
+
+class EditorResynthesizeTTSRequest(BaseModel):
+    cut_index: int = Field(1, description="1始まりのカット番号またはscene_id")
+    narration: str
+    speaker: Optional[str] = "ナレーション"
+    tts_engine: Optional[str] = "edge"
+    voice_name: Optional[str] = "nanami"
+    speaking_rate: Optional[float] = 1.0
+    tts_params: Optional[Dict[str, Any]] = None
+
+
+class EditorCutMediaUploadRequest(BaseModel):
+    cut_index: int = Field(1, description="対象カットのscene_id")
+    media_type: str = Field("image", description="image / video / audio")
+    data_base64: str = Field(..., description="Data URL または Base64文字列")
+    filename: Optional[str] = "uploaded_media.png"
+
+
+@app.get("/api/manga/editor/{job_id}")
+async def get_manga_editor_state_endpoint(job_id: str):
+    """指定ジョブの動画編集スタジオ用タイムライン状態・全カットアセット情報を取得"""
+    try:
+        from services.video_stock_service import VideoStockAndEditorService
+        svc = VideoStockAndEditorService()
+        state = svc.get_editor_state(job_id)
+        return {"success": True, "editor": state}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"編集スタジオデータ取得エラー ({job_id}): {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/manga/editor/{job_id}/save")
+async def save_manga_editor_state_endpoint(job_id: str, req: EditorSaveRequest):
+    """動画編集スタジオのタイムライン編集内容を一時保存（レンダリングなし）"""
+    try:
+        from services.video_stock_service import VideoStockAndEditorService
+        svc = VideoStockAndEditorService()
+        saved = svc.save_editor_state(job_id, req.editor_state)
+        return {"success": True, "editor": saved}
+    except Exception as e:
+        logger.error(f"編集スタジオ保存エラー ({job_id}): {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/manga/editor/{job_id}/resynthesize-tts")
+async def resynthesize_cut_tts_endpoint(job_id: str, req: EditorResynthesizeTTSRequest):
+    """動画編集スタジオ内で単一カットのナレーションテキスト＆音声をその場で再合成し、尺と音声URLを更新"""
+    try:
+        from services.video_stock_service import VideoStockAndEditorService
+        svc = VideoStockAndEditorService()
+        res = await svc.resynthesize_cut_tts(
+            job_id=job_id,
+            cut_index=req.cut_index,
+            narration=req.narration,
+            speaker=req.speaker or "ナレーション",
+            tts_engine=req.tts_engine or "edge",
+            voice_name=req.voice_name or "nanami",
+            speaking_rate=float(req.speaking_rate if req.speaking_rate is not None else 1.0),
+            tts_params=req.tts_params
+        )
+        return res
+    except Exception as e:
+        logger.error(f"カットTTS再合成エラー ({job_id} / Cut {req.cut_index}): {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/manga/editor/{job_id}/upload-cut-media")
+async def upload_cut_media_endpoint(job_id: str, req: EditorCutMediaUploadRequest):
+    """動画編集スタジオ内で特定カットの背景画像・動画クリップ・音声ファイルをユーザー素材に差し替え"""
+    try:
+        import base64
+        from PIL import Image
+        from io import BytesIO
+
+        job_dir = config.TMP_DIR / job_id
+        assets_dir = job_dir / "assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+
+        b64_data = req.data_base64
+        if "," in b64_data:
+            b64_data = b64_data.split(",", 1)[1]
+        raw_bytes = base64.b64decode(b64_data)
+
+        idx = max(1, int(req.cut_index))
+        ts = int(datetime.utcnow().timestamp())
+
+        if req.media_type == "image":
+            out_path = assets_dir / f"bg_{idx:03d}.png"
+            pil_img = Image.open(BytesIO(raw_bytes)).convert("RGB")
+            pil_img.save(out_path, "PNG")
+            return {
+                "success": True,
+                "media_type": "image",
+                "image_url": f"/api/jobs/{job_id}/asset/{out_path.name}?t={ts}"
+            }
+        elif req.media_type == "video":
+            out_path = assets_dir / f"clip_{idx:03d}.mp4"
+            out_path.write_bytes(raw_bytes)
+            return {
+                "success": True,
+                "media_type": "video",
+                "video_url": f"/api/jobs/{job_id}/asset/{out_path.name}?t={ts}"
+            }
+        elif req.media_type == "audio":
+            out_path = assets_dir / f"speech_{idx:03d}.mp3"
+            out_path.write_bytes(raw_bytes)
+            from processors.manga_video_composer import MangaVideoComposer
+            dur = round(MangaVideoComposer()._get_audio_duration(out_path), 2)
+            return {
+                "success": True,
+                "media_type": "audio",
+                "audio_url": f"/api/jobs/{job_id}/asset/{out_path.name}?t={ts}",
+                "duration": dur
+            }
+        else:
+            raise HTTPException(status_code=400, detail=f"未対応のmedia_typeです: {req.media_type}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"カットメディア差し替えエラー ({job_id}): {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/manga/editor/{job_id}/render")
+async def render_edited_timeline_endpoint(job_id: str, req: EditorSaveRequest):
+    """
+    動画編集スタジオで編集されたタイムライン（テロップ変更・位置変更・ナレーション変更・カットトリミング/削除/順序変更・効果音SE追加・BGM変更）を
+    既存アセットを活かして高速FFmpeg再レンダリングし、完成MP4および保存済み5本ストックを更新する
+    """
+    try:
+        from services.video_stock_service import VideoStockAndEditorService
+        svc = VideoStockAndEditorService()
+        res = await asyncio.to_thread(svc.render_edited_timeline, job_id=job_id, editor_state=req.editor_state)
+        # Firestore上のジョブ情報も最新化
+        try:
+            firestore.update_job(
+                job_id,
+                status="completed",
+                progress=100,
+                message="動画編集スタジオでの再書き出しが完了しました！",
+                video_path=res.get("video_path"),
+                storage_url=res.get("video_path")
+            )
+        except Exception:
+            pass
+        return res
+    except Exception as e:
+        logger.error(f"動画編集スタジオ再レンダリングエラー ({job_id}): {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"再書き出しに失敗しました: {str(e)}")
+
+
+# =============================================================================
 # 起動時の初期化
 # =============================================================================
 @app.on_event("startup")
@@ -2025,11 +2314,18 @@ async def startup_event():
 
     # 一時ディレクトリの初期化
     config.TMP_DIR.mkdir(parents=True, exist_ok=True)
+    # 既存の完成動画ジョブを保存済みストック（最大5本）と自動同期
+    try:
+        from services.video_stock_service import VideoStockAndEditorService
+        VideoStockAndEditorService().sync_tmp_completed_jobs()
+    except Exception as sync_err:
+        logger.warning(f"Startup video stock sync warning: {sync_err}")
 
 
 # フロントエンド静的ファイルの配信マウント (http://localhost:8080/ でWeb UIを直接表示)
 frontend_dir = config.BASE_DIR.parent / "frontend"
 if frontend_dir.exists():
     app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+
 
 

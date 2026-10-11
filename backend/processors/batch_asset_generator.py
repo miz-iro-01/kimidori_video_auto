@@ -504,7 +504,9 @@ class BatchAssetGenerator:
         style: Dict[str, Any],
         font_size_key: str = "medium",
         telop_font: Optional[str] = None,
-        genre: str = "story"
+        genre: str = "story",
+        telop_y_ratio: float = 0.75,
+        telop_scale_mult: float = 1.0
     ) -> Image.Image:
         """
         プロYouTube Shorts / 放送局クオリティの5層マルチレイヤーテロップ描画
@@ -523,7 +525,7 @@ class BatchAssetGenerator:
         if not lines:
             return overlay
 
-        base_scale = style.get("font_scale", 0.066)
+        base_scale = style.get("font_scale", 0.066) * max(0.60, min(1.50, float(telop_scale_mult or 1.0)))
         if font_size_key == "large":
             base_scale *= 1.10
         elif font_size_key == "xlarge":
@@ -536,7 +538,7 @@ class BatchAssetGenerator:
         dummy_draw = ImageDraw.Draw(overlay)
 
         # 画面幅90%以内に収まる最大フォントサイズを自動算出
-        while font_size > 32:
+        while font_size > 28:
             font_main = self._get_font(font_size, font_key=telop_font, genre=genre)
             outer_sw = max(12, int(font_size * 0.24))
             max_lw = 0
@@ -563,8 +565,9 @@ class BatchAssetGenerator:
             if idx < len(lines) - 1:
                 total_h += line_gap
 
-        # Shortsの黄金視認領域（画面高75%中心）に配置
-        base_y = int(height * 0.75) - (total_h // 2)
+        # 指定された垂直Y比率（デフォルト75% = 下部黄金領域、上部18%、中央50%等）に配置
+        safe_y_ratio = max(0.08, min(0.92, float(telop_y_ratio if telop_y_ratio is not None else 0.75)))
+        base_y = max(24, min(height - total_h - 24, int(height * safe_y_ratio) - (total_h // 2)))
 
         glow_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         glow_draw = ImageDraw.Draw(glow_layer)
@@ -679,7 +682,9 @@ class BatchAssetGenerator:
         genre: str = "story",
         telop_style: Optional[str] = None,
         font_size_key: str = "medium",
-        telop_font: Optional[str] = None
+        telop_font: Optional[str] = None,
+        telop_y_ratio: float = 0.75,
+        telop_scale_mult: float = 1.0
     ) -> List[Dict[str, Any]]:
         """
         長文ナレーションを最適なカード群に自動分割し、音声尺に合わせて順次切り替わるテロップ画像シーケンスを出力
@@ -723,7 +728,9 @@ class BatchAssetGenerator:
                 style=style,
                 font_size_key=font_size_key,
                 telop_font=telop_font,
-                genre=genre
+                genre=genre,
+                telop_y_ratio=telop_y_ratio,
+                telop_scale_mult=telop_scale_mult
             )
 
             card_filename = f"overlay_{scene_num:03d}_card_{idx:02d}.png"
@@ -1104,16 +1111,22 @@ class BatchAssetGenerator:
         fal_api_key: Optional[str] = None,
         replicate_api_token: Optional[str] = None,
         paid_gemini_api_key: Optional[str] = None,
-        visual_style: str = "anime_modern"
+        visual_style: str = "anime_modern",
+        user_reference_map: Optional[Dict[str, Path]] = None
     ) -> Dict[str, Path]:
         """
         登場人物ごとの「視覚的基準となるマスター画像（単一キャラクターのバストアップ1枚絵）」を
         指定された visual_style (ukiyoe / anime_modern / manga_dramatic 等) で事前確定生成。
-        ※ 2分割パネルや三面図（concept sheet / turnaround）になるのを防ぐため、単一ポートレートとして生成する
+        ユーザー側からアップロードされたリファレンス画像がある場合はそれを最優先アンカーとして登録・参照する。
         """
         char_dir = output_dir / "characters"
         char_dir.mkdir(parents=True, exist_ok=True)
-        master_map = {}
+        master_map: Dict[str, Path] = {}
+
+        if user_reference_map:
+            for k, p in user_reference_map.items():
+                if p and Path(p).exists():
+                    master_map[k] = Path(p)
 
         if not characters:
             return master_map
@@ -1126,6 +1139,12 @@ class BatchAssetGenerator:
             if not name or name in ["ナレーション", "語り", "解説"]:
                 continue
 
+            # ユーザーが該当キャラクター名のリファレンス画像をアップロードしている場合はそのまま採用
+            if user_reference_map and name in user_reference_map and Path(user_reference_map[name]).exists():
+                master_map[name] = Path(user_reference_map[name])
+                logger.info(f"Using user-uploaded reference image directly for character '{name}': {master_map[name].name}")
+                continue
+
             out_path = char_dir / f"master_{style_key}_{name}.png"
             legacy_path = char_dir / f"master_{name}.png"
             if out_path.exists() and out_path.stat().st_size > 1000:
@@ -1136,6 +1155,17 @@ class BatchAssetGenerator:
                 master_map[name] = legacy_path
                 logger.info(f"Reused existing character master checkpoint: {legacy_path.name}")
                 continue
+
+            # ユーザーが共通リファレンス画像 (__user_default__) をアップロードしている場合は Base64 で Nano Banana に注入
+            user_default_b64 = None
+            if user_reference_map and "__user_default__" in user_reference_map:
+                def_p = Path(user_reference_map["__user_default__"])
+                if def_p.exists():
+                    try:
+                        import base64
+                        user_default_b64 = base64.b64encode(def_p.read_bytes()).decode("utf-8")
+                    except Exception:
+                        pass
 
             appearance = self._clean_scene_prompt_for_image(char.get("appearance_prompt_en", ""), visual_style=style_key)
             master_prompt = (
@@ -1152,7 +1182,7 @@ class BatchAssetGenerator:
                     c_img = await self._generate_with_gemini_nanobanana(
                         api_key=paid_gemini_api_key,
                         prompt=master_prompt,
-                        ref_image_base64=None,
+                        ref_image_base64=user_default_b64,
                         target_size=(1024, 1024),
                         aspect_ratio="1:1",
                         visual_style=style_key
@@ -1206,6 +1236,8 @@ class BatchAssetGenerator:
             if generated:
                 master_map[name] = out_path
                 logger.info(f"[Character Consistency] Master Anchor Established ({style_key}): {name} -> {out_path}")
+            elif user_reference_map and "__user_default__" in user_reference_map:
+                master_map[name] = Path(user_reference_map["__user_default__"])
 
         return master_map
 
@@ -1263,9 +1295,12 @@ class BatchAssetGenerator:
             if not char_anchor and len(characters) > 0:
                 char_anchor = self._clean_scene_prompt_for_image(characters[0].get("appearance_prompt_en", ""), visual_style=style_key)
 
-        # 実画像マスター（Visual Canonical Anchor）が存在する場合、Base64に変換してリファレンス参照用に準備
+        # 実画像マスター（Visual Canonical Anchor）またはユーザーリファレンス画像をBase64に変換して注入
         if character_master_map:
-            master_path = character_master_map.get(speaker)
+            master_path = (
+                character_master_map.get(speaker)
+                or character_master_map.get("__user_default__")
+            )
             if not master_path and len(character_master_map) > 0:
                 master_path = next(iter(character_master_map.values()))
             if master_path and Path(master_path).exists():

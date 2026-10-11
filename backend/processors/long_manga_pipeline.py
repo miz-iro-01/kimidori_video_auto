@@ -180,14 +180,18 @@ async def run_long_manga_pipeline(
     telop_font_size: Optional[str] = "medium",
     telop_font: Optional[str] = "DelaGothicOne",
     bgm_choice: Optional[str] = "auto_script",
-    bgm_volume: float = 0.20
+    bgm_volume: float = 0.20,
+    custom_reference_images: Optional[List[Dict[str, Any]]] = None,
+    video_mode: Optional[str] = None
 ) -> str:
     """
     長尺漫画動画・Pro版ショート動画の全体生成パイプライン実行メイン関数。
     5%から100%までリアルタイムに進捗と詳細ログを Firestore に刻みながら実行する。
     """
     from services.firestore_service import FirestoreService
+    from services.video_stock_service import VideoStockAndEditorService
     firestore = firestore_client or FirestoreService()
+    stock_svc = VideoStockAndEditorService()
 
     logs = []
     job_dir = config.TMP_DIR / job_id
@@ -219,22 +223,29 @@ async def run_long_manga_pipeline(
             or ("ukiyoe" if project.genre == "edoculture" else "anime_modern")
         )
         total_scenes = len(project.scenes)
+        resolved_mode = video_mode or ("long_video" if total_scenes >= 15 else "pro_shorts")
         log_and_update(
             15, 1, "タイムライン構築完了", 
             f"全 {total_scenes} カットをタイムライン設計書に展開（スタイル: {resolved_visual_style} / 画像生成 ➔ I2Vアニメーション動画化）"
         )
 
-        # project.json を一時ディレクトリに保存（単体再生成・リカバリー用）
+        # project.json を一時ディレクトリに保存（単体再生成・リカバリー・編集スタジオ用）
         project_json_path = job_dir / "project.json"
         with open(project_json_path, "w", encoding="utf-8") as f:
             json.dump({
                 "job_id": job_id,
+                "mode": resolved_mode,
                 "title": project.title,
                 "theme": project.theme,
                 "genre": project.genre,
                 "visual_style": resolved_visual_style,
                 "tts_engine": tts_engine,
                 "voice_name": voice_name,
+                "telop_font": telop_font or "DelaGothicOne",
+                "telop_style": telop_style or "shorts_impact_yellow",
+                "telop_font_size": telop_font_size or "medium",
+                "bgm_choice": bgm_choice or "auto_script",
+                "bgm_volume": float(bgm_volume if bgm_volume is not None else 0.20),
                 "scenes": [
                     {
                         "scene_id": s.scene_id,
@@ -251,8 +262,16 @@ async def run_long_manga_pipeline(
                 ]
             }, f, ensure_ascii=False, indent=2)
 
-        # Step 1.5: 登場人物の実画像マスター（単一キャラクターバストアップ）事前一括生成 (18%)
+        # Step 1.5: 登場人物の実画像マスター（単一キャラクターバストアップ）事前一括生成 & ユーザーリファレンス画像統合 (18%)
         batch_gen = BatchAssetGenerator()
+        user_ref_map: Dict[str, Path] = {}
+        if custom_reference_images:
+            user_ref_map = stock_svc.save_custom_reference_images(job_dir, custom_reference_images)
+            if user_ref_map:
+                log_and_update(
+                    17, 1, "ユーザーリファレンス画像適用",
+                    f"アップロードされたリファレンス画像（{len(custom_reference_images)}枚）を基準マスターとして登録しました"
+                )
 
         # キャラクター定義の確認と自動補完（シーン情景は絶対に含めず純粋なキャラクター外見のみを指定）
         char_style_hint = (
@@ -288,11 +307,11 @@ async def run_long_manga_pipeline(
                     }
                 ]
 
-        if project.characters:
-            char_names = [c.get("name") for c in project.characters if c.get("name")]
+        if project.characters or user_ref_map:
+            char_names = [c.get("name") for c in (project.characters or []) if c.get("name")]
             log_and_update(
                 18, 1, f"マスターリファレンス画像生成中 ({resolved_visual_style})",
-                f"Gemini Nano Banana で基準マスター画像を生成中 ({resolved_visual_style}): {', '.join(char_names)}"
+                f"基準マスター画像を準備中 ({resolved_visual_style}): {', '.join(char_names) if char_names else 'カスタムリファレンス'}"
             )
             char_master_map = await batch_gen.generate_character_masters(
                 characters=project.characters,
@@ -301,11 +320,12 @@ async def run_long_manga_pipeline(
                 fal_api_key=fal_api_key,
                 replicate_api_token=replicate_api_token,
                 paid_gemini_api_key=paid_gemini_api_key,
-                visual_style=resolved_visual_style
+                visual_style=resolved_visual_style,
+                user_reference_map=user_ref_map
             )
             log_and_update(
                 20, 1, "マスターリファレンス画像確定完了",
-                f"基準マスター画像の生成が完了しました（{len(char_master_map)}件 / スタイル: {resolved_visual_style}）。これをリファレンスにして各シーン画像 ➔ アニメーション動画を生成します"
+                f"基準マスター画像の準備が完了しました（{len(char_master_map)}件 / スタイル: {resolved_visual_style}）。これをリファレンスにして各シーン画像 ➔ アニメーション動画を生成します"
             )
         else:
             char_master_map = {}
@@ -471,7 +491,32 @@ async def run_long_manga_pipeline(
             raise RuntimeError("動画合成処理が完了しましたが、出力ファイルが生成されませんでした。")
 
         file_mb = output_mp4.stat().st_size / (1024 * 1024)
-        log_and_update(95, 5, "動画ファイル確定", f"高画質長尺動画のレンダリングが完了しました ({file_mb:.1f} MB)")
+        log_and_update(95, 5, "動画ファイル確定", f"高画質動画のレンダリングが完了しました ({file_mb:.1f} MB)")
+
+        # 保存済み動画ストック（最大5本）へ自動登録（リロード対策）
+        total_dur_sec = sum(float(sa.get("duration_seconds") or 5.0) for sa in scene_assets)
+        try:
+            stock_svc.register_completed_video(
+                job_id=job_id,
+                mode=resolved_mode,
+                title=project.title,
+                theme=project.theme,
+                genre=project.genre,
+                visual_style=resolved_visual_style,
+                video_path=str(output_mp4),
+                cut_count=len(scene_assets),
+                duration_sec=total_dur_sec,
+                script_data=script_data,
+                tts_engine=tts_engine,
+                voice_name=voice_name,
+                telop_font=telop_font or "DelaGothicOne",
+                telop_style=telop_style or "shorts_impact_yellow",
+                telop_font_size=telop_font_size or "medium",
+                bgm_choice=bgm_choice or "auto_script",
+                bgm_volume=float(bgm_volume if bgm_volume is not None else 0.20)
+            )
+        except Exception as st_err:
+            logger.warning(f"Failed to register completed video in stock service: {st_err}")
 
         # 完了更新
         firestore.update_job(
@@ -480,8 +525,9 @@ async def run_long_manga_pipeline(
             progress=100,
             step=5,
             step_label="動画作成完了",
-            message="長尺動画の作成が完了しました！ダウンロード可能です。",
+            message="動画の作成が完了しました！ダウンロード・編集が可能です。",
             video_path=str(output_mp4),
+            storage_url=str(output_mp4),
             scenes=scenes_data_for_ui,
             logs=logs
         )

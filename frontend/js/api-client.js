@@ -507,7 +507,9 @@ class ApiClient {
       telop_style: options.telopStyle || "shorts_impact_yellow",
       telop_mode: options.telopMode || "sequential",
       telop_font_size: options.telopFontSize || "medium",
-      telop_font: options.telopFont || "DelaGothicOne"
+      telop_font: options.telopFont || "DelaGothicOne",
+      custom_reference_images: options.customReferenceImages || null,
+      video_mode: options.videoMode || null
     };
 
     let res;
@@ -1152,8 +1154,152 @@ ${ukiyoeInstruction}
     }
     return await res.json();
   }
+
+  // ==============================================================
+  // 保存済み動画ストック（最大5本保持・リロード自動復元）＆ Pro動画タイムライン編集スタジオ API
+  // ==============================================================
+
+  /** 保存済み完成動画ストック一覧を取得（mode: "pro_shorts" | "long_video" | null） */
+  async listSavedVideos(mode = null, limit = 5) {
+    const params = new URLSearchParams();
+    if (mode) params.set("mode", mode);
+    params.set("limit", String(limit));
+    const res = await fetch(`${this.baseUrl}/api/videos/saved?${params.toString()}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `保存済み動画ストック取得エラー (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** 保存済み動画ストックから指定ジョブを削除 */
+  async deleteSavedVideo(jobId, deleteFiles = false) {
+    const res = await fetch(`${this.baseUrl}/api/videos/saved/${encodeURIComponent(jobId)}?delete_files=${deleteFiles}`, {
+      method: "DELETE"
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `ストック削除エラー (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** 効果音（SE）プリセット＆カスタムSE一覧を取得 */
+  async listSePresets() {
+    const res = await fetch(`${this.baseUrl}/api/se/list`);
+    if (!res.ok) return { success: false, se_presets: [] };
+    return await res.json();
+  }
+
+  /** 効果音（SE）再生URLを取得 */
+  getSeFileUrl(seId) {
+    if (!seId || seId === "none") return "";
+    return `${this.baseUrl}/api/se/file/${encodeURIComponent(seId)}`;
+  }
+
+  /** ユーザー自前の効果音（SE）ファイルをアップロード */
+  async uploadCustomSe(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${this.baseUrl}/api/se/upload`, {
+      method: "POST",
+      body: formData
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `カスタムSEアップロード失敗 (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** 指定ジョブのタイムライン編集スタジオ状態（全カット・テロップ・音声・SE・BGM）を取得 */
+  async getEditorState(jobId) {
+    const res = await fetch(`${this.baseUrl}/api/manga/editor/${encodeURIComponent(jobId)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `編集データの読み込みに失敗しました (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** タイムライン編集スタジオの状態を一時保存 */
+  async saveEditorState(jobId, editorState) {
+    const res = await fetch(`${this.baseUrl}/api/manga/editor/${encodeURIComponent(jobId)}/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ editor_state: editorState })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `編集状態の保存に失敗しました (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** タイムライン編集スタジオ: 単一カットのナレーション（TTS）をその場で再合成し、尺も自動更新 */
+  async resynthesizeCutTts(jobId, params) {
+    const payload = {
+      scene_id: params.sceneId,
+      narration: params.narration || "",
+      speaker: params.speaker || "ナレーション",
+      tts_engine: params.ttsEngine || "edge",
+      voice_name: params.voiceName || "nanami",
+      speaking_rate: parseFloat(params.speakingRate || 1.0),
+      tts_params: {
+        speaking_rate: String(params.speakingRate || "1.0"),
+        google_tts_key: window.settingsManager.get("googleTtsKey") || "",
+        elevenlabs_key: window.settingsManager.get("elevenLabsKey") || "",
+        openai_key: window.settingsManager.get("openAiTtsKey") || "",
+        azure_key: window.settingsManager.get("azureTtsKey") || "",
+        azure_region: window.settingsManager.get("azureTtsRegion") || "japaneast",
+        voicevox_url: window.settingsManager.get("voicevoxUrl") || "http://localhost:50021"
+      }
+    };
+    const res = await fetch(`${this.baseUrl}/api/manga/editor/${encodeURIComponent(jobId)}/resynthesize-tts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `ナレーション再合成エラー (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** タイムライン編集スタジオ: 単一カットの背景画像・動画クリップ・音声ファイルを差し替えアップロード */
+  async uploadCutMedia(jobId, { sceneId, mediaType, file }) {
+    const formData = new FormData();
+    formData.append("scene_id", String(sceneId));
+    formData.append("media_type", mediaType);
+    formData.append("file", file);
+    const res = await fetch(`${this.baseUrl}/api/manga/editor/${encodeURIComponent(jobId)}/upload-cut-media`, {
+      method: "POST",
+      body: formData
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `カット素材アップロード失敗 (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** タイムライン編集スタジオ: 編集内容を反映してFFmpegで最終MP4を高速再レンダリング */
+  async renderEditedTimeline(jobId, editorState) {
+    const res = await fetch(`${this.baseUrl}/api/manga/editor/${encodeURIComponent(jobId)}/render`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ editor_state: editorState })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `動画再書き出しエラー (${res.status})`);
+    }
+    return await res.json();
+  }
 }
 
 window.apiClient = new ApiClient();
+
 
 

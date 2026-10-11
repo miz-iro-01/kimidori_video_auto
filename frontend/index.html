@@ -310,6 +310,24 @@
           <p class="section-subtitle">5〜6本のアニメーション/動画演出クリップを繋げた超高エンゲージメントな縦型ショート動画を全自動生成します。</p>
         </header>
 
+        <!-- 保存済み動画ストック（最大5本保持・リロード自動復元） -->
+        <div class="glass-card" id="proShortsSavedStockCard" style="margin-bottom: 1.5rem; padding: 1.25rem 1.5rem; border: 1px solid rgba(16, 185, 129, 0.35); background: rgba(11, 19, 35, 0.9);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.9rem;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <h3 style="margin: 0; font-size: 0.98rem; color: #f8fafc;">保存済み動画ストック（最大5本まで自動保存・リロードしても保持）</h3>
+              <span class="badge" id="proShortsStockCountBadge" style="background: rgba(16, 185, 129, 0.18); color: var(--accent-primary); font-size: 0.74rem; padding: 2px 8px; border-radius: 6px;">読込中...</span>
+            </div>
+            <button type="button" class="btn btn-outline" id="btnRefreshProShortsStock" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 5px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+              ストック更新
+            </button>
+          </div>
+          <div id="proShortsSavedStockList" class="saved-video-stock-grid">
+            <div style="font-size: 0.82rem; color: var(--text-secondary); padding: 0.5rem 0;">保存済み動画を読み込んでいます...</div>
+          </div>
+        </div>
+
         <div class="glass-card main-form-card">
           <div id="proShortsLockNotice" class="guide-box" style="display: none; margin-bottom: 1.5rem; border-left: 4px solid var(--accent-secondary); background: rgba(255, 100, 100, 0.08);">
             <p style="margin: 0; color: #ff6b6b; font-weight: 600; display: flex; align-items: center; gap: 6px;">
@@ -370,6 +388,27 @@
                 </select>
               </div>
             </div>
+          </div>
+
+          <!-- 2.5 ユーザー側リファレンス画像アップロード欄（キャラクター・画風基準アンカー） -->
+          <div id="proShortsRefUploadBox" style="margin-top: 1rem; padding: 1rem 1.25rem; border: 1px solid rgba(0, 210, 255, 0.3); border-radius: var(--radius-md); background: rgba(11, 20, 38, 0.65);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.65rem;">
+              <span style="font-size: 0.85rem; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #00d2ff;"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                リファレンス画像アップロード（任意：キャラクター・画風基準を指定）
+              </span>
+              <span class="badge" style="font-size: 0.72rem; background: rgba(0, 210, 255, 0.14); color: #38bdf8;">アップロードした画像を最優先リファレンスとして画像・アニメーション動画化</span>
+            </div>
+            <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+              <input type="text" id="inputRefLabelProShorts" class="form-input" placeholder="対象キャラ名または『共通』（空欄＝全カット共通リファレンス）" style="flex: 1; min-width: 210px; font-size: 0.82rem; padding: 0.5rem 0.75rem;">
+              <label class="btn btn-outline" style="cursor: pointer; padding: 0.5rem 0.9rem; font-size: 0.8rem; border-color: #00d2ff; color: #00d2ff; display: inline-flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                リファレンス画像を選択（複数可）
+                <input type="file" id="fileRefImagesProShorts" accept="image/*" multiple style="display: none;">
+              </label>
+              <button type="button" class="btn btn-text" id="btnClearRefImagesProShorts" style="font-size: 0.78rem; color: #94a3b8; display: none;">すべてクリア</button>
+            </div>
+            <div id="proShortsRefGallery" class="ref-image-gallery-grid" style="margin-top: 0.75rem; display: none;"></div>
           </div>
 
           <!-- 3. 自前の台本入力欄 / ファイルアップロード / Google Drive連携 -->
@@ -620,10 +659,14 @@
           <p id="proShortsProgressMsg" style="color: var(--text-secondary);">素材を準備中...</p>
           <div id="proShortsVideoResult" style="display: none; margin-top: 1.5rem;">
             <video id="proShortsVideoPreview" controls playsinline preload="metadata" style="max-width: 320px; max-height: 560px; border-radius: 8px;"></video>
-            <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+            <div style="margin-top: 1rem; display: flex; gap: 0.85rem; justify-content: center; flex-wrap: wrap;">
               <button class="btn btn-outline" id="btnResetProShorts" style="display: inline-flex; align-items: center; gap: 6px;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
                 最初から新しく作成する
+              </button>
+              <button type="button" class="btn btn-primary" id="btnEditProShortsVideo" style="background: linear-gradient(135deg, #00d2ff 0%, #0284c7 100%); border-color: #38bdf8; color: #ffffff; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                編集する（タイムライン編集スタジオ）
               </button>
               <a id="btnDownloadProShorts" class="btn btn-primary" href="#" download="pro_shorts.mp4">完成動画を保存</a>
             </div>
@@ -637,6 +680,24 @@
           <h1 class="section-title">長尺動画自動生成 (15〜20分)</h1>
           <p class="section-subtitle">完全仕様書準拠: 全5章・120〜180カット、音声先行測定（音ズレ防止）、人物検知による吹き出し配置、メモリ保護の小分け合成</p>
         </header>
+
+        <!-- 保存済み動画ストック（最大5本保持・リロード自動復元） -->
+        <div class="glass-card" id="longVideoSavedStockCard" style="margin-bottom: 1.5rem; padding: 1.25rem 1.5rem; border: 1px solid rgba(16, 185, 129, 0.35); background: rgba(11, 19, 35, 0.9);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.9rem;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <h3 style="margin: 0; font-size: 0.98rem; color: #f8fafc;">保存済み動画ストック（最大5本まで自動保存・リロードしても保持）</h3>
+              <span class="badge" id="longVideoStockCountBadge" style="background: rgba(16, 185, 129, 0.18); color: var(--accent-primary); font-size: 0.74rem; padding: 2px 8px; border-radius: 6px;">読込中...</span>
+            </div>
+            <button type="button" class="btn btn-outline" id="btnRefreshLongVideoStock" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 5px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+              ストック更新
+            </button>
+          </div>
+          <div id="longVideoSavedStockList" class="saved-video-stock-grid">
+            <div style="font-size: 0.82rem; color: var(--text-secondary); padding: 0.5rem 0;">保存済み動画を読み込んでいます...</div>
+          </div>
+        </div>
 
         <div class="glass-card main-form-card">
           <div id="longVideoLockNotice" class="guide-box" style="display: none; margin-bottom: 1.5rem; border-left: 4px solid var(--accent-secondary); background: rgba(255, 100, 100, 0.08);">
@@ -710,6 +771,27 @@
                 </select>
               </div>
             </div>
+          </div>
+
+          <!-- ユーザー側リファレンス画像アップロード欄（長尺動画用） -->
+          <div id="longVideoRefUploadBox" style="margin-top: 1rem; padding: 1rem 1.25rem; border: 1px solid rgba(0, 210, 255, 0.3); border-radius: var(--radius-md); background: rgba(11, 20, 38, 0.65);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.65rem;">
+              <span style="font-size: 0.85rem; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #00d2ff;"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                リファレンス画像アップロード（任意：キャラクター・画風基準を指定）
+              </span>
+              <span class="badge" style="font-size: 0.72rem; background: rgba(0, 210, 255, 0.14); color: #38bdf8;">アップロードした画像を最優先リファレンスとして画像・アニメーション動画化</span>
+            </div>
+            <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+              <input type="text" id="inputRefLabelLongVideo" class="form-input" placeholder="対象キャラ名または『共通』（空欄＝全カット共通リファレンス）" style="flex: 1; min-width: 210px; font-size: 0.82rem; padding: 0.5rem 0.75rem;">
+              <label class="btn btn-outline" style="cursor: pointer; padding: 0.5rem 0.9rem; font-size: 0.8rem; border-color: #00d2ff; color: #00d2ff; display: inline-flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                リファレンス画像を選択（複数可）
+                <input type="file" id="fileRefImagesLongVideo" accept="image/*" multiple style="display: none;">
+              </label>
+              <button type="button" class="btn btn-text" id="btnClearRefImagesLongVideo" style="font-size: 0.78rem; color: #94a3b8; display: none;">すべてクリア</button>
+            </div>
+            <div id="longVideoRefGallery" class="ref-image-gallery-grid" style="margin-top: 0.75rem; display: none;"></div>
           </div>
 
           <!-- 自前台本の入力・アップロード・Drive連携 ＆ 自動リライト -->
@@ -1017,10 +1099,14 @@
           <!-- 完成動画プレビュー＆保存パネル -->
           <div id="longVideoResult" style="display: none; margin-top: 1.5rem; text-align: center;">
             <video id="longVideoPreview" controls playsinline preload="metadata" style="max-width: 100%; max-height: 480px; border-radius: 8px;"></video>
-            <div style="margin-top: 1rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+            <div style="margin-top: 1rem; display: flex; gap: 0.85rem; justify-content: center; flex-wrap: wrap;">
               <button class="btn btn-outline" id="btnResetLongVideo" style="display: inline-flex; align-items: center; gap: 6px;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
                 最初から新しく作成する
+              </button>
+              <button type="button" class="btn btn-primary" id="btnEditLongVideo" style="background: linear-gradient(135deg, #00d2ff 0%, #0284c7 100%); border-color: #38bdf8; color: #ffffff; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                編集する（タイムライン編集スタジオ）
               </button>
               <a id="btnDownloadLongVideo" class="btn btn-primary" href="#" download="long_video.mp4">完成動画を保存</a>
             </div>
@@ -1970,6 +2056,377 @@
         <a href="#" class="btn btn-outline" id="modalDownload" download>ダウンロード</a>
         <a href="#" class="btn btn-primary" id="modalYoutube" target="_blank" style="display:none;">YouTubeで見る</a>
         <button class="btn btn-text" id="modalClose">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== Pro動画タイムライン編集スタジオ (Remotion / Filmcraft アーキテクチャ準拠) ==================== -->
+  <div class="pro-editor-overlay" id="proVideoEditorModal" style="display: none;">
+    <div class="pro-editor-container">
+      <!-- 1. トップヘッダーバー -->
+      <div class="pro-editor-header">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(0, 210, 255, 0.16); border: 1px solid rgba(0, 210, 255, 0.4); display: flex; align-items: center; justify-content: center; color: #00d2ff;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg>
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h2 id="editorProjectTitle" style="margin: 0; font-size: 1.05rem; font-weight: 700; color: #f8fafc;">Pro 動画タイムライン編集スタジオ</h2>
+              <span class="badge" style="background: rgba(0, 210, 255, 0.16); color: #38bdf8; font-size: 0.72rem; padding: 2px 8px; border-radius: 5px;">Remotion &amp; Filmcraft Engine</span>
+            </div>
+            <div id="editorProjectMeta" style="font-size: 0.75rem; color: #94a3b8; margin-top: 2px;">Job ID: -- | 全 0 カット | 総尺 0.0秒</div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+          <button type="button" class="btn btn-outline" id="btnEditorSaveDraft" style="padding: 0.45rem 0.9rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 5px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            編集状態を一時保存
+          </button>
+          <button type="button" class="btn btn-primary" id="btnEditorRenderFinal" style="padding: 0.5rem 1.1rem; font-size: 0.84rem; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            編集内容を反映してMP4を再書き出し
+          </button>
+          <a href="#" id="btnEditorDownloadMp4" class="btn btn-outline" download="edited_video.mp4" style="padding: 0.45rem 0.85rem; font-size: 0.8rem; border-color: var(--accent-primary); color: var(--accent-primary); display: inline-flex; align-items: center; gap: 5px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            現在のMP4を保存
+          </a>
+          <button type="button" class="btn btn-text" id="btnCloseProEditor" style="padding: 0.4rem 0.7rem; color: #cbd5e1; font-size: 0.85rem;">閉じる [X]</button>
+        </div>
+      </div>
+
+      <!-- 再レンダリング進捗バー -->
+      <div id="editorRenderStatusBanner" style="display: none; padding: 0.6rem 1.25rem; background: rgba(16, 185, 129, 0.12); border-bottom: 1px solid rgba(16, 185, 129, 0.35); align-items: center; justify-content: space-between; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 0.84rem; color: #f8fafc; font-weight: 600;">
+          <span class="btn-spinner"></span>
+          <span id="editorRenderStatusText">FFmpegで編集済みタイムラインを再レンダリング中...</span>
+        </div>
+        <span style="font-size: 0.76rem; color: var(--accent-primary);">既存アセット再利用で高速合成中</span>
+      </div>
+
+      <!-- 2. メインワークスペース（左: ライブコンポジションプレイヤー / 右: インスペクターパネル） -->
+      <div class="pro-editor-workspace">
+        <!-- 左: Remotion風 ライブコンポジションプレビュー画面 -->
+        <div class="pro-editor-player-pane">
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="badge" id="editorActiveCutBadge" style="background: rgba(16, 185, 129, 0.2); color: var(--accent-primary); font-size: 0.74rem; padding: 2px 8px; border-radius: 4px;">Cut #1</span>
+              <span id="editorActiveSpeakerLabel" style="font-size: 0.8rem; color: #e2e8f0; font-weight: 600;">ナレーション</span>
+            </div>
+            <div style="display: flex; gap: 4px;">
+              <button type="button" class="btn btn-outline" id="btnSwitchPreviewModeCut" style="padding: 2px 8px; font-size: 0.72rem; border-color: #00d2ff; color: #00d2ff;">カット別ライブ編集</button>
+              <button type="button" class="btn btn-outline" id="btnSwitchPreviewModeFullMp4" style="padding: 2px 8px; font-size: 0.72rem;">完成MP4全体再生</button>
+            </div>
+          </div>
+
+          <!-- 9:16 ステージキャンバス（ドラッグ可能なテロップオーバーレイ付き） -->
+          <div class="pro-editor-stage-wrapper" id="editorStageWrapper">
+            <!-- カット別ライブプレビューレイヤー -->
+            <div id="editorLiveCutStage" class="pro-editor-live-stage">
+              <video id="editorCutVideoEl" muted loop playsinline style="width: 100%; height: 100%; object-fit: cover; display: none;"></video>
+              <img id="editorCutImageEl" alt="Cut Visual" style="width: 100%; height: 100%; object-fit: cover; display: none;" />
+              <!-- ドラッグ可能なライブテロップボックス -->
+              <div id="editorDraggableTelopBox" class="editor-draggable-telop" title="上下にドラッグしてテロップ位置を直感的に変更できます" style="top: 76%;">
+                <div id="editorLiveTelopText" class="editor-live-telop-text">テロッププレビュー</div>
+              </div>
+              <div style="position: absolute; top: 8px; right: 8px; background: rgba(2, 6, 23, 0.75); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; padding: 2px 6px; font-size: 0.68rem; color: #cbd5e1; pointer-events: none;">
+                テロップを上下ドラッグで位置変更可
+              </div>
+            </div>
+
+            <!-- 完成MP4全体確認プレイヤー（切替表示） -->
+            <video id="editorFullMp4Player" controls playsinline style="width: 100%; height: 100%; object-fit: contain; background: #000; display: none;"></video>
+          </div>
+
+          <!-- プレイヤー操作トランスポートバー -->
+          <div class="pro-editor-transport">
+            <button type="button" class="btn btn-outline" id="btnEditorPrevCut" style="padding: 0.35rem 0.6rem; font-size: 0.76rem;" title="前のカットへ">|&lt;</button>
+            <button type="button" class="btn btn-primary" id="btnEditorPlayPauseCut" style="padding: 0.35rem 0.9rem; font-size: 0.78rem; font-weight: 700;">カット再生 (音声+SE)</button>
+            <button type="button" class="btn btn-outline" id="btnEditorNextCut" style="padding: 0.35rem 0.6rem; font-size: 0.76rem;" title="次のカットへ">&gt;|</button>
+            <span id="editorTimecodeDisplay" style="font-family: monospace; font-size: 0.78rem; color: #38bdf8; margin-left: 6px;">00:00.0 / 00:05.0</span>
+          </div>
+          <audio id="editorCutAudioEl" style="display: none;"></audio>
+          <audio id="editorCutSeAudioEl" style="display: none;"></audio>
+          <audio id="editorBgmAudioEl" style="display: none;"></audio>
+        </div>
+
+        <!-- 右: マルチ機能インスペクターパネル（4タブ切り替え） -->
+        <div class="pro-editor-inspector-pane">
+          <div class="pro-editor-tabs">
+            <button type="button" class="pro-editor-tab active" data-editor-tab="telop">1. テロップ種類・位置</button>
+            <button type="button" class="pro-editor-tab" data-editor-tab="narration">2. ナレーション変更</button>
+            <button type="button" class="pro-editor-tab" data-editor-tab="cut">3. カット作業・素材</button>
+            <button type="button" class="pro-editor-tab" data-editor-tab="audio">4. 効果音(SE)・BGM</button>
+          </div>
+
+          <!-- Tab 1: テロップ種類・位置・サイズ編集 -->
+          <div class="pro-editor-tab-content active" id="editorTabTelop">
+            <div class="form-group" style="margin-bottom: 0.85rem;">
+              <label class="form-label" style="font-size: 0.8rem;">表示テロップテキスト（改行で2段表示・ナレーションと別表記も可）</label>
+              <textarea id="editorCutTelopText" class="form-input form-textarea" rows="2" style="font-size: 0.86rem;"></textarea>
+            </div>
+
+            <div class="form-grid-2" style="gap: 0.75rem; margin-bottom: 0.85rem;">
+              <div>
+                <label class="form-label" style="font-size: 0.78rem;">テロップ書体 (YouTube定番8種)</label>
+                <div class="custom-select-wrapper">
+                  <select id="editorCutTelopFont" class="form-input form-select" style="font-size: 0.82rem; padding: 0.55rem 2.2rem 0.55rem 0.75rem;">
+                    <option value="DelaGothicOne">デラゴシック (超極太インパクト)</option>
+                    <option value="ReggaeOne">レゲエ One (江戸・浮世絵・和風)</option>
+                    <option value="MochiyPopOne">モッチーポップ (雑学・ポップ解説)</option>
+                    <option value="ShipporiMinchoB1">しっぽり明朝 B1 極太 (時代劇・感動)</option>
+                    <option value="MPLUSRounded1c">M PLUS Rounded 1c Black (丸ゴシック)</option>
+                    <option value="RocknRollOne">ロックンロール One (エンタメ)</option>
+                    <option value="ZenMaruGothic">Zen丸ゴシック Black (親しみ太丸)</option>
+                    <option value="RampartOne">ランパート One (立体シャドウ書体)</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="form-label" style="font-size: 0.78rem;">テロップ配色・立体5層スタイル</label>
+                <div class="custom-select-wrapper">
+                  <select id="editorCutTelopStyle" class="form-input form-select" style="font-size: 0.82rem; padding: 0.55rem 2.2rem 0.55rem 0.75rem;">
+                    <option value="shorts_impact_yellow">王道ゴールドイエロー (黄金×黒極太縁)</option>
+                    <option value="shorts_crimson_flame">灼熱クリムゾン紅蓮 (白金×真紅×黒縁)</option>
+                    <option value="shorts_gold_luxury">ラグジュアリー琥珀ゴールド</option>
+                    <option value="shorts_neon_cyber">ネオンサイバーブルー (シアン×濃紺)</option>
+                    <option value="shorts_clean_white">プラチナホワイト (純白×漆黒二重縁)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 10px; padding: 0.9rem; margin-bottom: 0.85rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.4rem;">
+                <label class="form-label" style="margin: 0; font-size: 0.8rem;">テロップ縦位置 (Y座標): <span id="editorTelopYLabel" style="color: #00d2ff; font-weight: 700;">76% (下部標準)</span></label>
+                <div style="display: flex; gap: 0.35rem;">
+                  <button type="button" class="btn btn-outline btn-telop-pos-preset" data-y-pct="18" style="padding: 2px 8px; font-size: 0.72rem;">上部 (18%)</button>
+                  <button type="button" class="btn btn-outline btn-telop-pos-preset" data-y-pct="50" style="padding: 2px 8px; font-size: 0.72rem;">中央 (50%)</button>
+                  <button type="button" class="btn btn-outline btn-telop-pos-preset" data-y-pct="76" style="padding: 2px 8px; font-size: 0.72rem;">下部 (76%)</button>
+                </div>
+              </div>
+              <input type="range" id="editorCutTelopYSlider" class="form-range" min="10" max="90" value="76">
+
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; margin-bottom: 0.35rem;">
+                <label class="form-label" style="margin: 0; font-size: 0.8rem;">テロップ文字サイズ倍率: <span id="editorTelopScaleLabel" style="color: var(--accent-primary); font-weight: 700;">100%</span></label>
+                <div class="custom-select-wrapper" style="width: 140px;">
+                  <select id="editorCutTelopSizeKey" class="form-input form-select" style="font-size: 0.76rem; padding: 0.3rem 1.8rem 0.3rem 0.5rem;">
+                    <option value="large">基準: 特大</option>
+                    <option value="medium">基準: 中</option>
+                    <option value="small">基準: 小</option>
+                  </select>
+                </div>
+              </div>
+              <input type="range" id="editorCutTelopScaleSlider" class="form-range" min="70" max="140" value="100">
+            </div>
+
+            <button type="button" class="btn btn-outline" id="btnApplyTelopToAllCuts" style="width: 100%; padding: 0.55rem; font-size: 0.8rem; border-color: #00d2ff; color: #00d2ff;">
+              このカットのテロップ書体・配色・縦位置・サイズを全カットに一括適用
+            </button>
+          </div>
+
+          <!-- Tab 2: ナレーション変更＆その場音声再合成 -->
+          <div class="pro-editor-tab-content" id="editorTabNarration" style="display: none;">
+            <div class="form-grid-2" style="gap: 0.75rem; margin-bottom: 0.75rem;">
+              <div>
+                <label class="form-label" style="font-size: 0.78rem;">話者名 (キャラクター)</label>
+                <input type="text" id="editorCutSpeaker" class="form-input" style="font-size: 0.84rem; padding: 0.5rem 0.75rem;" placeholder="例: ナレーション">
+              </div>
+              <div style="display: flex; align-items: flex-end;">
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #cbd5e1; cursor: pointer; margin-bottom: 0.5rem;">
+                  <input type="checkbox" id="editorSyncTelopWithNarration" checked>
+                  ナレーション変更時にテロップ文字も連動更新する
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0.85rem;">
+              <label class="form-label" style="font-size: 0.8rem;">ナレーション読み上げセリフ</label>
+              <textarea id="editorCutNarration" class="form-input form-textarea" rows="3" style="font-size: 0.86rem;"></textarea>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.65rem; margin-bottom: 0.85rem;">
+              <div>
+                <label class="form-label" style="font-size: 0.75rem;">TTSエンジン</label>
+                <div class="custom-select-wrapper">
+                  <select id="editorCutTtsEngine" class="form-input form-select" style="font-size: 0.8rem; padding: 0.5rem 2rem 0.5rem 0.65rem;">
+                    <option value="edge">Edge-TTS (標準)</option>
+                    <option value="openai">OpenAI TTS</option>
+                    <option value="voicevox">VOICEVOX</option>
+                    <option value="google">Google Cloud TTS</option>
+                    <option value="elevenlabs">ElevenLabs</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="form-label" style="font-size: 0.75rem;">声色・ボイス</label>
+                <div class="custom-select-wrapper">
+                  <select id="editorCutVoiceName" class="form-input form-select" style="font-size: 0.8rem; padding: 0.5rem 2rem 0.5rem 0.65rem;">
+                    <option value="nanami">七海 (女性・標準)</option>
+                    <option value="keita">慶太 (男性・爽やか)</option>
+                    <option value="aoi">あおい (女性・若手)</option>
+                    <option value="daichi">大地 (男性・渋め)</option>
+                    <option value="alloy">Alloy (OpenAI)</option>
+                    <option value="echo">Echo (OpenAI)</option>
+                    <option value="shimmer">Shimmer (OpenAI)</option>
+                    <option value="3">ずんだもん (VOICEVOX)</option>
+                    <option value="2">四国めたん (VOICEVOX)</option>
+                    <option value="13">青山龍星 (VOICEVOX)</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="form-label" style="font-size: 0.75rem;">話速: <span id="editorCutRateLabel" style="color: var(--accent-primary);">1.0x</span></label>
+                <input type="range" id="editorCutSpeakingRate" class="form-range" min="0.8" max="1.4" step="0.05" value="1.0" style="margin-top: 0.5rem;">
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 0.65rem; flex-wrap: wrap;">
+              <button type="button" class="btn btn-primary" id="btnEditorResynthesizeTts" style="flex: 1; padding: 0.6rem 1rem; font-size: 0.82rem; font-weight: 700;">
+                このカットのナレーション音声を再合成（尺も自動更新）
+              </button>
+              <label class="btn btn-outline" style="cursor: pointer; padding: 0.6rem 0.85rem; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 5px;">
+                音声ファイル差替 (.mp3/.wav)
+                <input type="file" id="fileEditorCutAudioUpload" accept="audio/*" style="display: none;">
+              </label>
+            </div>
+          </div>
+
+          <!-- Tab 3: カット作業（トリミング・分割・複製・順序移動・削除・映像素材差替） -->
+          <div class="pro-editor-tab-content" id="editorTabCut" style="display: none;">
+            <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 10px; padding: 0.9rem; margin-bottom: 0.85rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.86rem; font-weight: 700; color: #f8fafc; cursor: pointer;">
+                  <input type="checkbox" id="editorCutEnabledToggle" checked style="width: 16px; height: 16px;">
+                  このカットを有効にする（チェック解除で本編からカット除外）
+                </label>
+                <span id="editorCutMediaTypeBadge" class="badge" style="font-size: 0.72rem; background: rgba(0, 210, 255, 0.15); color: #38bdf8;">AI動画クリップ</span>
+              </div>
+
+              <div class="form-grid-2" style="gap: 0.85rem;">
+                <div>
+                  <label class="form-label" style="font-size: 0.78rem;">このカットの表示尺 (秒): <span id="editorCutDurationLabel" style="color: var(--accent-primary); font-weight: 700;">5.0s</span></label>
+                  <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <input type="range" id="editorCutDurationSlider" class="form-range" min="1.0" max="25.0" step="0.1" value="5.0" style="flex: 1;">
+                    <input type="number" id="editorCutDurationInput" class="form-input" min="0.5" max="60" step="0.1" value="5.0" style="width: 72px; padding: 0.35rem 0.5rem; font-size: 0.82rem;">
+                  </div>
+                </div>
+                <div>
+                  <label class="form-label" style="font-size: 0.78rem;">開始位置トリミング (秒): <span id="editorCutTrimStartLabel" style="color: #00d2ff; font-weight: 700;">0.0s</span></label>
+                  <input type="range" id="editorCutTrimStartSlider" class="form-range" min="0.0" max="10.0" step="0.1" value="0.0" style="margin-top: 0.45rem;">
+                </div>
+              </div>
+            </div>
+
+            <!-- カット編集アクションボタン群 -->
+            <div style="margin-bottom: 0.85rem;">
+              <label class="form-label" style="font-size: 0.78rem; margin-bottom: 0.4rem;">タイムライン・カット操作</label>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button type="button" class="btn btn-outline" id="btnEditorSplitCut" style="padding: 0.45rem 0.8rem; font-size: 0.78rem; border-color: #00d2ff; color: #00d2ff;">このカットを2分割</button>
+                <button type="button" class="btn btn-outline" id="btnEditorDuplicateCut" style="padding: 0.45rem 0.8rem; font-size: 0.78rem;">カットを複製</button>
+                <button type="button" class="btn btn-outline" id="btnEditorMoveCutLeft" style="padding: 0.45rem 0.8rem; font-size: 0.78rem;">&larr; 前のカットと入替</button>
+                <button type="button" class="btn btn-outline" id="btnEditorMoveCutRight" style="padding: 0.45rem 0.8rem; font-size: 0.78rem;">次のカットと入替 &rarr;</button>
+                <button type="button" class="btn btn-outline" id="btnEditorDeleteCut" style="padding: 0.45rem 0.8rem; font-size: 0.78rem; border-color: #ef4444; color: #f87171; margin-left: auto;">このカットを削除</button>
+              </div>
+            </div>
+
+            <!-- カット背景画像・動画の手動アップロード差し替え -->
+            <div style="background: rgba(15, 23, 42, 0.75); border: 1px dashed rgba(148, 163, 184, 0.3); border-radius: 10px; padding: 0.85rem;">
+              <label class="form-label" style="font-size: 0.78rem; margin-bottom: 0.45rem;">このカットの背景画像・動画クリップを差し替え</label>
+              <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+                <label class="btn btn-outline" style="cursor: pointer; padding: 0.45rem 0.85rem; font-size: 0.78rem;">
+                  背景画像をアップロード (.png/.jpg)
+                  <input type="file" id="fileEditorCutImageUpload" accept="image/*" style="display: none;">
+                </label>
+                <label class="btn btn-outline" style="cursor: pointer; padding: 0.45rem 0.85rem; font-size: 0.78rem;">
+                  動画クリップをアップロード (.mp4)
+                  <input type="file" id="fileEditorCutVideoUpload" accept="video/mp4,video/*" style="display: none;">
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 4: 効果音（SE）追加 ＆ BGM変更 -->
+          <div class="pro-editor-tab-content" id="editorTabAudio" style="display: none;">
+            <!-- カット別効果音 (SE) -->
+            <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(0, 210, 255, 0.25); border-radius: 10px; padding: 0.9rem; margin-bottom: 0.85rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <label class="form-label" style="margin: 0; font-size: 0.82rem; font-weight: 700; color: #00d2ff;">このカットの効果音 (SE) 追加・設定</label>
+                <label class="btn btn-outline" style="cursor: pointer; padding: 2px 8px; font-size: 0.72rem;">
+                  + 自前のSE音源を追加 (.mp3/.wav)
+                  <input type="file" id="fileEditorUploadCustomSe" accept="audio/*" style="display: none;">
+                </label>
+              </div>
+
+              <div style="display: flex; gap: 0.5rem; margin-bottom: 0.65rem;">
+                <div class="custom-select-wrapper" style="flex: 1;">
+                  <select id="editorCutSeSelect" class="form-input form-select" style="font-size: 0.82rem; padding: 0.55rem 2.2rem 0.55rem 0.75rem;">
+                    <option value="none">効果音なし</option>
+                    <option value="se_don">ドン！（衝撃・強調アクセント）</option>
+                    <option value="se_taiko">和太鼓ドドン！（江戸・歴史・開幕）</option>
+                    <option value="se_hyoushigi">拍子木カンカン！（歌舞伎・浮世絵転換）</option>
+                    <option value="se_kira">キラーン！（閃き・発見・輝く演出）</option>
+                    <option value="se_pikon">ピコン！（気づき・ポイント提示）</option>
+                    <option value="se_whoosh">シュッ！（高速場面切り替え・トランジション）</option>
+                    <option value="se_quiz">ジャジャン！（問題提起・登場）</option>
+                    <option value="se_correct">ピンポーン！（正解・メリット提示）</option>
+                    <option value="se_shock">ガーン…（絶望・まさかの事実）</option>
+                    <option value="se_drumroll">ドラムロール＋ジャン！（結果発表）</option>
+                  </select>
+                </div>
+                <button type="button" class="btn btn-outline" id="btnEditorPreviewSe" style="padding: 0.5rem 0.85rem; font-size: 0.78rem; border-color: #00d2ff; color: #00d2ff; white-space: nowrap;">SE試聴</button>
+              </div>
+
+              <div class="form-grid-2" style="gap: 0.75rem;">
+                <div>
+                  <label class="form-label" style="font-size: 0.75rem;">SE発動タイミング (カット開始から): <span id="editorCutSeDelayLabel" style="color: #00d2ff;">0.0s</span></label>
+                  <input type="range" id="editorCutSeDelaySlider" class="form-range" min="0.0" max="5.0" step="0.1" value="0.0">
+                </div>
+                <div>
+                  <label class="form-label" style="font-size: 0.75rem;">SE音量バランス: <span id="editorCutSeVolumeLabel" style="color: var(--accent-primary);">70%</span></label>
+                  <input type="range" id="editorCutSeVolumeSlider" class="form-range" min="10" max="150" step="5" value="70">
+                </div>
+              </div>
+            </div>
+
+            <!-- 全体BGM変更 -->
+            <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(16, 185, 129, 0.28); border-radius: 10px; padding: 0.9rem;">
+              <label class="form-label" style="font-size: 0.82rem; font-weight: 700; color: var(--accent-primary); margin-bottom: 0.5rem;">動画全体のBGM変更・音量調整</label>
+              <div style="display: flex; gap: 0.5rem; margin-bottom: 0.65rem;">
+                <div class="custom-select-wrapper" style="flex: 1;">
+                  <select id="editorGlobalBgmSelect" class="form-input form-select" style="font-size: 0.82rem; padding: 0.55rem 2.2rem 0.55rem 0.75rem;">
+                    <option value="auto_script">台本のカット別BGM設定を使用（自動クロスフェード）</option>
+                    <option value="builtin:edo_ukiyoe">和風・江戸浮世絵の調べ（三味線・和太鼓・篠笛）</option>
+                    <option value="builtin:dramatic_story">ドラマ・スカッと劇伴（重厚ストリングス）</option>
+                    <option value="builtin:upbeat_business">ビジネス・知的ノウハウ（マリンバ＆スマートビート）</option>
+                    <option value="builtin:mystery_trivia">ミステリー・雑学フック（幻想シンセ）</option>
+                    <option value="builtin:touching_piano">感動・エモーショナル（穏やかピアノ）</option>
+                    <option value="none">BGMなし（ナレーションとSEのみ）</option>
+                  </select>
+                </div>
+                <button type="button" class="btn btn-outline" id="btnEditorPreviewBgm" style="padding: 0.5rem 0.85rem; font-size: 0.78rem; border-color: var(--accent-primary); color: var(--accent-primary); white-space: nowrap;">BGM試聴</button>
+              </div>
+              <div>
+                <label class="form-label" style="font-size: 0.75rem;">BGM全体音量: <span id="editorGlobalBgmVolLabel" style="color: var(--accent-primary); font-weight: 700;">20%</span></label>
+                <input type="range" id="editorGlobalBgmVolSlider" class="form-range" min="0" max="50" step="1" value="20">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. 下部: マルチトラック・タイムライン (Track 1: 映像 / Track 2: テロップ / Track 3: 音声 / Track 4: SE) -->
+      <div class="pro-editor-timeline-pane">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem; padding: 0 0.25rem;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 0.78rem; font-weight: 700; color: #f8fafc; letter-spacing: 0.03em;">MULTI-TRACK TIMELINE (クリックして編集カットを切り替え)</span>
+            <span style="font-size: 0.72rem; color: #94a3b8;">Track 1: 映像 / Track 2: テロップ / Track 3: ナレーション / Track 4: 効果音(SE)</span>
+          </div>
+          <span id="editorTimelineSummaryText" style="font-size: 0.75rem; color: var(--accent-primary); font-family: monospace;">Total: 0 cuts (0.0s)</span>
+        </div>
+        <div id="editorTimelineTracksContainer" class="pro-editor-timeline-tracks">
+          <!-- JSで各カットのマルチトラックブロックを動的描画 -->
+        </div>
       </div>
     </div>
   </div>
