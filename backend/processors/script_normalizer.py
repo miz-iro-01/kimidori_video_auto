@@ -27,7 +27,8 @@ class ScriptNormalizer:
         raw_text: str,
         target_format: str = "pro_shorts",
         genre: str = "knowledge",
-        speaking_rate: float = 1.0
+        speaking_rate: float = 1.0,
+        visual_style: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         raw_text を解析し、当ツール専用の厳格なタイムラインJSONへリライト変換する。
@@ -36,6 +37,14 @@ class ScriptNormalizer:
         """
         if not raw_text or not raw_text.strip():
             raise ValueError("台本テキストが空です。")
+
+        style_key = visual_style or ("ukiyoe" if genre == "edoculture" else "anime_modern")
+        style_note = (
+            "※ 絵柄が『ukiyoe（本格浮世絵・錦絵）』のため、characters の appearance_prompt_en や description には anime という語を一切使わず、"
+            "authentic Edo-period Ukiyo-e woodblock print (Nishiki-e) by Hokusai and Kuniyoshi, slender ukiyo-e eyes, sumi-e ink outlines on handmade washi paper として記述すること。"
+            if style_key == "ukiyoe"
+            else f"※ 絵柄は『{style_key}』に合わせて characters の appearance_prompt_en を記述すること。"
+        )
 
         if target_format == "pro_shorts":
             prompt = f"""
@@ -52,6 +61,7 @@ class ScriptNormalizer:
    - Cut_002〜Cut_005: 疑問の深掘り、具体的ファクト、予想を裏切る展開。
    - Cut_006〜Cut_007: 納得のオチ・教訓、フォロー・いいねへの誘導。
 3. ト書き (description): 画像・動画生成AIが忠実に描画できるよう、被写体の表情・ポーズ・背景・照明・構図を具体的に描写すること（※「佐藤さん」等の安易な固定名は禁止）。
+   {style_note}
 4. セリフ (dialogue): 1カットあたり最大2〜3文（約30〜45文字）。早口にならず自然に伝わる文字量に調整すること。
 5. カメラ演出 (camera_effect): 全カット「動画 (アクション)」または「動画 (ズームイン)」「動画 (パン)」などの動画演出を指定すること。
 6. BGM (bgm_tag): cheerful / warm / touching / suspense / frightening / funny / epic / neutral から適切なものを1つ選択。
@@ -62,7 +72,15 @@ class ScriptNormalizer:
   "title": "動画タイトル",
   "theme": "主要テーマ",
   "genre": "{genre}",
+  "visual_style": "{style_key}",
   "target_duration_seconds": 60,
+  "characters": [
+    {{
+      "name": "登場人物名",
+      "role": "役割",
+      "appearance_prompt_en": "指定された絵柄（{style_key}）に忠実な英語の容姿・服装・画風プロンプト"
+    }}
+  ],
   "cuts": [
     {{
       "cut_id": "Cut_001",
@@ -88,6 +106,7 @@ class ScriptNormalizer:
 1. 構成: 全5章（オープニング、展開1、展開2、解決/クライマックス、まとめエンディング）。
 2. カット設計: 1カットあたり3〜8秒、テンポの良い対話と解説で構成すること。
 3. ト書き (description): 場面の情景、登場人物の感情・動作、背景を具体的に描写すること。
+   {style_note}
 4. カメラ演出 (camera_effect): zoom_in / zoom_out / pan_left / pan_right / static / video_action から選択。
 5. BGM (bgm_tag): 場面の雰囲気に合わせて指定。
 
@@ -97,7 +116,15 @@ class ScriptNormalizer:
   "title": "長尺動画タイトル",
   "theme": "テーマ",
   "genre": "{genre}",
+  "visual_style": "{style_key}",
   "target_minutes": 15,
+  "characters": [
+    {{
+      "name": "登場人物名",
+      "role": "役割",
+      "appearance_prompt_en": "指定された絵柄（{style_key}）に忠実な英語の容姿・服装・画風プロンプト"
+    }}
+  ],
   "chapters": [
     {{
       "chapter_num": 1,

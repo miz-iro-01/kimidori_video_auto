@@ -13,12 +13,15 @@ BASE_DIR = Path(__file__).parent
 if os.name == "nt":  # Windows
     TMP_DIR = Path(os.getenv("TMP_DIR", BASE_DIR / "tmp"))
     CACHE_DIR = Path(os.getenv("CACHE_DIR", BASE_DIR / "cache"))
+    DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data"))
 else:
     TMP_DIR = Path(os.getenv("TMP_DIR", "/app/tmp"))
     CACHE_DIR = Path(os.getenv("XDG_CACHE_HOME", "/app/cache"))
+    DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 
-# 一時ファイル用ディレクトリを確保
+# 一時ファイル・データ用ディレクトリを確保
 TMP_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # =============================================================================
 # Firebase 設定
@@ -52,6 +55,31 @@ YOUTUBE_TOKEN_FILE = os.getenv("YOUTUBE_TOKEN_FILE", "/app/youtube_token.json")
 YOUTUBE_CLIENT_ID = os.getenv("YOUTUBE_CLIENT_ID", "")
 YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET", "")
 YOUTUBE_REDIRECT_URI = os.getenv("YOUTUBE_REDIRECT_URI", "https://kimidori-movie-auto-ey3qvn3ruq-an.a.run.app/api/auth/youtube/callback")
+
+# =============================================================================
+# ComfyUI / Colab Worker 設定
+# =============================================================================
+def _get_comfyui_url_from_env() -> str:
+    # 1. 環境変数
+    url = os.getenv("COMFYUI_API_URL", "")
+    if url:
+        return url
+    # 2. プロジェクト直下の .env.local
+    env_local = BASE_DIR.parent / ".env.local"
+    if env_local.exists():
+        try:
+            with open(env_local, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("COMFYUI_API_URL="):
+                        val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                        if val:
+                            return val
+        except Exception:
+            pass
+    return ""
+
+COMFYUI_API_URL = _get_comfyui_url_from_env()
 
 # =============================================================================
 # Whisper 設定

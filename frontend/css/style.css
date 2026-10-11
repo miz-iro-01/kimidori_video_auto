@@ -122,18 +122,41 @@
   .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
   .form-label { display: block; font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.75rem; }
   .form-input {
-    width: 100%; padding: 1rem 1.25rem; background: rgba(0,0,0,0.2);
-    border: 1px solid var(--border-color); border-radius: var(--radius-md);
+    width: 100%; padding: 1rem 1.25rem; background: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.28); border-radius: var(--radius-md);
     color: var(--text-primary); font-family: inherit; font-size: 1rem;
-    transition: all 0.2s ease; outline: none;
+    transition: all 0.2s ease; outline: none; color-scheme: dark;
   }
-  .form-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-primary-glow); background: rgba(0,0,0,0.4); }
+  .form-input:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-primary-glow); background: #131c31; }
   
   .custom-select-wrapper { position: relative; }
-  .form-select { appearance: none; padding-right: 3rem; cursor: pointer; }
+  select, .form-select, select.form-input {
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    padding-right: 3rem; cursor: pointer;
+    background-color: #0f172a !important;
+    color: #f8fafc !important;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    font-weight: 500;
+    color-scheme: dark;
+  }
+  select:hover, .form-select:hover, select.form-input:hover {
+    background-color: #162038 !important;
+    border-color: var(--accent-primary);
+  }
+  select option, .form-select option, select optgroup {
+    background-color: #0f172a !important;
+    color: #f8fafc !important;
+    padding: 10px 14px;
+    font-weight: 500;
+  }
+  select option:checked, .form-select option:checked {
+    background-color: #10b981 !important;
+    color: #04130d !important;
+    font-weight: 700;
+  }
   .custom-select-wrapper::after {
     content: "▼"; position: absolute; right: 1.25rem; top: 50%; transform: translateY(-50%);
-    font-size: 0.8rem; color: var(--text-secondary); pointer-events: none;
+    font-size: 0.8rem; color: var(--accent-primary); pointer-events: none;
   }
   
   .form-range { width: 100%; appearance: none; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; outline: none; }

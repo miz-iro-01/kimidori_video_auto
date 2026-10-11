@@ -48,19 +48,26 @@ class MangaVideoComposer:
     def create_single_scene_clip(
         self,
         base_image_path: Union[str, Path],
-        overlay_image_path: Union[str, Path],
+        overlay_image_path: Optional[Union[str, Path]],
         audio_path: Optional[Union[str, Path]],
         output_clip_path: Union[str, Path],
         duration: float,
         width: int = 1080,
         height: int = 1920,
         fps: int = 30,
-        switch_delay: float = 0.3
+        switch_delay: float = 0.3,
+        video_clip_path: Optional[Union[str, Path]] = None,
+        overlay_cards: Optional[List[Dict[str, Any]]] = None,
+        enable_ken_burns: bool = True
     ) -> float:
         """
         1シーン分の動画クリップを作成する。
-        演出: 最初の 0.3 秒は `base_image_path`（人物のみ）、
-             0.3秒以降は `overlay_image_path`（吹き出し付き）を表示。
+        - video_clip_path (ComfyUI LTX-Video等のAI生成動画、またはPexelsストック動画) がある場合:
+          動画クリップをベース映像として採用し、その上に順次字幕・テロップカードを合成。
+        - 静止画の場合:
+          Ken Burns効果 (zoompan) により、じわじわと滑らかにズームインする躍動映像へ自動変換。
+        - overlay_cards がある場合:
+          ナレーションの尺に合わせて複数のテロップカードを between(t, start, end) で順次切り替え。
         """
         out_p = Path(output_clip_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
@@ -69,43 +76,116 @@ class MangaVideoComposer:
         audio_duration = self._get_audio_duration(audio_path) if has_audio else duration
         final_duration = max(duration, audio_duration, switch_delay + 0.5)
 
-        # 0.3秒切り替えFFmpegフィルタコンプレックス構文
-        # 0 ~ 0.3s は 0:v (base_image), 0.3s ~ 終わり は 1:v (overlay_image)
-        filter_complex = (
-            f"[0:v]scale={width}:{height},fps={fps},settb=AVTB[v0];"
-            f"[1:v]scale={width}:{height},fps={fps},settb=AVTB[v1];"
-            f"[v0][v1]overlay=enable='gte(t,{switch_delay})'[outv]"
-        )
+        has_ai_video = video_clip_path and Path(video_clip_path).exists() and Path(video_clip_path).stat().st_size > 0
 
-        cmd = [
-            self.ffmpeg_path, "-y", "-loglevel", "error",
-            "-loop", "1", "-t", str(final_duration), "-i", str(base_image_path),
-            "-loop", "1", "-t", str(final_duration), "-i", str(overlay_image_path),
-        ]
+        cmd = [self.ffmpeg_path, "-y", "-loglevel", "error"]
+        filter_parts = []
+        current_input_idx = 0
 
+        # ----------------------------------------------------
+        # 1. ベース映像の入力とフィルタ構築
+        # ----------------------------------------------------
+        if has_ai_video:
+            # 動画クリップをベース映像として使用
+            cmd.extend(["-stream_loop", "-1", "-t", str(final_duration), "-i", str(video_clip_path)])
+            filter_parts.append(
+                f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{height},fps={fps},settb=AVTB[vbase];"
+            )
+        else:
+            # 静止画ベース（Ken Burns ズームパン演出 または 通常リサイズ）
+            cmd.extend(["-loop", "1", "-t", str(final_duration), "-i", str(base_image_path)])
+            if enable_ken_burns:
+                # 余白切れ・粗さを防ぐため 1.2倍解像度(1296x2304)へ拡大・トリミング後に zoompan
+                filter_parts.append(
+                    f"[0:v]scale=1296:2304:force_original_aspect_ratio=increase,"
+                    f"crop=1296:2304,"
+                    f"zoompan=z='min(zoom+0.0008,1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+                    f"d=1:s={width}x{height}:fps={fps},settb=AVTB[vbase];"
+                )
+            else:
+                filter_parts.append(f"[0:v]scale={width}:{height},fps={fps},settb=AVTB[vbase];")
+
+        current_input_idx += 1
+
+        # ----------------------------------------------------
+        # 2. テロップカードのオーバーレイ処理
+        # ----------------------------------------------------
+        valid_cards = []
+        if overlay_cards and isinstance(overlay_cards, list) and len(overlay_cards) >= 1:
+            for c in overlay_cards:
+                cp = c.get("image_path")
+                if cp and Path(cp).exists():
+                    valid_cards.append({
+                        "path": str(cp),
+                        "start_time": float(c.get("start_time", 0.0)),
+                        "end_time": float(c.get("end_time", final_duration))
+                    })
+
+        last_v_label = "[vbase]"
+
+        if len(valid_cards) >= 1:
+            # 複数カードの順次オーバーレイチェイン
+            num_cards = len(valid_cards)
+            for i, card in enumerate(valid_cards):
+                cmd.extend(["-loop", "1", "-t", str(final_duration), "-i", card["path"]])
+                card_in_idx = current_input_idx
+                current_input_idx += 1
+
+                is_last = (i == num_cards - 1)
+                next_v_label = "[outv]" if is_last else f"[v_ov_{i}]"
+                st = card["start_time"]
+                et = card["end_time"]
+
+                filter_parts.append(
+                    f"{last_v_label}[{card_in_idx}:v]overlay=0:0:"
+                    f"enable='between(t,{st:.2f},{et:.2f})'{next_v_label};"
+                )
+                last_v_label = next_v_label
+        elif overlay_image_path and Path(overlay_image_path).exists():
+            # 後方互換フォールバック: 0.3秒後表示
+            cmd.extend(["-loop", "1", "-t", str(final_duration), "-i", str(overlay_image_path)])
+            ov_in_idx = current_input_idx
+            current_input_idx += 1
+
+            filter_parts.append(
+                f"[{ov_in_idx}:v]scale={width}:{height},fps={fps},settb=AVTB[v_ov_single];"
+                f"{last_v_label}[v_ov_single]overlay=enable='gte(t,{switch_delay})'[outv];"
+            )
+            last_v_label = "[outv]"
+        else:
+            filter_parts.append(f"{last_v_label}null[outv];")
+            last_v_label = "[outv]"
+
+        filter_complex = "".join(filter_parts).rstrip(";")
+
+        # ----------------------------------------------------
+        # 3. 音声トラック設定
+        # ----------------------------------------------------
         if has_audio:
             cmd.extend(["-i", str(audio_path)])
+            audio_in_idx = current_input_idx
+            current_input_idx += 1
             cmd.extend([
                 "-filter_complex", filter_complex,
-                "-map", "[outv]", "-map", "2:a",
+                "-map", "[outv]", "-map", f"{audio_in_idx}:a",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
                 "-c:a", "aac", "-b:a", "192000",
                 "-t", str(final_duration),
                 str(out_p)
             ])
         else:
-            # 音声なし無音トラック生成
             cmd.extend([
                 "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
                 "-filter_complex", filter_complex,
-                "-map", "[outv]", "-map", "2:a",
+                "-map", "[outv]", "-map", f"{current_input_idx}:a",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "ultrafast",
                 "-c:a", "aac", "-b:a", "192000",
                 "-t", str(final_duration),
                 str(out_p)
             ])
 
-        logger.info(f"MangaVideoComposer: Creating scene clip ({final_duration:.2f}s) -> {out_p.name}")
+        logger.info(f"MangaVideoComposer: Creating scene clip ({final_duration:.2f}s, AI/Stock Video: {has_ai_video}, Cards: {len(valid_cards)}) -> {out_p.name}")
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if res.returncode != 0:
             raise RuntimeError(f"FFmpeg scene clip creation failed: {res.stderr}")
@@ -201,21 +281,11 @@ class MangaVideoComposer:
         output_video_path: Union[str, Path],
         work_dir: Union[str, Path],
         is_paid_member: bool = False,
-        video_size: Tuple[int, int] = (1080, 1920)
+        video_size: Tuple[int, int] = (1080, 1920),
+        bgm_volume: float = BGM_VOLUME
     ) -> Path:
         """
         全シーンアセットを合成し、感情別BGMマルチ合成＆ロゴオーバーレイ適用して最終動画を出力
-
-        Args:
-            scene_assets: Step 3 で出力されたシーン別アセットのリスト
-            bgm_map: 感情タグ(`bgm_tag`)に対応するBGMファイルの辞書
-            output_video_path: 最終出力動画パス
-            work_dir: 作業用一時ディレクトリ
-            is_paid_member: Trueの場合はロゴ非表示、Falseの場合はロゴを表示
-            video_size: 幅・高さ (1080, 1920)
-
-        Returns:
-            合成された最終動画のパス (.mp4)
         """
         work_p = Path(work_dir)
         work_p.mkdir(parents=True, exist_ok=True)
@@ -235,20 +305,28 @@ class MangaVideoComposer:
             clip_file = work_p / f"scene_clip_{i:03d}.mp4"
             dur = self.create_single_scene_clip(
                 base_image_path=scene["base_image_path"],
-                overlay_image_path=scene["overlay_image_path"],
+                overlay_image_path=scene.get("overlay_image_path"),
                 audio_path=scene.get("audio_path"),
                 output_clip_path=clip_file,
                 duration=scene.get("duration_seconds", 5),
                 width=width,
-                height=height
+                height=height,
+                video_clip_path=scene.get("video_path"),
+                overlay_cards=scene.get("overlay_cards"),
+                enable_ken_burns=True
             )
 
             clip_paths.append(clip_file)
             total_duration += dur
 
-            # BGMのシーケンス情報を登録
+            # BGMのシーケンス情報を登録（override指定時は全カット統一BGM）
             bgm_tag = scene.get("bgm_tag", "neutral")
-            bgm_file = bgm_map.get(bgm_tag) or bgm_map.get("neutral") or bgm_map.get("warm")
+            bgm_file = (
+                bgm_map.get("__override__")
+                or bgm_map.get(bgm_tag)
+                or bgm_map.get("neutral")
+                or bgm_map.get("warm")
+            )
             scene_bgm_sequence.append((dur, str(bgm_file) if bgm_file else None))
 
         # ----------------------------------------------------
@@ -275,7 +353,8 @@ class MangaVideoComposer:
         self.build_multi_bgm_track(
             scene_bgm_sequence=scene_bgm_sequence,
             total_duration=total_duration,
-            output_bgm_path=multibgm_audio_file
+            output_bgm_path=multibgm_audio_file,
+            bgm_volume=bgm_volume
         )
 
         # ----------------------------------------------------

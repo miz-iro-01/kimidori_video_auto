@@ -23,18 +23,20 @@ class FluxSchnellClient:
         prompt: str,
         width: int = 1024,
         height: int = 576,
-        num_inference_steps: int = 4
+        num_inference_steps: int = 4,
+        image_url: Optional[str] = None,
+        strength: float = 0.65
     ) -> Dict[str, Any]:
         """
-        FLUX.1 [schnell] で画像を生成する
+        FLUX.1 で画像を生成する（img2imgキャラクター一貫性対応）
         """
         if not self.api_key:
             raise ValueError(f"{self.provider.upper()} のAPIキーが設定されていません。")
 
         if self.provider == "fal":
-            return await self._generate_fal(prompt, width, height, num_inference_steps)
+            return await self._generate_fal(prompt, width, height, num_inference_steps, image_url, strength)
         elif self.provider == "replicate":
-            return await self._generate_replicate(prompt, width, height, num_inference_steps)
+            return await self._generate_replicate(prompt, width, height, num_inference_steps, image_url, strength)
         else:
             raise ValueError(f"未対応のFLUXプロバイダーです: {self.provider}")
 
@@ -43,19 +45,33 @@ class FluxSchnellClient:
         prompt: str,
         width: int,
         height: int,
-        steps: int
+        steps: int,
+        image_url: Optional[str] = None,
+        strength: float = 0.65
     ) -> Dict[str, Any]:
-        url = "https://fal.run/fal-ai/flux/schnell"
+        if image_url:
+            url = "https://fal.run/fal-ai/flux/dev/image-to-image"
+            payload = {
+                "prompt": prompt,
+                "image_url": image_url,
+                "strength": strength,
+                "num_inference_steps": max(steps, 15),
+                "enable_safety_checker": False
+            }
+        else:
+            url = "https://fal.run/fal-ai/flux/schnell"
+            payload = {
+                "prompt": prompt,
+                "image_size": {"width": width, "height": height},
+                "num_inference_steps": steps,
+                "enable_safety_checker": False
+            }
+
         headers = {
             "Authorization": f"Key {self.api_key}",
             "Content-Type": "application/json"
         }
-        payload = {
-            "prompt": prompt,
-            "image_size": {"width": width, "height": height},
-            "num_inference_steps": steps,
-            "enable_safety_checker": False
-        }
+
 
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=45)) as resp:

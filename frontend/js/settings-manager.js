@@ -39,7 +39,7 @@ class SettingsManager {
       fluxProvider: "fal",
       falApiKey: "",
       replicateApiToken: "",
-      colabWorkerUrl: "",
+      colabWorkerUrl: "https://alexander-cedar-pastor-cornell.trycloudflare.com",
       googleDriveSync: false
     };
     this.settings = this.load();
@@ -133,6 +133,18 @@ class SettingsManager {
 
   getYouTubeAccounts() {
     return this.get("youtubeAccounts") || [];
+  }
+
+  // Google Colab (ComfyUI / LTX-Video) 接続URL
+  getColabUrl() {
+    const url = (this.get("colabWorkerUrl") || "").trim();
+    return url || "https://alexander-cedar-pastor-cornell.trycloudflare.com";
+  }
+
+  setColabUrl(url) {
+    const sanitized = (url || "").trim().replace(/\/+$/, "");
+    this.set("colabWorkerUrl", sanitized);
+    return sanitized;
   }
 
   // UIへの反映イベント

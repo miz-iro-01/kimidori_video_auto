@@ -39,5 +39,17 @@ env/
 backend/client_secrets.json
 backend/youtube_token.json
 tmp/
+backend/tmp/
+backend/cache/
+backend/data/
 firebase-debug.log
 .firebase/
+node_modules/
+.next/
+public/
+.env.local
+tsconfig.tsbuildinfo
+next-env.d.ts
+run_logs.json
+
+

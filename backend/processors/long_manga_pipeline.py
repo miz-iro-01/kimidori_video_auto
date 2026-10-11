@@ -173,10 +173,17 @@ async def run_long_manga_pipeline(
     colab_worker_url: Optional[str] = "",
     fal_api_key: Optional[str] = "",
     replicate_api_token: Optional[str] = "",
-    pexels_api_key: Optional[str] = ""
+    pexels_api_key: Optional[str] = "",
+    visual_style: Optional[str] = None,
+    telop_style: Optional[str] = "shorts_impact_yellow",
+    telop_mode: Optional[str] = "sequential",
+    telop_font_size: Optional[str] = "medium",
+    telop_font: Optional[str] = "DelaGothicOne",
+    bgm_choice: Optional[str] = "auto_script",
+    bgm_volume: float = 0.20
 ) -> str:
     """
-    長尺漫画動画の全体生成パイプライン実行メイン関数。
+    長尺漫画動画・Pro版ショート動画の全体生成パイプライン実行メイン関数。
     5%から100%までリアルタイムに進捗と詳細ログを Firestore に刻みながら実行する。
     """
     from services.firestore_service import FirestoreService
@@ -206,11 +213,15 @@ async def run_long_manga_pipeline(
         # Step 1: 台本データの解析＆タイムライン正規化 (10%)
         log_and_update(10, 1, "タイムライン正規化 & コスト最適化中", "台本データを解析し、タイムライン中間設計図へ正規化中...")
         project = normalize_script_data_to_timeline(script_data)
+        resolved_visual_style = (
+            visual_style
+            or script_data.get("visual_style")
+            or ("ukiyoe" if project.genre == "edoculture" else "anime_modern")
+        )
         total_scenes = len(project.scenes)
-        video_count = sum(1 for s in project.scenes if s.type == "video")
         log_and_update(
             15, 1, "タイムライン構築完了", 
-            f"全 {total_scenes} カットをタイムライン設計書に展開（コスト最適化: 動画 {video_count} カット / 静止画 {total_scenes - video_count} カット）"
+            f"全 {total_scenes} カットをタイムライン設計書に展開（スタイル: {resolved_visual_style} / 画像生成 ➔ I2Vアニメーション動画化）"
         )
 
         # project.json を一時ディレクトリに保存（単体再生成・リカバリー用）
@@ -221,6 +232,7 @@ async def run_long_manga_pipeline(
                 "title": project.title,
                 "theme": project.theme,
                 "genre": project.genre,
+                "visual_style": resolved_visual_style,
                 "tts_engine": tts_engine,
                 "voice_name": voice_name,
                 "scenes": [
@@ -239,21 +251,78 @@ async def run_long_manga_pipeline(
                 ]
             }, f, ensure_ascii=False, indent=2)
 
-        # Step 2: 各シーンのアセット生成（画像・音声・吹き出し）(20%〜65%)
+        # Step 1.5: 登場人物の実画像マスター（単一キャラクターバストアップ）事前一括生成 (18%)
         batch_gen = BatchAssetGenerator()
+
+        # キャラクター定義の確認と自動補完（シーン情景は絶対に含めず純粋なキャラクター外見のみを指定）
+        char_style_hint = (
+            "authentic Edo-period Ukiyo-e woodblock print portrait by Hokusai and Kuniyoshi, slender ukiyo-e eyes, sumi-e ink outlines on handmade washi paper, strictly NO anime style"
+            if resolved_visual_style == "ukiyoe"
+            else f"distinctive character design in {resolved_visual_style} style, waist-up portrait on clean background"
+        )
+        if not getattr(project, "characters", None):
+            speaker_set = []
+            for s in project.scenes:
+                spk = (s.speaker or "").strip()
+                if spk and spk not in ["ナレーション", "語り", "解説", "Voice", "SE"] and spk not in speaker_set:
+                    speaker_set.append(spk)
+            if speaker_set:
+                project.characters = [
+                    {
+                        "name": spk_name,
+                        "appearance_prompt_en": (
+                            f"single character {spk_name} from '{project.theme}', "
+                            f"period-appropriate attire, {char_style_hint}"
+                        )
+                    }
+                    for spk_name in speaker_set[:2]
+                ]
+            else:
+                project.characters = [
+                    {
+                        "name": "メインキャラクター",
+                        "appearance_prompt_en": (
+                            f"single main protagonist character from '{project.theme}', "
+                            f"{char_style_hint}"
+                        )
+                    }
+                ]
+
+        if project.characters:
+            char_names = [c.get("name") for c in project.characters if c.get("name")]
+            log_and_update(
+                18, 1, f"マスターリファレンス画像生成中 ({resolved_visual_style})",
+                f"Gemini Nano Banana で基準マスター画像を生成中 ({resolved_visual_style}): {', '.join(char_names)}"
+            )
+            char_master_map = await batch_gen.generate_character_masters(
+                characters=project.characters,
+                output_dir=assets_dir,
+                colab_worker_url=colab_worker_url,
+                fal_api_key=fal_api_key,
+                replicate_api_token=replicate_api_token,
+                paid_gemini_api_key=paid_gemini_api_key,
+                visual_style=resolved_visual_style
+            )
+            log_and_update(
+                20, 1, "マスターリファレンス画像確定完了",
+                f"基準マスター画像の生成が完了しました（{len(char_master_map)}件 / スタイル: {resolved_visual_style}）。これをリファレンスにして各シーン画像 ➔ アニメーション動画を生成します"
+            )
+        else:
+            char_master_map = {}
+
+        # Step 2: 各シーンのアセット生成（Stage1: 画像生成 ➔ Stage2: I2Vアニメーション動画化 ➔ Stage3: プロ仕様テロップ）(20%〜65%)
         scene_assets = []
 
-        log_and_update(20, 2, "シーンアセット一括生成中", f"全 {total_scenes} カットの音声合成および画像・吹き出し演出アセットの生成を開始します...")
+        log_and_update(20, 2, "シーン画像＆I2Vアニメーション生成中", f"全 {total_scenes} カットの画像生成 ➔ リファレンスI2Vアニメーション動画化を開始します...")
 
         for idx, scene in enumerate(project.scenes):
             scene_num = scene.scene_id
             curr_pct = 20 + int((idx / total_scenes) * 45) # 20% 〜 65%
             
-            if idx % max(1, total_scenes // 5) == 0 or idx == total_scenes - 1:
-                log_and_update(
-                    curr_pct, 2, "シーンアセット生成中",
-                    f"アセット生成中: カット {idx + 1} / {total_scenes} ({scene.speaker}: {scene.narration[:15]}...)"
-                )
+            log_and_update(
+                curr_pct, 2, "画像生成 ➔ I2Vアニメーション変換中",
+                f"カット {idx + 1} / {total_scenes} 生成中 ({scene.speaker}: {scene.narration[:15]}...)"
+            )
 
             scene_dict = {
                 "scene_number": scene_num,
@@ -278,7 +347,13 @@ async def run_long_manga_pipeline(
                     replicate_api_token=replicate_api_token,
                     pexels_api_key=pexels_api_key,
                     characters=project.characters,
-                    genre=project.genre
+                    character_master_map=char_master_map,
+                    genre=project.genre,
+                    visual_style=resolved_visual_style,
+                    telop_style=telop_style,
+                    telop_mode=telop_mode,
+                    telop_font_size=telop_font_size,
+                    telop_font=telop_font
                 )
                 scene.status = "generated"
                 scene_assets.append(asset_res)
@@ -290,7 +365,9 @@ async def run_long_manga_pipeline(
                 ph_path = assets_dir / f"bg_{scene_num:03d}.png"
                 pil_ph.save(ph_path, "PNG")
 
-                pil_ov = batch_gen._create_manga_bubble_overlay(1080, 1920, scene.speaker, scene.narration, genre=project.genre)
+                pil_ov = batch_gen._create_manga_bubble_overlay(
+                    1080, 1920, scene.speaker, scene.narration, genre=project.genre, telop_style=telop_style, telop_font=telop_font
+                )
                 ov_path = assets_dir / f"overlay_{scene_num:03d}.png"
                 pil_ov.save(ov_path, "PNG")
 
@@ -323,8 +400,59 @@ async def run_long_manga_pipeline(
 
         log_and_update(65, 3, "アセット生成完了", f"全 {len(scene_assets)} カットのアセット生成が正常に完了しました")
 
-        # Step 3: 0.3秒演出切り替え ＆ マルチBGMクロスフェード動画合成 (70%〜90%)
-        log_and_update(70, 4, "マルチBGMクロスフェード & 演出合成中", "0.3秒演出切り替え・マルチBGMクロスフェード動画合成を開始します...")
+        # Step 3: BGM選曲の解決 ＆ マルチBGMクロスフェード動画合成 (70%〜90%)
+        effective_bgm_map = dict(bgm_map or {})
+        builtin_bgm_dir = config.DATA_DIR / "bgm"
+        choice = (bgm_choice or "auto_script").strip()
+
+        if choice == "none":
+            effective_bgm_map = {}
+        elif choice.startswith("builtin:"):
+            preset_wav = batch_gen.ensure_builtin_bgm_file(choice, builtin_bgm_dir)
+            if preset_wav and preset_wav.exists():
+                effective_bgm_map["__override__"] = str(preset_wav)
+        elif choice != "auto_script":
+            # 登録済みカスタムBGMファイル名またはbgm_id指定
+            custom_bgm_file = builtin_bgm_dir / choice
+            if custom_bgm_file.exists():
+                effective_bgm_map["__override__"] = str(custom_bgm_file)
+            else:
+                try:
+                    from services.bgm_service import BGMService
+                    from services.storage_service import StorageService
+                    bgm_svc = BGMService(firestore, StorageService())
+                    dl_bgm = bgm_svc.download_bgm(choice, builtin_bgm_dir)
+                    if dl_bgm and dl_bgm.exists():
+                        effective_bgm_map["__override__"] = str(dl_bgm)
+                except Exception as bgm_dl_err:
+                    logger.warning(f"Failed to download custom BGM {choice}: {bgm_dl_err}")
+
+        # auto_script またはフォールバック補完: 未設定タグに内蔵BGMを自動割り当て
+        if choice != "none" and "__override__" not in effective_bgm_map:
+            tag_to_builtin = {
+                "cheerful": "upbeat_marimba",
+                "funny": "upbeat_marimba",
+                "warm": "calm_piano",
+                "touching": "calm_piano",
+                "suspense": "mystery_synth",
+                "frightening": "mystery_synth",
+                "epic": "dramatic_strings",
+                "neutral": "edo_ukiyoe" if (resolved_visual_style == "ukiyoe" or project.genre == "edoculture") else "corporate_clean"
+            }
+            if resolved_visual_style == "ukiyoe" or project.genre == "edoculture":
+                edo_wav = batch_gen.ensure_builtin_bgm_file("edo_ukiyoe", builtin_bgm_dir)
+                if edo_wav:
+                    for t_k in tag_to_builtin:
+                        if t_k not in effective_bgm_map or not Path(str(effective_bgm_map[t_k])).exists():
+                            effective_bgm_map[t_k] = str(edo_wav)
+            else:
+                for t_k, b_id in tag_to_builtin.items():
+                    if t_k not in effective_bgm_map or not Path(str(effective_bgm_map[t_k])).exists():
+                        b_wav = batch_gen.ensure_builtin_bgm_file(b_id, builtin_bgm_dir)
+                        if b_wav:
+                            effective_bgm_map[t_k] = str(b_wav)
+
+        log_and_update(70, 4, "マルチBGMクロスフェード & 演出合成中", f"BGM設定 ({choice}) ＆ テロップ合成を実行しています...")
         composer = MangaVideoComposer()
         output_mp4 = job_dir / "manga_video_final.mp4"
 
@@ -332,10 +460,11 @@ async def run_long_manga_pipeline(
         await asyncio.to_thread(
             composer.compose_manga_video,
             scene_assets=scene_assets,
-            bgm_map=bgm_map,
+            bgm_map=effective_bgm_map,
             output_video_path=output_mp4,
             work_dir=work_dir,
-            is_paid_member=not watermark_required
+            is_paid_member=not watermark_required,
+            bgm_volume=float(bgm_volume or 0.20)
         )
 
         if not output_mp4.exists() or output_mp4.stat().st_size == 0:

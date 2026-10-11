@@ -160,7 +160,7 @@ class MangaScriptRequest(BaseModel):
 
 
 class MangaVideoGenerateRequest(BaseModel):
-    """長尺漫画動画生成リクエスト"""
+    """長尺漫画動画・Pro版ショート動画生成リクエスト"""
     script_data: dict = Field(..., description="生成されたシナリオJSON")
     user_id: str = Field(..., description="FirebaseユーザーID")
     gemini_api_keys: Union[List[str], str] = Field("", description="Gemini APIキー（無料枠：テキスト・構成用）")
@@ -168,6 +168,8 @@ class MangaVideoGenerateRequest(BaseModel):
     tts_engine: str = Field("edge", description="TTSエンジン")
     voice_name: str = Field("nanami", description="声色名")
     bgm_map: Dict[str, str] = Field({}, description="タグ別BGMファイルマッピング")
+    bgm_choice: Optional[str] = Field("auto_script", description="BGM選曲設定（auto_script / builtin:... / ファイル名 / none）")
+    bgm_volume: Optional[float] = Field(0.20, description="BGM音量バランス (0.05〜0.50)")
     auto_post: bool = Field(False, description="完全自動投稿フラグ")
     # TTS Parameters
     tts_params: Optional[Dict[str, Any]] = Field(None, description="詳細なTTS設定パラメータ")
@@ -175,6 +177,11 @@ class MangaVideoGenerateRequest(BaseModel):
     fal_api_key: Optional[str] = Field("", description="fal.ai FLUX APIキー")
     replicate_api_token: Optional[str] = Field("", description="Replicate APIトークン")
     pexels_api_key: Optional[str] = Field("", description="Pexels APIキー")
+    visual_style: Optional[str] = Field(None, description="ビジュアルスタイル・絵柄（ukiyoe / anime_modern / manga_dramatic 等）")
+    telop_style: Optional[str] = Field("shorts_impact_yellow", description="テロップスタイルプリセット")
+    telop_mode: Optional[str] = Field("sequential", description="テロップ表示方式")
+    telop_font_size: Optional[str] = Field("medium", description="テロップ文字サイズ")
+    telop_font: Optional[str] = Field("DelaGothicOne", description="テロップフォント（YouTube定番8種）")
 
 
 class TTSPreviewRequest(BaseModel):
@@ -237,6 +244,9 @@ class AdminUserUpdateRequest(BaseModel):
     subscription_expire_date: Optional[str] = None
 
 
+ACTIVE_RUNNING_JOBS: set[str] = set()
+
+
 async def run_manga_video_job(
     job_id: str,
     script_data: dict,
@@ -250,9 +260,17 @@ async def run_manga_video_job(
     colab_worker_url: Optional[str] = "",
     fal_api_key: Optional[str] = "",
     replicate_api_token: Optional[str] = "",
-    pexels_api_key: Optional[str] = ""
+    pexels_api_key: Optional[str] = "",
+    visual_style: Optional[str] = None,
+    telop_style: Optional[str] = "shorts_impact_yellow",
+    telop_mode: Optional[str] = "sequential",
+    telop_font_size: Optional[str] = "medium",
+    telop_font: Optional[str] = "DelaGothicOne",
+    bgm_choice: Optional[str] = "auto_script",
+    bgm_volume: float = 0.20
 ):
-    """長尺漫画動画・Pro版ショート動画の統合バックグラウンド合成タスク（タイムラインJSON & コスト最適化）"""
+    """長尺漫画動画・Pro版ショート動画の統合バックグラウンド合成タスク（タイムラインJSON & チェックポイント自動再開対応）"""
+    ACTIVE_RUNNING_JOBS.add(job_id)
     try:
         from processors.long_manga_pipeline import run_long_manga_pipeline
         await run_long_manga_pipeline(
@@ -269,7 +287,14 @@ async def run_manga_video_job(
             colab_worker_url=colab_worker_url,
             fal_api_key=fal_api_key,
             replicate_api_token=replicate_api_token,
-            pexels_api_key=pexels_api_key
+            pexels_api_key=pexels_api_key,
+            visual_style=visual_style,
+            telop_style=telop_style,
+            telop_mode=telop_mode,
+            telop_font_size=telop_font_size,
+            telop_font=telop_font,
+            bgm_choice=bgm_choice or "auto_script",
+            bgm_volume=float(bgm_volume or 0.20)
         )
 
     except Exception as e:
@@ -280,6 +305,62 @@ async def run_manga_video_job(
             progress=0,
             message=f"動画生成エラー: {str(e)}"
         )
+    finally:
+        ACTIVE_RUNNING_JOBS.discard(job_id)
+
+
+async def _resume_interrupted_manga_job(job_id: str):
+    """サーバー再起動等で中断した processing 状態のジョブをチェックポイントから自動再開する"""
+    if job_id in ACTIVE_RUNNING_JOBS:
+        return
+    job_dir = config.TMP_DIR / job_id
+    params_path = job_dir / "job_params.json"
+    project_path = job_dir / "project.json"
+    if not params_path.exists() and not project_path.exists():
+        return
+
+    logger.info(f"[AutoResume] Detected interrupted job {job_id}. Resuming from existing checkpoints...")
+    try:
+        if params_path.exists():
+            params = json.loads(params_path.read_text(encoding="utf-8"))
+            await run_manga_video_job(**params)
+            return
+
+        proj = json.loads(project_path.read_text(encoding="utf-8"))
+        reconstructed_script = {
+            "title": proj.get("title", "自動生成動画"),
+            "theme": proj.get("theme", ""),
+            "genre": proj.get("genre", "story"),
+            "visual_style": proj.get("visual_style", "anime_modern"),
+            "cuts": [
+                {
+                    "cut_id": s.get("cut_key", f"Cut_{s.get('scene_id', idx+1):03d}"),
+                    "speaker": s.get("speaker", "ナレーター"),
+                    "dialogue": s.get("narration", ""),
+                    "description": s.get("description", ""),
+                    "character_prompt": s.get("character_prompt", s.get("description", "")),
+                    "bgm_tag": s.get("bgm_tag", "neutral"),
+                    "duration_sec": s.get("duration", 5.0),
+                    "is_video_cut": s.get("type") == "video"
+                }
+                for idx, s in enumerate(proj.get("scenes", []))
+            ]
+        }
+        await run_manga_video_job(
+            job_id=job_id,
+            script_data=reconstructed_script,
+            user_id="oumaumauma32@gmail.com",
+            tts_engine=proj.get("tts_engine", "edge"),
+            voice_name=proj.get("voice_name", "nanami"),
+            bgm_map={},
+            watermark_required=False,
+            paid_gemini_api_key=os.getenv("PAID_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY") or "",
+            colab_worker_url=getattr(config, "COMFYUI_API_URL", "") or "",
+            visual_style=proj.get("visual_style", "anime_modern"),
+        )
+    except Exception as e:
+        logger.error(f"[AutoResume] Failed to resume job {job_id}: {e}")
+        ACTIVE_RUNNING_JOBS.discard(job_id)
 
 
 
@@ -478,15 +559,22 @@ async def process_mode_b(request: ModeBRequest, background_tasks: BackgroundTask
 @app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
 @app.get("/api/job/{job_id}", response_model=JobStatusResponse)
 async def get_job_status(job_id: str):
-    """ジョブの現在のステータスを取得"""
+    """ジョブの現在のステータスを取得（サーバー再起動等で中断したジョブはチェックポイントから自動再開）"""
     try:
         job = firestore.get_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="ジョブが見つかりません")
 
+        status_val = job.get("status", "unknown")
+        if status_val == "processing" and job_id not in ACTIVE_RUNNING_JOBS:
+            job_dir = config.TMP_DIR / job_id
+            if (job_dir / "job_params.json").exists() or (job_dir / "project.json").exists():
+                import asyncio
+                asyncio.create_task(_resume_interrupted_manga_job(job_id))
+
         return JobStatusResponse(
             job_id=job_id,
-            status=job.get("status", "unknown"),
+            status=status_val,
             progress=job.get("progress", 0),
             message=job.get("message", ""),
             youtube_url=job.get("youtube_url"),
@@ -1312,8 +1400,19 @@ async def generate_manga_video_endpoint(req: MangaVideoGenerateRequest, backgrou
     }
     firestore.collection.document(job_id).set(job_data)
 
-    background_tasks.add_task(
-        run_manga_video_job,
+    # 有料Gemini APIキーが空の場合はメインGemini APIキーを自動フォールバック適用
+    effective_gemini_key = (req.paid_gemini_api_key or "").strip()
+    if not effective_gemini_key and req.gemini_api_keys:
+        if isinstance(req.gemini_api_keys, list) and len(req.gemini_api_keys) > 0:
+            effective_gemini_key = str(req.gemini_api_keys[0]).strip()
+        elif isinstance(req.gemini_api_keys, str):
+            parts = [k.strip() for k in req.gemini_api_keys.split(",") if k.strip()]
+            if parts:
+                effective_gemini_key = parts[0]
+    if not effective_gemini_key:
+        effective_gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+
+    job_kwargs = dict(
         job_id=job_id,
         script_data=req.script_data,
         user_id=req.user_id,
@@ -1321,13 +1420,28 @@ async def generate_manga_video_endpoint(req: MangaVideoGenerateRequest, backgrou
         voice_name=req.voice_name,
         bgm_map=req.bgm_map,
         watermark_required=access["watermark_required"],
-        paid_gemini_api_key=req.paid_gemini_api_key or "",
+        paid_gemini_api_key=effective_gemini_key,
         tts_params=req.tts_params,
         colab_worker_url=req.colab_worker_url or "",
         fal_api_key=req.fal_api_key or "",
         replicate_api_token=req.replicate_api_token or "",
-        pexels_api_key=req.pexels_api_key or ""
+        pexels_api_key=req.pexels_api_key or "",
+        visual_style=req.visual_style,
+        telop_style=req.telop_style or "shorts_impact_yellow",
+        telop_mode=req.telop_mode or "sequential",
+        telop_font_size=req.telop_font_size or "medium",
+        telop_font=req.telop_font or "DelaGothicOne",
+        bgm_choice=req.bgm_choice or "auto_script",
+        bgm_volume=float(req.bgm_volume if req.bgm_volume is not None else 0.20)
     )
+    try:
+        j_dir = config.TMP_DIR / job_id
+        j_dir.mkdir(parents=True, exist_ok=True)
+        (j_dir / "job_params.json").write_text(json.dumps(job_kwargs, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as jp_err:
+        logger.warning(f"Failed to save job_params.json: {jp_err}")
+
+    background_tasks.add_task(run_manga_video_job, **job_kwargs)
     return {"job_id": job_id, "status": "PROCESSING"}
 
 
@@ -1372,6 +1486,7 @@ async def regenerate_single_scene_endpoint(req: SceneRegenerateRequest):
 class ProShortsRequest(BaseModel):
     theme: str
     genre: str = "story"
+    visual_style: Optional[str] = None
     user_id: str = "default_user"
     gemini_api_keys: Optional[List[str]] = None
 
@@ -1388,7 +1503,11 @@ async def generate_pro_shorts_script_endpoint(req: ProShortsRequest):
         from processors.pro_shorts_engine import ProShortsEngine
         km = KeyManager(req.gemini_api_keys or [config.GEMINI_API_KEY])
         engine = ProShortsEngine(key_manager=km)
-        script = await engine.generate_pro_shorts_script(theme=req.theme, genre=req.genre)
+        script = await engine.generate_pro_shorts_script(
+            theme=req.theme,
+            genre=req.genre,
+            visual_style=req.visual_style
+        )
         return {"success": True, "script": script}
     except Exception as e:
         logger.error(f"Pro版ショート動画台本生成失敗: {e}")
@@ -1398,6 +1517,7 @@ async def generate_pro_shorts_script_endpoint(req: ProShortsRequest):
 class LongVideoScriptRequest(BaseModel):
     theme: str
     genre: str = "story"
+    visual_style: Optional[str] = None
     target_minutes: int = 15
     research_notes: Optional[str] = ""
     user_id: str = "default_user"
@@ -1420,7 +1540,8 @@ async def generate_long_video_script_endpoint(req: LongVideoScriptRequest):
             theme=req.theme,
             genre=req.genre,
             target_minutes=req.target_minutes,
-            research_notes=req.research_notes or ""
+            research_notes=req.research_notes or "",
+            visual_style=req.visual_style
         )
         return {"success": True, "script": script}
     except Exception as e:
@@ -1477,6 +1598,7 @@ class ScriptNormalizeRequest(BaseModel):
     raw_script: str
     target_format: Optional[str] = "pro_shorts"
     genre: Optional[str] = "knowledge"
+    visual_style: Optional[str] = None
     gemini_api_keys: Optional[List[str]] = None
 
 
@@ -1490,7 +1612,8 @@ async def normalize_script_endpoint(req: ScriptNormalizeRequest):
         normalized = await normalizer.normalize_to_timeline_json(
             raw_text=req.raw_script,
             target_format=req.target_format or "pro_shorts",
-            genre=req.genre or "knowledge"
+            genre=req.genre or "knowledge",
+            visual_style=req.visual_style
         )
         return {"success": True, "timeline": normalized}
     except Exception as e:
@@ -1526,14 +1649,55 @@ async def generate_flux_image_endpoint(req: FluxGenRequest):
 
 
 class ColabHealthRequest(BaseModel):
-    worker_url: str
+    worker_url: Optional[str] = ""
+    colab_url: Optional[str] = ""
+
+
+class ColabConfigRequest(BaseModel):
+    colab_url: str
+
+
+@app.get("/api/colab/config")
+async def get_colab_config():
+    """現在のColab/ComfyUI接続設定を取得"""
+    import os
+    import config
+    current_url = os.environ.get("COMFYUI_API_URL") or getattr(config, "COMFYUI_API_URL", "")
+    return {"colab_url": current_url}
+
+
+@app.post("/api/colab/config")
+async def update_colab_config(req: ColabConfigRequest):
+    """管理者ページ等から動的にColab/ComfyUI URLを更新・永続化"""
+    import os
+    from pathlib import Path
+    import config
+
+    sanitized = req.colab_url.strip().rstrip("/")
+    os.environ["COMFYUI_API_URL"] = sanitized
+    os.environ["COLAB_WORKER_URL"] = sanitized
+    setattr(config, "COMFYUI_API_URL", sanitized)
+    setattr(config, "COLAB_WORKER_URL", sanitized)
+
+    # .env.local に永続保存
+    env_local = Path(__file__).parent.parent / ".env.local"
+    try:
+        env_local.write_text(f"COMFYUI_API_URL={sanitized}\n", encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Failed to persist .env.local: {e}")
+
+    return {"success": True, "colab_url": sanitized, "message": "Colab接続URLを更新・保存しました。"}
 
 
 @app.post("/api/colab/health")
 async def colab_health_endpoint(req: ColabHealthRequest):
-    """Google Colab 無料T4 GPUワーカーのヘルスチェック"""
+    """Google Colab 無料T4 GPUワーカー / ComfyUI (LTX-Video) のヘルスチェック"""
     from processors.colab_gpu_client import ColabGpuClient
-    client = ColabGpuClient(req.worker_url)
+    import os
+    import config
+
+    target_url = (req.colab_url or req.worker_url or os.environ.get("COMFYUI_API_URL") or getattr(config, "COMFYUI_API_URL", "")).strip()
+    client = ColabGpuClient(target_url)
     res = await client.check_health()
     return res
 
@@ -1786,6 +1950,66 @@ async def preview_tts(req: TTSPreviewRequest):
         logger.error(f"TTSプレビュー生成エラー: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+class TelopPreviewRequest(BaseModel):
+    text: Optional[str] = "まさか、そんな秘密があったなんて…！"
+    telop_font: Optional[str] = "keifont"
+    telop_style: Optional[str] = "shorts_impact_yellow"
+    telop_font_size: Optional[str] = "medium"
+    genre: Optional[str] = "story"
+    visual_style: Optional[str] = "anime_modern"
+
+
+@app.post("/api/telop/preview")
+async def preview_telop_endpoint(req: TelopPreviewRequest):
+    """選択されたテロップフォント・配色・サイズを本番同一の5層エンジンで即座に描画してBase64 PNGを返す"""
+    try:
+        from processors.batch_asset_generator import BatchAssetGenerator
+        gen = BatchAssetGenerator()
+        b64_url = gen.generate_telop_preview_base64(
+            text=req.text or "まさか、そんな秘密があったなんて…！",
+            telop_font=req.telop_font or "keifont",
+            telop_style=req.telop_style or "shorts_impact_yellow",
+            telop_font_size=req.telop_font_size or "medium",
+            genre=req.genre or "story",
+            visual_style=req.visual_style or "anime_modern"
+        )
+        return {"success": True, "image_base64": b64_url}
+    except Exception as e:
+        logger.error(f"テロッププレビュー描画エラー: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/bgm/builtin/{preset_id}")
+async def get_builtin_bgm_preview(preset_id: str):
+    """内蔵プリセットBGM（edo_ukiyoe, dramatic_strings 等）の試聴用オーディオファイルを返す"""
+    try:
+        from processors.batch_asset_generator import BatchAssetGenerator
+        bgm_dir = config.DATA_DIR / "bgm"
+        wav_path = BatchAssetGenerator.ensure_builtin_bgm_file(preset_id, bgm_dir)
+        if not wav_path or not wav_path.exists():
+            raise HTTPException(status_code=404, detail="指定されたプリセットBGMの生成に失敗しました")
+        return FileResponse(path=str(wav_path), media_type="audio/wav", filename=wav_path.name)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"内蔵BGMプレビュー取得エラー: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/bgm/file/{bgm_id}")
+async def get_custom_bgm_file(bgm_id: str):
+    """登録済みカスタムBGMの試聴用オーディオファイルを返す"""
+    try:
+        bgm_dir = config.DATA_DIR / "bgm"
+        local_candidate = bgm_dir / bgm_id
+        if local_candidate.exists():
+            return FileResponse(path=str(local_candidate))
+        downloaded = bgm_service.download_bgm(bgm_id, bgm_dir)
+        return FileResponse(path=str(downloaded))
+    except Exception as e:
+        logger.error(f"カスタムBGMプレビュー取得エラー: {e}")
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 # =============================================================================

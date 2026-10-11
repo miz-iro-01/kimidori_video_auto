@@ -456,12 +456,15 @@ class ApiClient {
   }
 
   /** 長尺漫画動画 / Pro版ショート動画の生成ジョブの発行 */
-  async generateMangaVideo(scriptData, ttsEngine = "edge", voiceName = "nanami", bgmMap = {}) {
-    const geminiKey = window.settingsManager.get("geminiApiKey");
-    const paidGeminiKey = window.settingsManager.get("paidGeminiApiKey") || "";
+  async generateMangaVideo(scriptData, ttsEngine = "edge", voiceName = "nanami", bgmMap = {}, options = {}) {
+    const allGeminiKeys = (window.settingsManager && window.settingsManager.getGeminiKeys) ? window.settingsManager.getGeminiKeys() : [];
+    const geminiKey = window.settingsManager.get("geminiApiKey") || (allGeminiKeys[0] || "");
+    const paidGeminiKey = window.settingsManager.get("paidGeminiApiKey") || geminiKey || "";
+
+    const speakingRate = options.speakingRate ? parseFloat(options.speakingRate) : (parseFloat(window.settingsManager.get("speakingRate")) || 1.0);
 
     const ttsParams = {
-      speaking_rate: parseFloat(window.settingsManager.get("speakingRate")) || 1.0,
+      speaking_rate: speakingRate,
       google_tts_key: window.settingsManager.get("googleTtsKey") || "",
       elevenlabs_key: window.settingsManager.get("elevenLabsKey") || "",
       openai_key: window.settingsManager.get("openAiTtsKey") || "",
@@ -493,22 +496,36 @@ class ApiClient {
       tts_engine: ttsEngine,
       voice_name: voiceName,
       bgm_map: bgmMap,
+      bgm_choice: options.bgmChoice || "auto_script",
+      bgm_volume: options.bgmVolume !== undefined ? parseFloat(options.bgmVolume) : 0.20,
       tts_params: ttsParams,
-      colab_worker_url: window.settingsManager.get("colabWorkerUrl") || "",
+      colab_worker_url: (window.settingsManager && window.settingsManager.getColabUrl) ? window.settingsManager.getColabUrl() : (window.settingsManager.get("colabWorkerUrl") || ""),
       fal_api_key: window.settingsManager.get("falApiKey") || "",
       replicate_api_token: window.settingsManager.get("replicateApiToken") || "",
-      pexels_api_key: window.settingsManager.get("pexelsApiKey") || ""
+      pexels_api_key: window.settingsManager.get("pexelsApiKey") || "",
+      visual_style: options.visualStyle || (scriptData && scriptData.visual_style) || null,
+      telop_style: options.telopStyle || "shorts_impact_yellow",
+      telop_mode: options.telopMode || "sequential",
+      telop_font_size: options.telopFontSize || "medium",
+      telop_font: options.telopFont || "DelaGothicOne"
     };
 
-
-    const res = await fetch(`${this.baseUrl}/api/manga/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+    let res;
+    try {
+      res = await fetch(`${this.baseUrl}/api/manga/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    } catch (fetchErr) {
+      if (fetchErr.message && fetchErr.message.includes("Failed to fetch")) {
+        throw new Error("バックエンドAPIサーバー（port 8080）に接続できません。サーバーの稼働状態を確認してください。");
+      }
+      throw fetchErr;
+    }
 
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `漫画動画生成エラー (${res.status})`);
     }
 
@@ -516,15 +533,17 @@ class ApiClient {
   }
 
   /** Pro版ショート動画の台本生成（バックエンド ＋ 直接Gemini APIフォールバック・全キー両対応） */
-  async generateProShortsScript(theme, genre = "story") {
+  async generateProShortsScript(theme, genre = "story", visualStyle = null) {
     const keys = window.settingsManager.getGeminiKeys();
     if (!keys || keys.length === 0) {
       throw new Error("Gemini APIキー（無料版または有料版）を設定画面で保存してください。");
     }
 
+    const resolvedStyle = visualStyle || (genre === "edoculture" ? "ukiyoe" : "anime_modern");
     const payload = {
       theme: theme,
       genre: genre,
+      visual_style: resolvedStyle,
       user_id: this._getUserId(),
       gemini_api_keys: keys
     };
@@ -553,27 +572,34 @@ class ApiClient {
     // 2. バックエンドが失敗した場合はブラウザから直結でGemini APIを実行（デュアルキー＆複数モデルフォールバック）
     const genreNames = {
       story: "ストーリー・ドラマ・スカッと",
+      business: "ビジネス・教養・ノウハウ",
       knowledge: "ライフハック・豆知識・ノウハウ",
       edoculture: "歴史・江戸文化・浮世絵雑学",
       trivia: "雑学・ミステリー・驚きの事実"
     };
     const genreRules = {
       story: "ナレーターによる感情移入の強い朗読または登場人物の会話。冒頭3秒で事件・葛藤が発生。",
+      business: "ナレーターによる論理的で痛快な知的ショート解説。全カット動画演出。",
       knowledge: "ナレーターによる論理的で痛快な知的ショート解説。全カット動画演出。",
-      edoculture: "現代キャラ排除。浮世絵アニメーションと純粋な知的好奇心解説。",
+      edoculture: "現代キャラ排除。伝統浮世絵（木版画・錦絵）と純粋な知的好奇心解説。",
       trivia: "テンポの良い疑問提示と即座の解説。ダイナミック演出。"
     };
 
     const gName = genreNames[genre] || genreNames.story;
     const gRule = genreRules[genre] || genreRules.story;
+    const ukiyoeInstruction = resolvedStyle === "ukiyoe"
+      ? "・絵柄は『江戸時代のアニメ』ではなく葛飾北斎・歌川国芳・東洲斎写楽の本格浮世絵（木版画・錦絵・和紙質感）とし、characters の appearance_prompt_en に anime という語を絶対に含めないこと。"
+      : `・絵柄（visual_style）は ${resolvedStyle} とすること。`;
 
     const prompt = `あなたはYouTube ShortsやTikTokで100万回再生を連発するショート動画のトッププロデューサーです。
 以下のテーマで、厳密に【60秒尺（全6〜7カット、各8〜10秒、合計55〜60秒）】の超高エンゲージメント動画台本を作成してください。
 
 【テーマ】: ${theme}
 【ジャンル】: ${gName}
+【絵柄スタイル】: ${resolvedStyle}
 【演出ルール】:
 ${gRule}
+${ukiyoeInstruction}
 ・全カット【演出】：動画（ダイナミック動画演出）として構成すること。
 ・各カットは8〜10秒程度（全6〜7カットで合計55〜60秒）。
 
@@ -583,7 +609,15 @@ ${gRule}
   "title": "ショート動画タイトル",
   "theme": "${theme}",
   "genre": "${genre}",
+  "visual_style": "${resolvedStyle}",
   "target_duration_seconds": 60,
+  "characters": [
+    {
+      "name": "登場人物名",
+      "role": "役割",
+      "appearance_prompt_en": "指定された絵柄（${resolvedStyle}）に忠実な英語の容姿・服装・画風プロンプト"
+    }
+  ],
   "cuts": [
     {
       "cut_id": "Cut_001",
@@ -625,6 +659,7 @@ ${gRule}
                 if (!clean.endsWith("}")) clean += "\n]}";
                 parsed = JSON.parse(clean);
               }
+              parsed.visual_style = parsed.visual_style || resolvedStyle;
               return { success: true, script: parsed };
             }
           } else {
@@ -642,15 +677,17 @@ ${gRule}
   }
 
   /** 長尺動画（15〜20分）完全仕様の台本・人物シート生成（バックエンド ＋ 直接Gemini APIフォールバック・全キー両対応） */
-  async generateLongVideoScript(theme, genre = "story", targetMinutes = 15, researchNotes = "") {
+  async generateLongVideoScript(theme, genre = "story", targetMinutes = 15, researchNotes = "", visualStyle = null) {
     const keys = window.settingsManager.getGeminiKeys();
     if (!keys || keys.length === 0) {
       throw new Error("Gemini APIキー（無料版または有料版）を設定画面で保存してください。");
     }
 
+    const resolvedStyle = visualStyle || (genre === "edoculture" ? "ukiyoe" : "anime_modern");
     const payload = {
       theme: theme,
       genre: genre,
+      visual_style: resolvedStyle,
       target_minutes: parseInt(targetMinutes, 10),
       research_notes: researchNotes,
       user_id: this._getUserId(),
@@ -989,7 +1026,7 @@ ${gRule}
   }
 
   /** 外部台本・メモ・Driveデータを当ツールの標準タイムラインJSONへリライト正規化 */
-  async normalizeScript(rawScript, targetFormat = "pro_shorts", genre = "knowledge") {
+  async normalizeScript(rawScript, targetFormat = "pro_shorts", genre = "knowledge", visualStyle = null) {
     const keys = window.settingsManager.getGeminiKeys();
     const res = await fetch(`${this.baseUrl}/api/script/normalize`, {
       method: "POST",
@@ -998,6 +1035,7 @@ ${gRule}
         raw_script: rawScript,
         target_format: targetFormat,
         genre: genre,
+        visual_style: visualStyle || (genre === "edoculture" ? "ukiyoe" : "anime_modern"),
         gemini_api_keys: keys
       })
     });
@@ -1006,6 +1044,32 @@ ${gRule}
       throw new Error(err.detail || `台本正規化リライト失敗 (${res.status})`);
     }
     return await res.json();
+  }
+
+  /** テロップ設定の5層リアルプレビュー画像をバックエンドで生成 */
+  async previewTelop(params = {}) {
+    const res = await fetch(`${this.baseUrl}/api/telop/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: params.text || "まさか、そんな秘密があったなんて…！",
+        telop_font: params.telopFont || "keifont",
+        telop_style: params.telopStyle || "shorts_impact_yellow",
+        telop_font_size: params.telopFontSize || "medium",
+        genre: params.genre || "story",
+        visual_style: params.visualStyle || "anime_modern"
+      })
+    });
+    if (!res.ok) {
+      throw new Error(`テロッププレビュー失敗 (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** 内蔵プリセットBGMの試聴URLを返す */
+  getBuiltinBgmPreviewUrl(presetId) {
+    const cleanId = (presetId || "edo_ukiyoe").replace(/^builtin:/, "").trim();
+    return `${this.baseUrl}/api/bgm/builtin/${encodeURIComponent(cleanId)}`;
   }
 
   /** FLUX.1 [schnell] (fal.ai / Replicate) 画像生成 */
@@ -1029,18 +1093,44 @@ ${gRule}
     return await res.json();
   }
 
-  /** Google Colab 無料T4 GPUワーカー接続テスト */
+  /** Google Colab 無料T4 GPUワーカー / ComfyUI (LTX-Video) 接続テスト */
   async checkColabHealth(workerUrl) {
-    const res = await fetch(`${this.baseUrl}/api/colab/health`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ worker_url: workerUrl })
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Colab接続確認失敗 (${res.status})`);
+    const url = (workerUrl || (window.settingsManager && window.settingsManager.getColabUrl ? window.settingsManager.getColabUrl() : "")).trim();
+    try {
+      const res = await fetch(`${this.baseUrl}/api/colab/health`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ worker_url: url, colab_url: url })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Colab接続確認失敗 (${res.status})`);
+      }
+      return await res.json();
+    } catch (e) {
+      if (e.message && e.message.includes("Failed to fetch")) {
+        throw new Error("バックエンドAPIサーバー（port 8080）に接続できません。サーバーが起動しているか確認してください。");
+      }
+      throw e;
     }
-    return await res.json();
+  }
+
+  /** Colab接続URLのバックエンド永続化保存 */
+  async saveColabConfig(url) {
+    const sanitized = (url || "").trim().replace(/\/+$/, "");
+    try {
+      const res = await fetch(`${this.baseUrl}/api/colab/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ colab_url: sanitized })
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn("バックエンドへのColab URL保存スキップ:", e);
+    }
+    return { success: true, colab_url: sanitized };
   }
 
   /** Google Colab 無料GPUによる FLUX.1 画像生成 */

@@ -53,14 +53,32 @@ class ProShortsEngine:
         self,
         theme: str,
         genre: str = "story",
+        visual_style: Optional[str] = None,
         research_context: Optional[str] = None,
         outlier_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         60秒尺（全6〜7カット・各8〜10秒・全カット動画演出）の高密度台本をGeminiで生成。
         外部リサーチデータ・隠れ需要インサイトを注入し、安易なステレオタイプ（偏り）を完全排除する。
+        visual_style（ukiyoe 等）に応じた画風プロンプト指示を台本生成段階から徹底する。
         """
         genre_info = PRO_SHORTS_GENRES.get(genre, PRO_SHORTS_GENRES["story"])
+        style_key = visual_style or ("ukiyoe" if genre == "edoculture" else "anime_modern")
+
+        visual_style_rules = {
+            "ukiyoe": (
+                "【絵柄・ビジュアルスタイル厳守：本格浮世絵・錦絵（江戸木版画・和紙質感）】\n"
+                "・映像の絵柄は『江戸時代のアニメ』ではなく、葛飾北斎・歌川広重・歌川国芳・東洲斎写楽の伝統的な木版画（浮世絵・錦絵）として構成すること。\n"
+                "・characters の appearance_prompt_en や各カットの description には、現代アニメ調（anime style, big anime eyes 等）を一切含めず、"
+                "『authentic Edo-period Ukiyo-e woodblock print (Nishiki-e), traditional slender ukiyo-e eyes, sumi-e ink outlines, flat mineral pigments on textured handmade washi paper』として記述すること。"
+            ),
+            "anime_modern": "【絵柄・ビジュアルスタイル：現代アニメ調（高精細シネマティックアニメ）】",
+            "manga_dramatic": "【絵柄・ビジュアルスタイル：劇画・ドラマチック漫画調（濃厚な陰影と迫力の筆致）】",
+            "watercolor_ink": "【絵柄・ビジュアルスタイル：水墨・淡彩画調（和風筆致・水彩グラデーション）】",
+            "flat_2d_motion": "【絵柄・ビジュアルスタイル：2Dフラット図解・モーショングラフィックス調】",
+            "photoreal_cinematic": "【絵柄・ビジュアルスタイル：実写映画・シネマティック写実調】",
+        }
+        style_rule_text = visual_style_rules.get(style_key, visual_style_rules["anime_modern"])
 
         # リサーチコンテキストがない場合、Outlierリサーチを自動実行
         dynamic_research_section = ""
@@ -98,6 +116,7 @@ class ProShortsEngine:
 
 【テーマ】: {theme}
 【ジャンル】: {genre_info['name']}
+{style_rule_text}
 {dynamic_research_section}
 【演出ルール】:
 {genre_info['rule']}
@@ -111,14 +130,22 @@ class ProShortsEngine:
   "title": "ショート動画タイトル",
   "theme": "{theme}",
   "genre": "{genre}",
+  "visual_style": "{style_key}",
   "target_duration_seconds": 60,
+  "characters": [
+    {{
+      "name": "登場人物名",
+      "role": "役割",
+      "appearance_prompt_en": "指定された絵柄（{style_key}）に忠実な英語の容姿・服装・画風プロンプト"
+    }}
+  ],
   "cuts": [
     {{
       "cut_id": "Cut_001",
       "time_range": "[00:00 - 00:09]",
       "speaker": "話者名（または ナレーション）",
       "dialogue": "セリフまたは発話テキスト（冒頭3秒で引き込むフック）",
-      "description": "画面の情景・被写体のアクション・背景描写",
+      "description": "画面の純粋な映像情景・登場人物の表情とダイナミックな動作・背景描写のみ（注意：『〜のテロップが浮かび上がる』『文字が表示される』等の字幕指示は絶対に書かないこと）",
       "camera_effect": "動画 (アクション)",
       "bgm_tag": "cheerful / warm / touching / suspense / frightening / funny / epic / neutral から選択"
     }}
@@ -141,10 +168,12 @@ class ProShortsEngine:
                     async with session.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={key}", timeout=10) as m_resp:
                         if m_resp.status == 200:
                             m_data = await m_resp.json()
+                            _non_text = ("tts", "image", "banana", "embedding", "veo", "imagen", "aqa", "audio", "robotics", "computer-use", "learnlm")
                             supported = [
                                 m["name"].replace("models/", "")
                                 for m in m_data.get("models", [])
                                 if "generateContent" in m.get("supportedGenerationMethods", [])
+                                and not any(bad in m["name"].lower() for bad in _non_text)
                             ]
                             if supported:
                                 # 利用可能モデルの中から優先順序で並び替え

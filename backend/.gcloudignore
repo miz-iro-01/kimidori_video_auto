@@ -15,8 +15,10 @@ __pycache__/
 *.pyd
 .Python
 
-# 一時ファイル
+# 一時ファイル・ローカルキャッシュ
 tmp/
+cache/
+data/
 *.tmp
 *.log
 

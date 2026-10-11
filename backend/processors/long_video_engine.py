@@ -63,14 +63,22 @@ class LongVideoEngine:
         theme: str,
         genre: str = "story",
         target_minutes: int = 15,
-        research_notes: str = ""
+        research_notes: str = "",
+        visual_style: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         題材やリサーチメモから、1場面3〜8秒のセリフと状況説明からなる台本を作成。
         同時に登場人物の英語指示文一覧表（容姿統一）を作成。
         """
         genre_spec = GENRE_SPECS.get(genre, GENRE_SPECS["story"])
+        style_key = visual_style or ("ukiyoe" if genre == "edoculture" else "anime_modern")
         target_cuts = max(80, min(180, int(target_minutes * 8)))
+
+        style_example = (
+            "an Edo-period Japanese merchant, chonmage topknot, indigo kimono, authentic Edo Ukiyo-e woodblock print by Hokusai and Kuniyoshi, slender ukiyo-e eyes, sumi-e ink outlines on handmade washi paper, strictly NO anime style"
+            if style_key == "ukiyoe"
+            else "a 32-year-old Japanese male researcher, glasses, wearing modern casual workwear, cinematic anime style"
+        )
 
         prompt = f"""
 あなたはYouTubeで100万再生を連発する長尺動画（{target_minutes}分動画）のプロ脚本家・構成作家です。
@@ -78,11 +86,13 @@ class LongVideoEngine:
 
 【テーマ】: {theme}
 【ジャンル】: {genre_spec['label']}（{genre_spec['description']}）
+【絵柄・ビジュアルスタイル】: {style_key}
 【目標尺】: 約{target_minutes}分（合計 {target_cuts} カット程度、1カットあたり3〜8秒程度）
 【参考リサーチメモ】: {research_notes or '特になし（一次情報・具体的ファクトに基づいて構成してください）'}
 【禁止事項】：
 ・使い古された定番ステレオタイプ（江戸＝うんち換金、都市伝説＝頭の上の余命数字、ビジネス＝45歳佐藤さん等）は【絶対に使用禁止】。
 ・登場人物の名前はテーマや舞台にふさわしい独自の自然な名前を動的に命名すること（「佐藤」「健一」等の安易な定番名の流用は禁止）。
+・特に絵柄が ukiyoe の場合は、『江戸時代のアニメ』にならないよう、appearance_prompt_en に anime という単語を絶対に含めず、伝統木版画（Ukiyo-e woodblock print, Nishiki-e, sumi-e ink outlines, washi paper texture）として記述すること。
 
 【出力フォーマット（厳格なJSON）】:
 必ず以下のJSON形式のみを出力してください（Markdownコードブロック ```json ``` で囲んでください）。
@@ -90,11 +100,12 @@ class LongVideoEngine:
   "title": "動画のタイトル",
   "theme": "{theme}",
   "genre": "{genre}",
+  "visual_style": "{style_key}",
   "characters": [
     {{
       "name": "テーマに応じた独自の登場人物名",
       "role": "主人公 / 同僚 / 専門家 / ナレーター など",
-      "appearance_prompt_en": "英語の外見・服装指示（例: a 32-year-old Japanese male researcher, glasses, wearing modern casual workwear, anime style）"
+      "appearance_prompt_en": "英語の外見・服装・画風指示（例: {style_example}）"
     }}
   ],
   "main_locations": [
@@ -137,10 +148,12 @@ class LongVideoEngine:
                     async with session.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={key}", timeout=10) as m_resp:
                         if m_resp.status == 200:
                             m_data = await m_resp.json()
+                            _non_text = ("tts", "image", "banana", "embedding", "veo", "imagen", "aqa", "audio", "robotics", "computer-use", "learnlm")
                             supported = [
                                 m["name"].replace("models/", "")
                                 for m in m_data.get("models", [])
                                 if "generateContent" in m.get("supportedGenerationMethods", [])
+                                and not any(bad in m["name"].lower() for bad in _non_text)
                             ]
                             if supported:
                                 prioritized = [m for m in ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.5-pro"] if m in supported]

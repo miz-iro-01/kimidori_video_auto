@@ -66,3 +66,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - **事前検証・本番疎通テストの義務**:
   コード編集後は必ず構文チェック（Python: `python -m py_compile` 等）を実行し、デプロイ完了後は実機エンドポイントへの疎通テスト（HTTP 200の確認）を実施して完了とすること。
 
+## 6. 自律ハーネス検証ワークフロー規範（Harness Verification Loop）
+- **完了前のハーネス実行必須化**:
+  すべての開発・修正タスクにおいて、作業完了前に必ず `npm run harness:check`（`node scripts/harness.mjs` による TypeScript 型チェック `tsc --noEmit` および本番ビルド `npm run build` の一括検証）を自律実行すること。
+- **自己修復ループの徹底**:
+  `npm run harness:check` でエラー（Exit Code 0 以外）が発生した場合は、ユーザーに判断を仰ぐことなく即座に原因を特定して自力でコードを修正し、合格（Exit Code 0）するまで検証ループを繰り返してから完了報告を行うこと。
+- **仕様書の同期維持**:
+  新規ファイル追加や機能拡張を行った際は、プロジェクト直下の `SYSTEM_SPEC.md` を最新の実装状態に同期更新すること。
+

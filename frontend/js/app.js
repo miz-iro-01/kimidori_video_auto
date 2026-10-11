@@ -127,46 +127,153 @@ class AppController {
       });
     }
 
-    // Google Colab 無料T4 GPU ワーカー設定
+    // Google Colab 無料T4 GPU / ComfyUI (LTX-Video) ワーカー設定
     const colabUrlInput = document.getElementById('setColabWorkerUrl');
     const btnTestColab = document.getElementById('btnTestColab');
     const btnSaveColab = document.getElementById('btnSaveColab');
     const colabStatusMsg = document.getElementById('colabStatusMsg');
 
-    if (colabUrlInput) {
-      colabUrlInput.value = window.settingsManager.get('colabWorkerUrl') || '';
-    }
-    if (btnSaveColab && colabUrlInput) {
-      btnSaveColab.addEventListener('click', () => {
-        const u = colabUrlInput.value.trim();
-        window.settingsManager.set('colabWorkerUrl', u);
-        this.showToast('ColabワーカーURLを保存しました', 'success');
-      });
-    }
-    if (btnTestColab && colabUrlInput && colabStatusMsg) {
-      btnTestColab.addEventListener('click', async () => {
-        const u = colabUrlInput.value.trim();
-        if (!u) return this.showToast('ColabワーカーURLを入力してください', 'error');
-        btnTestColab.disabled = true;
-        colabStatusMsg.textContent = 'ステータス: 接続検証中...';
-        try {
-          const res = await window.apiClient.checkColabHealth(u);
-          if (res.connected && res.gpu_available) {
-            colabStatusMsg.innerHTML = `<span style="color: var(--accent-primary);">接続成功: GPU稼働中 (${res.device} / VRAM: ${res.vram_gb}GB)</span>`;
-            this.showToast('Colab GPUワーカーへの接続に成功しました', 'success');
-          } else if (res.connected) {
-            colabStatusMsg.innerHTML = `<span style="color: #ffaa00;">接続成功 (GPU未検出・CPUモード)</span>`;
-            this.showToast('ワーカーに接続されましたがGPUが検出されませんでした', 'info');
-          } else {
-            colabStatusMsg.innerHTML = `<span style="color: #ff6b6b;">接続失敗: ${res.error || '未接続'}</span>`;
-            this.showToast('接続に失敗しました。URLを確認してください', 'error');
-          }
-        } catch (e) {
-          colabStatusMsg.innerHTML = `<span style="color: #ff6b6b;">接続失敗: ${e.message}</span>`;
-          this.showToast('接続テスト失敗: ' + e.message, 'error');
-        } finally {
-          btnTestColab.disabled = false;
+    const adminColabInput = document.getElementById('adminColabWorkerUrl');
+    const btnAdminSaveColab = document.getElementById('btnAdminSaveColab');
+    const btnAdminTestColab = document.getElementById('btnAdminTestColab');
+    const adminColabStatusMsg = document.getElementById('adminColabStatusMsg');
+    const adminColabStatusBadge = document.getElementById('adminColabStatusBadge');
+
+    const proShortsStatusBadge = document.getElementById('proShortsColabStatusBadge');
+    const btnQuickCheckColabPro = document.getElementById('btnQuickCheckColabPro');
+
+    const currentSavedUrl = (window.settingsManager.getColabUrl ? window.settingsManager.getColabUrl() : window.settingsManager.get('colabWorkerUrl')) || '';
+
+    // 入力欄の初期化と同期
+    if (colabUrlInput) colabUrlInput.value = currentSavedUrl;
+    if (adminColabInput) adminColabInput.value = currentSavedUrl;
+
+    const syncColabInputs = (url) => {
+      if (colabUrlInput && colabUrlInput.value !== url) colabUrlInput.value = url;
+      if (adminColabInput && adminColabInput.value !== url) adminColabInput.value = url;
+    };
+
+    const updateColabStatusUI = (status, text, detailHtml = '') => {
+      // バッジ更新
+      if (adminColabStatusBadge) {
+        if (status === 'online') {
+          adminColabStatusBadge.style.background = 'rgba(57, 255, 20, 0.15)';
+          adminColabStatusBadge.style.color = 'var(--accent-primary)';
+          adminColabStatusBadge.textContent = 'オンライン (稼働中)';
+        } else if (status === 'offline') {
+          adminColabStatusBadge.style.background = 'rgba(255, 107, 107, 0.15)';
+          adminColabStatusBadge.style.color = '#ff6b6b';
+          adminColabStatusBadge.textContent = 'オフライン / 準備中';
+        } else if (status === 'checking') {
+          adminColabStatusBadge.style.background = 'rgba(0, 210, 255, 0.15)';
+          adminColabStatusBadge.style.color = '#00d2ff';
+          adminColabStatusBadge.textContent = '接続検証中...';
+        } else {
+          adminColabStatusBadge.style.background = 'rgba(255, 255, 255, 0.1)';
+          adminColabStatusBadge.style.color = 'var(--text-secondary)';
+          adminColabStatusBadge.textContent = text || '未確認';
         }
+      }
+
+      if (proShortsStatusBadge) {
+        if (status === 'online') {
+          proShortsStatusBadge.style.background = 'rgba(57, 255, 20, 0.15)';
+          proShortsStatusBadge.style.color = 'var(--accent-primary)';
+          proShortsStatusBadge.textContent = 'オンライン';
+        } else if (status === 'offline') {
+          proShortsStatusBadge.style.background = 'rgba(255, 107, 107, 0.15)';
+          proShortsStatusBadge.style.color = '#ff6b6b';
+          proShortsStatusBadge.textContent = 'オフライン / 準備中';
+        } else if (status === 'checking') {
+          proShortsStatusBadge.textContent = '確認中...';
+        }
+      }
+
+      // 詳細メッセージ更新
+      if (colabStatusMsg) {
+        colabStatusMsg.innerHTML = detailHtml || `ステータス: ${text}`;
+      }
+      if (adminColabStatusMsg) {
+        adminColabStatusMsg.innerHTML = detailHtml || `ステータス: ${text}`;
+      }
+    };
+
+    // 保存処理
+    const handleSaveColabUrl = async (url) => {
+      const u = (url || '').trim();
+      if (window.settingsManager.setColabUrl) {
+        window.settingsManager.setColabUrl(u);
+      } else {
+        window.settingsManager.set('colabWorkerUrl', u);
+      }
+      syncColabInputs(u);
+      if (window.apiClient && window.apiClient.saveColabConfig) {
+        await window.apiClient.saveColabConfig(u).catch(() => {});
+      }
+      this.showToast('Colab接続URLを保存しました', 'success');
+      updateColabStatusUI('saved', '保存済み (未確認)', `<span style="color: var(--accent-primary);">URL保存完了: ${u || '未設定'}</span>`);
+    };
+
+    if (btnSaveColab && colabUrlInput) {
+      btnSaveColab.addEventListener('click', () => handleSaveColabUrl(colabUrlInput.value));
+    }
+    if (btnAdminSaveColab && adminColabInput) {
+      btnAdminSaveColab.addEventListener('click', () => handleSaveColabUrl(adminColabInput.value));
+    }
+
+    // 接続テスト処理（スピナーアニメーション対応）
+    const handleTestColab = async (url, triggerBtn) => {
+      const u = (url || '').trim();
+      if (!u) return this.showToast('ColabワーカーURLを入力してください', 'error');
+
+      handleSaveColabUrl(u);
+
+      const origHtml = triggerBtn ? triggerBtn.innerHTML : null;
+      if (triggerBtn) {
+        triggerBtn.disabled = true;
+        triggerBtn.classList.add('is-loading');
+        triggerBtn.innerHTML = '<span class="btn-spinner"></span><span>検証中...</span>';
+      }
+      updateColabStatusUI('checking', '接続検証中...');
+
+      try {
+        const res = await window.apiClient.checkColabHealth(u);
+        if (res.connected) {
+          const serviceName = res.service || 'ComfyUI (LTX-Video)';
+          const dev = res.device || 'GPU';
+          const vram = res.vram_gb ? `${res.vram_gb}GB` : '15GB';
+          const successHtml = `<span style="color: var(--accent-primary);">接続成功: ${serviceName} 稼働中 (${dev} / VRAM: ${vram})</span>`;
+          updateColabStatusUI('online', 'オンライン', successHtml);
+          this.showToast(`${serviceName} への接続に成功しました`, 'success');
+        } else {
+          const errMsg = res.error || 'ワーカーから応答がありません';
+          const failHtml = `<span style="color: #ff6b6b;">接続失敗: ${errMsg}</span>`;
+          updateColabStatusUI('offline', 'オフライン / 準備中', failHtml);
+          this.showToast(`接続失敗: ${errMsg}`, 'error', 6000);
+        }
+      } catch (e) {
+        const errHtml = `<span style="color: #ff6b6b;">接続エラー: ${e.message}</span>`;
+        updateColabStatusUI('offline', 'エラー', errHtml);
+        this.showToast('接続テストエラー: ' + e.message, 'error');
+      } finally {
+        if (triggerBtn && origHtml) {
+          triggerBtn.disabled = false;
+          triggerBtn.classList.remove('is-loading');
+          triggerBtn.innerHTML = origHtml;
+        }
+      }
+    };
+
+    if (btnTestColab && colabUrlInput) {
+      btnTestColab.addEventListener('click', () => handleTestColab(colabUrlInput.value, btnTestColab));
+    }
+    if (btnAdminTestColab && adminColabInput) {
+      btnAdminTestColab.addEventListener('click', () => handleTestColab(adminColabInput.value, btnAdminTestColab));
+    }
+    if (btnQuickCheckColabPro) {
+      btnQuickCheckColabPro.addEventListener('click', () => {
+        const u = (window.settingsManager.getColabUrl ? window.settingsManager.getColabUrl() : window.settingsManager.get('colabWorkerUrl')) || '';
+        handleTestColab(u, btnQuickCheckColabPro);
       });
     }
 
@@ -1972,8 +2079,9 @@ class AppController {
 
 
   // --- トースト通知 ---
-  showToast(message, type = "info") {
+  showToast(message, type = "info", duration = 4000) {
     const wrapper = document.getElementById('toastWrapper');
+    if (!wrapper) return;
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
@@ -1981,7 +2089,7 @@ class AppController {
     setTimeout(() => {
       toast.style.animation = "toastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) reverse forwards";
       setTimeout(() => toast.remove(), 300);
-    }, 4000);
+    }, duration);
   }
 
   // --- BGM管理 ---
@@ -2204,7 +2312,7 @@ class AppController {
     // 完全自動投稿モードのPro限定制御
     const checkAutoMode = document.getElementById('checkAutoMode');
     if (checkAutoMode) {
-      checkAutoMode.addEventListener('change', async (e) => {
+      checkAutoMode.addEventListener('change', async () => {
         if (checkAutoMode.checked) {
           if (this.isAdmin) return; // 管理者は常時無制限
           try {
@@ -2220,6 +2328,445 @@ class AppController {
         }
       });
     }
+
+    // 共通: TTSエンジン別ボイスリスト定義
+    const workerEngineVoices = {
+      edge: [
+        { id: "nanami", name: "七海 (女性・明るく聞き取りやすい標準)" },
+        { id: "keita", name: "慶太 (男性・落ち着いた解説・ナレーション)" },
+        { id: "aoi", name: "あおい (女性・親しみやすい若年層向け)" },
+        { id: "daichi", name: "大地 (男性・深みのある重厚トーン)" },
+        { id: "mayu", name: "まゆ (女性・柔らかいトーン)" },
+        { id: "naoki", name: "直樹 (男性・爽やかトーン)" },
+        { id: "shiori", name: "しおり (女性・クリアな語り)" }
+      ],
+      voicevox: [
+        { id: "3", name: "ずんだもん (ノーマル)" },
+        { id: "1", name: "ずんだもん (あまあま)" },
+        { id: "7", name: "ずんだもん (ツンツン)" },
+        { id: "2", name: "四国めたん (ノーマル)" },
+        { id: "8", name: "春日部つむぎ (ノーマル)" },
+        { id: "13", name: "青山龍星 (重厚ナレーション)" },
+        { id: "14", name: "冥鳴ひまり (ノーマル)" }
+      ],
+      openai: [
+        { id: "nova", name: "Nova (女性・エネルギッシュ)" },
+        { id: "onyx", name: "Onyx (男性・重厚シネマティック)" },
+        { id: "alloy", name: "Alloy (中性的・クリア)" },
+        { id: "shimmer", name: "Shimmer (女性・落ち着き)" },
+        { id: "echo", name: "Echo (男性・マイルド)" }
+      ],
+      elevenlabs: [
+        { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel (女性・感情豊か)" },
+        { id: "ErXwobaYiN019PkySvjV", name: "Antoni (男性・ナレーター)" },
+        { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella (女性・ストーリー向け)" },
+        { id: "pNInz6obpgDQGcFmaJgB", name: "Adam (男性・重厚)" }
+      ],
+      google: [
+        { id: "ja-JP-Neural2-B", name: "Neural2-B (女性・高精度)" },
+        { id: "ja-JP-Neural2-C", name: "Neural2-C (男性・高精度)" },
+        { id: "ja-JP-Wavenet-A", name: "WaveNet-A (女性)" },
+        { id: "ja-JP-Wavenet-D", name: "WaveNet-D (男性)" }
+      ],
+      azure: [
+        { id: "ja-JP-NanamiNeural", name: "Nanami (女性・Azure Neural)" },
+        { id: "ja-JP-KeitaNeural", name: "Keita (男性・Azure Neural)" },
+        { id: "ja-JP-AoiNeural", name: "Aoi (女性・Azure Neural)" },
+        { id: "ja-JP-DaichiNeural", name: "Daichi (男性・Azure Neural)" }
+      ],
+      gtts: [
+        { id: "ja", name: "日本語 (標準)" }
+      ]
+    };
+
+    // 共通: ワーカー内TTSプルダウン＆スライダー連動セットアップ
+    const setupWorkerTtsControls = (prefix, scriptTextareaId, genreSelectId) => {
+      const engineEl = document.getElementById(`${prefix}TtsEngine`);
+      const voiceEl = document.getElementById(`${prefix}VoiceName`);
+      const rateEl = document.getElementById(`${prefix}SpeakingRate`);
+      const rateLabel = document.getElementById(prefix === 'proShorts' ? 'labelProShortsRate' : 'labelLongVideoRate');
+      const previewBtn = document.getElementById(prefix === 'proShorts' ? 'btnPreviewProShortsTts' : 'btnPreviewLongVideoTts');
+      const audioEl = document.getElementById(`${prefix}TtsPreviewAudio`);
+      const statusEl = document.getElementById(`${prefix}TtsPreviewStatus`);
+
+      if (engineEl && voiceEl) {
+        engineEl.addEventListener('change', () => {
+          const list = workerEngineVoices[engineEl.value] || workerEngineVoices.edge;
+          voiceEl.innerHTML = list.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+        });
+      }
+      if (rateEl && rateLabel) {
+        rateEl.addEventListener('input', () => {
+          rateLabel.textContent = `${parseFloat(rateEl.value).toFixed(2)}x`;
+        });
+      }
+      if (previewBtn) {
+        previewBtn.addEventListener('click', async () => {
+          const engine = engineEl ? engineEl.value : 'edge';
+          const voice = voiceEl ? voiceEl.value : 'nanami';
+          const rate = rateEl ? parseFloat(rateEl.value) || 1.0 : 1.0;
+
+          // 台本があれば1カット目のセリフを試聴テキストに使用、なければジャンル別サンプル文
+          let sampleText = "こんにちは！この声とスピードでナレーションを読み上げます。";
+          const jsonVal = document.getElementById(scriptTextareaId)?.value?.trim();
+          if (jsonVal) {
+            try {
+              const parsed = JSON.parse(jsonVal);
+              const firstCut = (parsed.cuts && parsed.cuts[0]) || (parsed.chapters && parsed.chapters[0]?.cuts?.[0]);
+              if (firstCut && (firstCut.dialogue || firstCut.narration)) {
+                sampleText = (firstCut.dialogue || firstCut.narration).slice(0, 90);
+              }
+            } catch (_) {}
+          } else {
+            const genre = document.getElementById(genreSelectId)?.value || 'story';
+            if (genre === 'edoculture') {
+              sampleText = "実は江戸時代の庶民は、現代人も驚くほど粋で合理的な暮らしを送っていたのです！";
+            } else if (genre === 'business') {
+              sampleText = "なぜ9割の人がこの法則を知らないまま損をしてしまうのでしょうか？結論から解説します。";
+            } else if (genre === 'trivia') {
+              sampleText = "これを知ったら誰かに話したくなる、隠された驚きの真実をご紹介します！";
+            }
+          }
+
+          const origHtml = previewBtn.innerHTML;
+          previewBtn.disabled = true;
+          previewBtn.innerHTML = '<span class="btn-spinner"></span><span>音声合成中...</span>';
+          if (statusEl) statusEl.textContent = `「${sampleText.slice(0, 22)}...」を合成中...`;
+
+          try {
+            const audioUrl = await window.apiClient.previewTTS({
+              text: sampleText,
+              tts_engine: engine,
+              voice_name: voice,
+              speaking_rate: rate,
+              google_tts_key: window.settingsManager.get('googleTtsKey') || '',
+              elevenlabs_key: window.settingsManager.get('elevenLabsKey') || '',
+              openai_key: window.settingsManager.get('openAiTtsKey') || '',
+              azure_key: window.settingsManager.get('azureTtsKey') || '',
+              azure_region: window.settingsManager.get('azureTtsRegion') || 'japaneast',
+              voicevox_url: window.settingsManager.get('voicevoxUrl') || 'http://localhost:50021'
+            });
+            if (audioEl) {
+              audioEl.src = audioUrl;
+              audioEl.style.display = 'block';
+              await audioEl.play().catch(() => {});
+            }
+            if (statusEl) statusEl.textContent = `試聴再生中 (${engine} / ${voice} / ${rate.toFixed(2)}x)`;
+          } catch (err) {
+            if (statusEl) statusEl.textContent = `試聴エラー: ${err.message}`;
+            this.showToast(`TTS試聴エラー: ${err.message}`, 'error');
+          } finally {
+            previewBtn.disabled = false;
+            previewBtn.innerHTML = origHtml;
+          }
+        });
+      }
+    };
+
+    // 共通: テロップ即時プレビュー描画（Canvas 0ms即時描画 ＋ バックエンド5層PNGリアル描画）
+    const setupWorkerTelopPreview = (prefix, scriptTextareaId, genreSelectId, visualStyleSelectId) => {
+      const fontEl = document.getElementById(`${prefix}TelopFont`);
+      const styleEl = document.getElementById(`${prefix}TelopStyle`);
+      const sizeEl = document.getElementById(`${prefix}TelopFontSize`);
+      const modeEl = document.getElementById(`${prefix}TelopMode`);
+      const canvasEl = document.getElementById(`${prefix}TelopPreviewCanvas`);
+      const imgEl = document.getElementById(`${prefix}TelopPreviewImg`);
+      const badgeEl = document.getElementById(`${prefix}TelopPreviewBadge`);
+      const genreEl = document.getElementById(genreSelectId);
+      const vStyleEl = document.getElementById(visualStyleSelectId);
+
+      const stylePalettes = {
+        shorts_impact_yellow: { top: '#FFF500', bottom: '#FF8A00', outer: '#000000', inner: '#FFFFFF', label: '王道インパクト黄×黒' },
+        variety_red_white:    { top: '#FF2A2A', bottom: '#B80000', outer: '#FFFFFF', inner: '#000000', label: '炎上・強調赤×白' },
+        neon_cyber_cyan:      { top: '#00F5FF', bottom: '#0088FF', outer: '#040B1A', inner: '#FFFFFF', label: 'サイバー水色×濃紺' },
+        edo_ukiyoe_crimson:   { top: '#FFE885', bottom: '#D9381E', outer: '#140804', inner: '#FFFDF5', label: '浮世絵・江戸紅金' },
+        clean_emerald_white:  { top: '#FFFFFF', bottom: '#D8FFE8', outer: '#052E16', inner: '#10B981', label: 'クリーン白×エメラルド' }
+      };
+
+      const fontLabels = {
+        keifont: 'けいふぉんと',
+        DelaGothicOne: 'デラゴシック One',
+        MochiyPopOne: 'モッチーポップ One',
+        RocknRollOne: 'ロックンロール One',
+        ReggaeOne: 'レゲエ One',
+        YuseiMagic: '유성マジック',
+        KaisoNext: '廻想体 ネクスト B',
+        NotoSansJPBlack: '源ノ角ゴシック Heavy'
+      };
+
+      let debounceTimer = null;
+
+      const renderPreview = () => {
+        const fontKey = fontEl?.value || 'keifont';
+        const styleKey = styleEl?.value || 'shorts_impact_yellow';
+        const sizeKey = sizeEl?.value || 'medium';
+        const genreVal = genreEl?.value || 'story';
+        const visualStyleVal = vStyleEl?.value || 'anime_modern';
+        const pal = stylePalettes[styleKey] || stylePalettes.shorts_impact_yellow;
+
+        // プレビュー文言の決定（台本があれば1カット目のセリフ、なければスタイルに応じたサンプル文）
+        let sampleText = "まさか、そんな秘密があったなんて…！";
+        const jsonVal = document.getElementById(scriptTextareaId)?.value?.trim();
+        if (jsonVal) {
+          try {
+            const parsed = JSON.parse(jsonVal);
+            const firstCut = (parsed.cuts && parsed.cuts[0]) || (parsed.chapters && parsed.chapters[0]?.cuts?.[0]);
+            if (firstCut && (firstCut.dialogue || firstCut.narration)) {
+              sampleText = (firstCut.dialogue || firstCut.narration).slice(0, 22);
+            }
+          } catch (_) {}
+        } else if (visualStyleVal === 'ukiyoe' || styleKey === 'edo_ukiyoe_crimson') {
+          sampleText = "江戸の町人が熱狂した驚きの秘密とは！？";
+        } else if (genreVal === 'business') {
+          sampleText = "9割が知らない！圧倒的成果を出す法則";
+        }
+
+        if (badgeEl) {
+          const sizeLabel = sizeKey === 'large' ? '特大' : (sizeKey === 'small' ? 'コンパクト' : '標準');
+          badgeEl.textContent = `${fontLabels[fontKey] || fontKey} × ${pal.label} (${sizeLabel})`;
+        }
+
+        // 1. まずローカルCanvasで0ms即時プレビュー描画
+        if (canvasEl) {
+          const ctx = canvasEl.getContext('2d');
+          const cw = canvasEl.width;
+          const ch = canvasEl.height;
+          ctx.clearRect(0, 0, cw, ch);
+
+          // 背景グラデーション（浮世絵時は和紙・藍ぼかし風、通常時はシネマダーク）
+          const bgGrad = ctx.createLinearGradient(0, 0, 0, ch);
+          if (visualStyleVal === 'ukiyoe' || styleKey === 'edo_ukiyoe_crimson') {
+            bgGrad.addColorStop(0, '#2e2620');
+            bgGrad.addColorStop(1, '#181c30');
+          } else {
+            bgGrad.addColorStop(0, '#16203a');
+            bgGrad.addColorStop(1, '#0a0f1e');
+          }
+          ctx.fillStyle = bgGrad;
+          ctx.fillRect(0, 0, cw, ch);
+
+          // ざぶとん半透明プレート
+          const plateW = cw * 0.88;
+          const plateH = ch * 0.64;
+          const plateX = (cw - plateW) / 2;
+          const plateY = (ch - plateH) / 2;
+          ctx.fillStyle = 'rgba(8, 10, 18, 0.72)';
+          ctx.beginPath();
+          ctx.roundRect(plateX, plateY, plateW, plateH, 16);
+          ctx.fill();
+
+          const pxSize = sizeKey === 'large' ? 38 : (sizeKey === 'small' ? 26 : 32);
+          ctx.font = `900 ${pxSize}px "Hiragino Kaku Gothic StdN", "Noto Sans JP", "Yu Gothic UI", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const cx = cw / 2;
+          const cy = ch / 2;
+
+          // ドロップシャドウ
+          ctx.lineJoin = 'round';
+          ctx.lineWidth = 14;
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+          ctx.strokeText(sampleText.slice(0, 17), cx + 4, cy + 5);
+
+          // 外フチ
+          ctx.lineWidth = 12;
+          ctx.strokeStyle = pal.outer;
+          ctx.strokeText(sampleText.slice(0, 17), cx, cy);
+
+          // 内フチ
+          ctx.lineWidth = 5;
+          ctx.strokeStyle = pal.inner;
+          ctx.strokeText(sampleText.slice(0, 17), cx, cy);
+
+          // 本体縦グラデーション
+          const textGrad = ctx.createLinearGradient(0, cy - pxSize / 2, 0, cy + pxSize / 2);
+          textGrad.addColorStop(0, pal.top);
+          textGrad.addColorStop(1, pal.bottom);
+          ctx.fillStyle = textGrad;
+          ctx.fillText(sampleText.slice(0, 17), cx, cy);
+        }
+
+        // 2. バックエンドの実寸5層PILエンジンから本物のフォント描画PNGを取得して表示
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+          try {
+            const res = await window.apiClient.previewTelop({
+              text: sampleText,
+              telopFont: fontKey,
+              telopStyle: styleKey,
+              telopFontSize: sizeKey,
+              genre: genreVal,
+              visualStyle: visualStyleVal
+            });
+            if (res && res.image_base64 && imgEl) {
+              imgEl.src = res.image_base64;
+              imgEl.style.display = 'block';
+              if (canvasEl) canvasEl.style.display = 'none';
+            }
+          } catch (_) {
+            if (imgEl) imgEl.style.display = 'none';
+            if (canvasEl) canvasEl.style.display = 'block';
+          }
+        }, 120);
+      };
+
+      [fontEl, styleEl, sizeEl, modeEl, genreEl, vStyleEl].forEach(el => {
+        if (el) el.addEventListener('change', renderPreview);
+      });
+
+      // 初回即時描画
+      setTimeout(renderPreview, 80);
+      return renderPreview;
+    };
+
+    // 共通: ワーカー内BGM選曲・音量・その場試聴セットアップ
+    const setupWorkerBgmControls = (prefix, scriptTextareaId, genreSelectId, visualStyleSelectId) => {
+      const selectEl = document.getElementById(`${prefix}BgmSelect`);
+      const customGroupEl = document.getElementById(`${prefix}BgmCustomGroup`);
+      const volEl = document.getElementById(`${prefix}BgmVolume`);
+      const volLabel = document.getElementById(prefix === 'proShorts' ? 'labelProShortsBgmVol' : 'labelLongVideoBgmVol');
+      const previewBtn = document.getElementById(prefix === 'proShorts' ? 'btnPreviewProShortsBgm' : 'btnPreviewLongVideoBgm');
+      const audioEl = document.getElementById(`${prefix}BgmPreviewAudio`);
+
+      // 登録済みカスタムBGM一覧をロードしてプルダウンに追加
+      const refreshCustomBgmList = async () => {
+        if (!customGroupEl) return;
+        try {
+          const data = await window.apiClient.listBGM();
+          const tracks = data.bgm_tracks || [];
+          customGroupEl.innerHTML = '';
+          tracks.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.filename || t.bgm_id;
+            opt.textContent = `登録BGM: ${t.title} (${t.keywords || 'カスタム'})`;
+            opt.dataset.previewUrl = t.storage_url || `${window.apiClient.baseUrl}/api/bgm/file/${encodeURIComponent(t.filename || t.bgm_id)}`;
+            customGroupEl.appendChild(opt);
+          });
+        } catch (_) {}
+      };
+      refreshCustomBgmList();
+
+      if (volEl && volLabel) {
+        volEl.addEventListener('input', () => {
+          const pct = parseInt(volEl.value, 10) || 20;
+          volLabel.textContent = `${pct}%`;
+          if (audioEl) {
+            audioEl.volume = Math.min(1.0, Math.max(0.05, pct / 100));
+          }
+        });
+      }
+
+      if (previewBtn && selectEl && audioEl) {
+        previewBtn.addEventListener('click', async () => {
+          const val = selectEl.value || 'auto_script';
+          if (val === 'none') {
+            audioEl.pause();
+            audioEl.style.display = 'none';
+            return this.showToast('「BGMなし（無音）」が選択されています', 'info');
+          }
+
+          let targetUrl = '';
+          if (val === 'auto_script') {
+            // 台本データ内の1カット目のbgm_tagまたはスタイルに応じた内蔵BGMを試聴
+            const vStyle = document.getElementById(visualStyleSelectId)?.value || 'anime_modern';
+            const genre = document.getElementById(genreSelectId)?.value || 'story';
+            let presetId = (vStyle === 'ukiyoe' || genre === 'edoculture') ? 'edo_ukiyoe' : 'corporate_clean';
+            const jsonVal = document.getElementById(scriptTextareaId)?.value?.trim();
+            if (jsonVal && vStyle !== 'ukiyoe') {
+              try {
+                const parsed = JSON.parse(jsonVal);
+                const firstCut = (parsed.cuts && parsed.cuts[0]) || (parsed.chapters && parsed.chapters[0]?.cuts?.[0]);
+                const tag = firstCut?.bgm_tag || 'neutral';
+                const tagMap = {
+                  cheerful: 'upbeat_marimba',
+                  funny: 'upbeat_marimba',
+                  warm: 'calm_piano',
+                  touching: 'calm_piano',
+                  suspense: 'mystery_synth',
+                  frightening: 'mystery_synth',
+                  epic: 'dramatic_strings',
+                  neutral: 'corporate_clean'
+                };
+                presetId = tagMap[tag] || 'corporate_clean';
+              } catch (_) {}
+            }
+            targetUrl = window.apiClient.getBuiltinBgmPreviewUrl(presetId);
+          } else if (val.startsWith('builtin:')) {
+            targetUrl = window.apiClient.getBuiltinBgmPreviewUrl(val);
+          } else {
+            const selectedOpt = selectEl.options[selectEl.selectedIndex];
+            targetUrl = selectedOpt?.dataset?.previewUrl || `${window.apiClient.baseUrl}/api/bgm/file/${encodeURIComponent(val)}`;
+          }
+
+          audioEl.src = targetUrl;
+          const pct = parseInt(volEl?.value || '20', 10);
+          audioEl.volume = Math.min(1.0, Math.max(0.05, pct / 100));
+          audioEl.style.display = 'block';
+          try {
+            await audioEl.play();
+            this.showToast('BGMプレビューを再生中...', 'info');
+          } catch (e) {
+            this.showToast('BGMの再生に失敗しました: ' + e.message, 'error');
+          }
+        });
+      }
+
+      // 台本生成完了時に auto_script オプションのラベルへ検知BGMタグを表示するヘルパー
+      return (scriptData) => {
+        if (!selectEl || !scriptData) return;
+        const cuts = scriptData.cuts || (scriptData.chapters ? scriptData.chapters.flatMap(ch => ch.cuts || []) : []);
+        const tags = [...new Set(cuts.map(c => c.bgm_tag).filter(Boolean))];
+        const autoOpt = selectEl.querySelector('option[value="auto_script"]');
+        if (autoOpt && tags.length > 0) {
+          autoOpt.textContent = `台本の自動BGM設定を使用（設定済タグ: ${tags.slice(0, 4).join(' ➔ ')}）`;
+        }
+      };
+    };
+
+    // Pro版ショート & 長尺動画のワーカーコントロール初期化
+    const refreshProShortsTelop = setupWorkerTelopPreview('proShorts', 'inputProShortsScriptJson', 'inputProShortsGenre', 'inputProShortsVisualStyle');
+    const refreshLongVideoTelop = setupWorkerTelopPreview('longVideo', 'inputLongVideoScriptJson', 'inputLongVideoGenre', 'inputLongVideoVisualStyle');
+    setupWorkerTtsControls('proShorts', 'inputProShortsScriptJson', 'inputProShortsGenre');
+    setupWorkerTtsControls('longVideo', 'inputLongVideoScriptJson', 'inputLongVideoGenre');
+    const updateProShortsBgmTags = setupWorkerBgmControls('proShorts', 'inputProShortsScriptJson', 'inputProShortsGenre', 'inputProShortsVisualStyle');
+    const updateLongVideoBgmTags = setupWorkerBgmControls('longVideo', 'inputLongVideoScriptJson', 'inputLongVideoGenre', 'inputLongVideoVisualStyle');
+
+    // ジャンル変更時のおすすめスタイル・テロップ・BGMスマート連動（手動でのスタイル個別変更も完全自由）
+    const bindGenreAndStyleSync = (genreId, styleId, telopStyleId, telopFontId, bgmSelectId, refreshTelopFn) => {
+      const gEl = document.getElementById(genreId);
+      const sEl = document.getElementById(styleId);
+      const tsEl = document.getElementById(telopStyleId);
+      const tfEl = document.getElementById(telopFontId);
+      const bgmEl = document.getElementById(bgmSelectId);
+
+      if (gEl && sEl) {
+        gEl.addEventListener('change', () => {
+          if (gEl.value === 'edoculture') {
+            sEl.value = 'ukiyoe';
+            if (tsEl) tsEl.value = 'edo_ukiyoe_crimson';
+            if (tfEl) tfEl.value = 'KaisoNext';
+            if (bgmEl) bgmEl.value = 'builtin:edo_ukiyoe';
+          } else if (gEl.value === 'business' && sEl.value === 'ukiyoe') {
+            sEl.value = 'flat_2d_motion';
+            if (tsEl) tsEl.value = 'clean_emerald_white';
+            if (bgmEl) bgmEl.value = 'auto_script';
+          }
+          if (refreshTelopFn) refreshTelopFn();
+        });
+
+        sEl.addEventListener('change', () => {
+          if (sEl.value === 'ukiyoe') {
+            if (tsEl) tsEl.value = 'edo_ukiyoe_crimson';
+            if (tfEl) tfEl.value = 'KaisoNext';
+            if (bgmEl && bgmEl.value === 'auto_script') bgmEl.value = 'builtin:edo_ukiyoe';
+          }
+          if (refreshTelopFn) refreshTelopFn();
+        });
+      }
+    };
+
+    bindGenreAndStyleSync('inputProShortsGenre', 'inputProShortsVisualStyle', 'proShortsTelopStyle', 'proShortsTelopFont', 'proShortsBgmSelect', refreshProShortsTelop);
+    bindGenreAndStyleSync('inputLongVideoGenre', 'inputLongVideoVisualStyle', 'longVideoTelopStyle', 'longVideoTelopFont', 'longVideoBgmSelect', refreshLongVideoTelop);
 
     // 1. Pro版ショート動画
     const btnRunProShorts = document.getElementById('btnRunProShortsScript');
@@ -2248,22 +2795,40 @@ class AppController {
 
     if (btnRunProShorts) {
       btnRunProShorts.addEventListener('click', async () => {
-        const theme = document.getElementById('inputProShortsTheme').value.trim();
-        const genre = document.getElementById('inputProShortsGenre').value;
-        if (!theme) return this.showToast("テーマ・題材を入力してください", "error");
+        const theme = document.getElementById('inputProShortsTheme')?.value.trim() || '';
+        const customRaw = document.getElementById('inputRawScriptProShorts')?.value.trim() || '';
+        const genre = document.getElementById('inputProShortsGenre')?.value || 'story';
+        const visualStyle = document.getElementById('inputProShortsVisualStyle')?.value || 'anime_modern';
+
+        if (!theme && !customRaw) {
+          return this.showToast("テーマ・題材、または自前の台本を入力してください", "error");
+        }
 
         const originalHtml = btnRunProShorts.innerHTML;
         btnRunProShorts.disabled = true;
         btnRunProShorts.classList.add('is-loading');
-        btnRunProShorts.innerHTML = '<span class="btn-spinner"></span><span>台本を生成中...</span>';
+        btnRunProShorts.innerHTML = '<span class="btn-spinner"></span><span>台本を作成中...</span>';
 
-        this.showToast("Pro版ショート台本（全6〜7カット・全カット動画演出）を生成中...", "info");
         try {
-          const res = await window.apiClient.generateProShortsScript(theme, genre);
-          if (res.success && res.script) {
-            document.getElementById('inputProShortsScriptJson').value = JSON.stringify(res.script, null, 2);
+          let scriptObj = null;
+          if (customRaw && !theme) {
+            this.showToast(`自前の台本を【${visualStyle === 'ukiyoe' ? '本格浮世絵' : visualStyle}】60秒カット割りへ変換中...`, "info");
+            const res = await window.apiClient.normalizeScript(customRaw, 'pro_shorts', genre, visualStyle);
+            if (res.success && res.timeline) scriptObj = res.timeline;
+          } else {
+            const combinedTheme = customRaw ? `${theme}\n\n【自前台本・参考原案】:\n${customRaw}` : theme;
+            this.showToast(`Pro版ショート台本（絵柄: ${visualStyle === 'ukiyoe' ? '本格浮世絵・錦絵' : visualStyle}）を生成中...`, "info");
+            const res = await window.apiClient.generateProShortsScript(combinedTheme, genre, visualStyle);
+            if (res.success && res.script) scriptObj = res.script;
+          }
+
+          if (scriptObj) {
+            scriptObj.visual_style = visualStyle;
+            document.getElementById('inputProShortsScriptJson').value = JSON.stringify(scriptObj, null, 2);
             proShortsScriptArea.style.display = 'block';
-            this.showToast("Pro版ショート動画の台本が生成されました！", "success");
+            updateProShortsBgmTags(scriptObj);
+            if (refreshProShortsTelop) refreshProShortsTelop();
+            this.showToast("Pro版ショート動画の台本とBGM・演出設定が完了しました！", "success");
             proShortsScriptArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
         } catch (err) {
@@ -2313,7 +2878,7 @@ class AppController {
           this.showToast('Outlierリサーチ失敗: ' + e.message, 'error');
         } finally {
           btnProOutlier.disabled = false;
-          btnProOutlier.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> 外れ値・隠れ需要リサーチ';
+          btnProOutlier.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> リサーチ（外れ値・隠れ需要）';
         }
       });
     }
@@ -2338,11 +2903,10 @@ class AppController {
     const btnDrivePro = document.getElementById('btnDriveImportProShorts');
     if (btnDrivePro && rawScriptPro) {
       btnDrivePro.addEventListener('click', () => {
-        // Driveからの共有リンクまたはテキスト貼り付けを促すプロンプト
         const driveUrl = prompt('Google Driveファイルの公開リンクまたはテキストを入力してください:');
         if (driveUrl) {
           rawScriptPro.value = driveUrl;
-          this.showToast('Driveデータをセットしました。「標準フォーマットへリライト」を押してください', 'info');
+          this.showToast('Driveデータをセットしました。「1. 台本作成」または「自前台本を変換」を押してください', 'info');
         }
       });
     }
@@ -2352,20 +2916,24 @@ class AppController {
     if (btnNormPro && rawScriptPro) {
       btnNormPro.addEventListener('click', async () => {
         const text = rawScriptPro.value.trim();
-        if (!text) return this.showToast('リライトする台本・メモ・外部資料を入力してください', 'error');
+        if (!text) return this.showToast('リライトする自前の台本・メモ・外部資料を入力してください', 'error');
 
-        const genre = document.getElementById('inputProShortsGenre').value;
+        const genre = document.getElementById('inputProShortsGenre')?.value || 'story';
+        const visualStyle = document.getElementById('inputProShortsVisualStyle')?.value || 'anime_modern';
         const origHtml = btnNormPro.innerHTML;
         btnNormPro.disabled = true;
         btnNormPro.classList.add('is-loading');
         btnNormPro.innerHTML = '<span class="btn-spinner"></span><span>60秒台本へ自動リライト中...</span>';
 
-        this.showToast('入力台本を60秒カット割りフォーマットへリライト中...', 'info');
+        this.showToast('自前台本を60秒カット割りフォーマットへリライト中...', 'info');
         try {
-          const res = await window.apiClient.normalizeScript(text, 'pro_shorts', genre);
+          const res = await window.apiClient.normalizeScript(text, 'pro_shorts', genre, visualStyle);
           if (res.success && res.timeline) {
+            res.timeline.visual_style = visualStyle;
             document.getElementById('inputProShortsScriptJson').value = JSON.stringify(res.timeline, null, 2);
             proShortsScriptArea.style.display = 'block';
+            updateProShortsBgmTags(res.timeline);
+            if (refreshProShortsTelop) refreshProShortsTelop();
             this.showToast('当ツール標準フォーマットへのリライトが完了しました！', 'success');
             proShortsScriptArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
@@ -2382,7 +2950,7 @@ class AppController {
     if (btnGenProShorts) {
       btnGenProShorts.addEventListener('click', async () => {
         const jsonStr = document.getElementById('inputProShortsScriptJson').value.trim();
-        if (!jsonStr) return this.showToast("台本データがありません", "error");
+        if (!jsonStr) return this.showToast("まずは「1. 台本作成」ボタンを押して台本を作成してください", "error");
 
         let scriptData;
         try {
@@ -2391,15 +2959,36 @@ class AppController {
           return this.showToast("JSON形式が不正です: " + e.message, "error");
         }
 
-        const ttsEngine = window.settingsManager.get('ttsEngine') || 'edge';
-        const voiceName = window.settingsManager.get('voiceName') || 'nanami';
+        const visualStyle = document.getElementById('inputProShortsVisualStyle')?.value || scriptData.visual_style || 'anime_modern';
+        scriptData.visual_style = visualStyle;
+
+        const ttsEngine = document.getElementById('proShortsTtsEngine')?.value || window.settingsManager.get('ttsEngine') || 'edge';
+        const voiceName = document.getElementById('proShortsVoiceName')?.value || window.settingsManager.get('voiceName') || 'nanami';
+        const speakingRate = document.getElementById('proShortsSpeakingRate')?.value || window.settingsManager.get('speakingRate') || '1.0';
+        const telopStyle = document.getElementById('proShortsTelopStyle')?.value || 'shorts_impact_yellow';
+        const telopMode = document.getElementById('proShortsTelopMode')?.value || 'sequential';
+        const telopFontSize = document.getElementById('proShortsTelopFontSize')?.value || 'medium';
+        const telopFont = document.getElementById('proShortsTelopFont')?.value || 'keifont';
+        const bgmChoice = document.getElementById('proShortsBgmSelect')?.value || 'auto_script';
+        const bgmVolume = (parseInt(document.getElementById('proShortsBgmVolume')?.value || '20', 10)) / 100;
+
+        const videoOptions = {
+          visualStyle: visualStyle,
+          speakingRate: speakingRate,
+          telopStyle: telopStyle,
+          telopMode: telopMode,
+          telopFontSize: telopFontSize,
+          telopFont: telopFont,
+          bgmChoice: bgmChoice,
+          bgmVolume: bgmVolume
+        };
 
         const originalGenHtml = btnGenProShorts.innerHTML;
         btnGenProShorts.disabled = true;
         btnGenProShorts.classList.add('is-loading');
         btnGenProShorts.innerHTML = '<span class="btn-spinner"></span><span>サーバー通信・ジョブ登録中...</span>';
 
-        this.showToast("Pro版ショート動画の生成を開始しました", "info");
+        this.showToast(`Pro版ショート動画（スタイル: ${visualStyle === 'ukiyoe' ? '本格浮世絵・錦絵' : visualStyle}）の生成を開始しました`, "info");
 
         const progArea = document.getElementById('proShortsProgressArea');
         const titleEl = document.getElementById('proShortsProgressTitle');
@@ -2417,7 +3006,7 @@ class AppController {
         }
 
         try {
-          const res = await window.apiClient.generateMangaVideo(scriptData, ttsEngine, voiceName);
+          const res = await window.apiClient.generateMangaVideo(scriptData, ttsEngine, voiceName, {}, videoOptions);
 
           this.startJobPolling(res.job_id, 'PRO_SHORTS', {
             onProgress: (job) => {
@@ -2502,24 +3091,40 @@ class AppController {
 
     if (btnRunLong) {
       btnRunLong.addEventListener('click', async () => {
-        const theme = document.getElementById('inputLongVideoTheme').value.trim();
-        const genre = document.getElementById('inputLongVideoGenre').value;
-        const duration = document.getElementById('inputLongVideoDuration').value;
+        const theme = document.getElementById('inputLongVideoTheme')?.value.trim() || '';
+        const customRaw = document.getElementById('inputRawScriptLongVideo')?.value.trim() || '';
+        const genre = document.getElementById('inputLongVideoGenre')?.value || 'story';
+        const visualStyle = document.getElementById('inputLongVideoVisualStyle')?.value || 'anime_modern';
+        const duration = document.getElementById('inputLongVideoDuration')?.value || '15';
 
-        if (!theme) return this.showToast("動画テーマまたは原案資料を入力してください", "error");
+        if (!theme && !customRaw) {
+          return this.showToast("動画テーマ、または自前の台本を入力してください", "error");
+        }
 
         const origRunHtml = btnRunLong.innerHTML;
         btnRunLong.disabled = true;
         btnRunLong.classList.add('is-loading');
         btnRunLong.innerHTML = '<span class="btn-spinner"></span><span>全5章台本を執筆中...</span>';
 
-        this.showToast("全5章長尺台本＆人物シートを生成中...", "info");
         try {
-          const res = await window.apiClient.generateLongVideoScript(theme, genre, duration);
-          if (res.success && res.script) {
-            document.getElementById('inputLongVideoScriptJson').value = JSON.stringify(res.script, null, 2);
+          let scriptObj = null;
+          if (customRaw && !theme) {
+            this.showToast(`自前の台本を長尺全5章カット割り（スタイル: ${visualStyle === 'ukiyoe' ? '本格浮世絵' : visualStyle}）へ変換中...`, "info");
+            const res = await window.apiClient.normalizeScript(customRaw, 'long_video', genre, visualStyle);
+            if (res.success && res.timeline) scriptObj = res.timeline;
+          } else {
+            this.showToast(`全5章長尺台本＆人物シート（スタイル: ${visualStyle === 'ukiyoe' ? '本格浮世絵' : visualStyle}）を生成中...`, "info");
+            const res = await window.apiClient.generateLongVideoScript(theme, genre, duration, customRaw, visualStyle);
+            if (res.success && res.script) scriptObj = res.script;
+          }
+
+          if (scriptObj) {
+            scriptObj.visual_style = visualStyle;
+            document.getElementById('inputLongVideoScriptJson').value = JSON.stringify(scriptObj, null, 2);
             longScriptArea.style.display = 'block';
-            this.showToast("全5章台本と確定設計図が生成されました！", "success");
+            updateLongVideoBgmTags(scriptObj);
+            if (refreshLongVideoTelop) refreshLongVideoTelop();
+            this.showToast("全5章台本とBGM・確定設計図が生成されました！", "success");
             longScriptArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
         } catch (err) {
@@ -2569,7 +3174,7 @@ class AppController {
           this.showToast('リサーチ失敗: ' + e.message, 'error');
         } finally {
           btnLongOutlier.disabled = false;
-          btnLongOutlier.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> 外れ値・隠れ需要リサーチ';
+          btnLongOutlier.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> リサーチ（外れ値・隠れ需要）';
         }
       });
     }
@@ -2640,7 +3245,7 @@ class AppController {
         const driveUrl = prompt('Google Driveファイルの公開リンクまたはテキストを入力してください:');
         if (driveUrl) {
           rawScriptLong.value = driveUrl;
-          this.showToast('Driveデータをセットしました。「標準フォーマットへリライト」を押してください', 'info');
+          this.showToast('Driveデータをセットしました。「1. 台本作成」または「自前台本を変換」を押してください', 'info');
         }
       });
     }
@@ -2650,20 +3255,24 @@ class AppController {
     if (btnNormLong && rawScriptLong) {
       btnNormLong.addEventListener('click', async () => {
         const text = rawScriptLong.value.trim();
-        if (!text) return this.showToast('リライトする台本・小説・外部資料を入力してください', 'error');
+        if (!text) return this.showToast('リライトする自前の台本・小説・外部資料を入力してください', 'error');
 
-        const genre = document.getElementById('inputLongVideoGenre').value;
+        const genre = document.getElementById('inputLongVideoGenre')?.value || 'story';
+        const visualStyle = document.getElementById('inputLongVideoVisualStyle')?.value || 'anime_modern';
         const origHtml = btnNormLong.innerHTML;
         btnNormLong.disabled = true;
         btnNormLong.classList.add('is-loading');
         btnNormLong.innerHTML = '<span class="btn-spinner"></span><span>15分全5章へ自動リライト中...</span>';
 
-        this.showToast('入力台本を長尺全5章カット割りフォーマットへリライト中...', 'info');
+        this.showToast('自前台本を長尺全5章カット割りフォーマットへリライト中...', 'info');
         try {
-          const res = await window.apiClient.normalizeScript(text, 'long_video', genre);
+          const res = await window.apiClient.normalizeScript(text, 'long_video', genre, visualStyle);
           if (res.success && res.timeline) {
+            res.timeline.visual_style = visualStyle;
             document.getElementById('inputLongVideoScriptJson').value = JSON.stringify(res.timeline, null, 2);
             longScriptArea.style.display = 'block';
+            updateLongVideoBgmTags(res.timeline);
+            if (refreshLongVideoTelop) refreshLongVideoTelop();
             this.showToast('長尺標準フォーマットへのリライトが完了しました！', 'success');
             longScriptArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
@@ -2680,7 +3289,7 @@ class AppController {
     if (btnGenLong) {
       btnGenLong.addEventListener('click', async () => {
         const jsonStr = document.getElementById('inputLongVideoScriptJson').value.trim();
-        if (!jsonStr) return this.showToast("台本データがありません", "error");
+        if (!jsonStr) return this.showToast("まずは「1. 台本作成」ボタンを押して台本を作成してください", "error");
 
         let scriptData;
         try {
@@ -2689,15 +3298,36 @@ class AppController {
           return this.showToast("JSON形式が不正です: " + e.message, "error");
         }
 
-        const ttsEngine = window.settingsManager.get('ttsEngine') || 'edge';
-        const voiceName = window.settingsManager.get('voiceName') || 'nanami';
+        const visualStyle = document.getElementById('inputLongVideoVisualStyle')?.value || scriptData.visual_style || 'anime_modern';
+        scriptData.visual_style = visualStyle;
+
+        const ttsEngine = document.getElementById('longVideoTtsEngine')?.value || window.settingsManager.get('ttsEngine') || 'edge';
+        const voiceName = document.getElementById('longVideoVoiceName')?.value || window.settingsManager.get('voiceName') || 'nanami';
+        const speakingRate = document.getElementById('longVideoSpeakingRate')?.value || window.settingsManager.get('speakingRate') || '1.0';
+        const telopStyle = document.getElementById('longVideoTelopStyle')?.value || 'shorts_impact_yellow';
+        const telopMode = document.getElementById('longVideoTelopMode')?.value || 'sequential';
+        const telopFontSize = document.getElementById('longVideoTelopFontSize')?.value || 'medium';
+        const telopFont = document.getElementById('longVideoTelopFont')?.value || 'keifont';
+        const bgmChoice = document.getElementById('longVideoBgmSelect')?.value || 'auto_script';
+        const bgmVolume = (parseInt(document.getElementById('longVideoBgmVolume')?.value || '20', 10)) / 100;
+
+        const videoOptions = {
+          visualStyle: visualStyle,
+          speakingRate: speakingRate,
+          telopStyle: telopStyle,
+          telopMode: telopMode,
+          telopFontSize: telopFontSize,
+          telopFont: telopFont,
+          bgmChoice: bgmChoice,
+          bgmVolume: bgmVolume
+        };
 
         const origGenHtml = btnGenLong.innerHTML;
         btnGenLong.disabled = true;
         btnGenLong.classList.add('is-loading');
         btnGenLong.innerHTML = '<span class="btn-spinner"></span><span>サーバー通信・ジョブ登録中...</span>';
 
-        this.showToast("長尺動画（小分け小メモリ生成）を開始しました", "info");
+        this.showToast(`長尺動画（スタイル: ${visualStyle === 'ukiyoe' ? '本格浮世絵・錦絵' : visualStyle}）の生成を開始しました`, "info");
 
         const progArea = document.getElementById('longVideoProgressArea');
         const titleEl = document.getElementById('longVideoProgressStatusTitle');
@@ -2733,13 +3363,11 @@ class AppController {
           if (titleEl) titleEl.textContent = job.message || "長尺動画を生成中...";
           if (msgEl) msgEl.textContent = job.step_label || (job.message || "処理中...");
 
-          // ステッパー進行ライン
           if (stepperLineLong) {
             const linePct = Math.min(100, Math.max(0, (currentStep - 1) * 25));
             stepperLineLong.style.width = `${linePct}%`;
           }
 
-          // 各ステップの active / completed 更新
           for (let s = 1; s <= 5; s++) {
             const stepNode = document.getElementById(`stepLong${s}`);
             if (!stepNode) continue;
@@ -2751,7 +3379,6 @@ class AppController {
             }
           }
 
-          // リアルタイムログコンソール
           if (execLogsLong && Array.isArray(job.logs) && job.logs.length > 0) {
             execLogsLong.innerHTML = job.logs.map(logLine => {
               let badgeType = "info";
@@ -2773,7 +3400,6 @@ class AppController {
             execLogsLong.scrollTop = execLogsLong.scrollHeight;
           }
 
-          // カット別ステータス一覧グリッドの描画
           if (Array.isArray(job.scenes) && job.scenes.length > 0) {
             if (scenesGridAreaLong) scenesGridAreaLong.style.display = 'block';
             if (scenesCountLabelLong) scenesCountLabelLong.textContent = `全 ${job.scenes.length} カット`;
@@ -2815,7 +3441,7 @@ class AppController {
         };
 
         try {
-          const res = await window.apiClient.generateMangaVideo(scriptData, ttsEngine, voiceName);
+          const res = await window.apiClient.generateMangaVideo(scriptData, ttsEngine, voiceName, {}, videoOptions);
           const jobId = res.job_id;
 
           this.startJobPolling(jobId, 'LONG_VIDEO', {
@@ -2823,7 +3449,6 @@ class AppController {
               updateLongVideoStepperAndLogs(job, jobId);
             },
             onComplete: (job) => {
-              // 全ステップ完了状態へ更新
               for (let s = 1; s <= 5; s++) {
                 const stepNode = document.getElementById(`stepLong${s}`);
                 if (stepNode) stepNode.classList.add('completed');
@@ -2879,7 +3504,6 @@ class AppController {
       const jsonArea = document.getElementById('inputLongVideoScriptJson');
       if (jsonArea) jsonArea.value = '';
 
-      // ステッパー＆ログ＆グリッド初期化
       const execLogsLong = document.getElementById('execLogsLong');
       if (execLogsLong) {
         execLogsLong.innerHTML = `

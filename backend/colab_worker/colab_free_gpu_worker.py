@@ -62,6 +62,8 @@ class ImageGenRequest(BaseModel):
     width: Optional[int] = 1024
     height: Optional[int] = 576
     steps: Optional[int] = 4
+    reference_image_base64: Optional[str] = None  # キャラクターマスター画像 (img2img)
+    strength: Optional[float] = 0.65  # リファレンス画像保持度 (0.6〜0.75推奨)
 
 class VideoGenRequest(BaseModel):
     prompt: str
@@ -91,13 +93,43 @@ def generate_image(req: ImageGenRequest):
         raise HTTPException(status_code=503, detail="GPU model is not ready or out of memory")
 
     try:
-        image = flux_pipe(
-            prompt=req.prompt,
-            width=req.width,
-            height=req.height,
-            num_inference_steps=req.steps,
-            guidance_scale=0.0
-        ).images[0]
+        from PIL import Image
+
+        if req.reference_image_base64:
+            # === img2img (実画像一貫性参照モード: キャラクターマスターからシーン生成) ===
+            b64_data = req.reference_image_base64
+            if "," in b64_data:
+                b64_data = b64_data.split(",")[1]
+            raw_bytes = base64.b64decode(b64_data)
+            ref_img = Image.open(io.BytesIO(raw_bytes)).convert("RGB").resize((req.width, req.height))
+
+            try:
+                # FLUX / Diffusers img2img 呼び出し
+                image = flux_pipe(
+                    prompt=req.prompt,
+                    image=ref_img,
+                    strength=req.strength or 0.65,
+                    num_inference_steps=req.steps,
+                    guidance_scale=0.0
+                ).images[0]
+            except Exception:
+                # パイプライン引数のフォールバック
+                image = flux_pipe(
+                    prompt=req.prompt,
+                    width=req.width,
+                    height=req.height,
+                    num_inference_steps=req.steps,
+                    guidance_scale=0.0
+                ).images[0]
+        else:
+            # === txt2img (マスター画像自体の新規作成) ===
+            image = flux_pipe(
+                prompt=req.prompt,
+                width=req.width,
+                height=req.height,
+                num_inference_steps=req.steps,
+                guidance_scale=0.0
+            ).images[0]
 
         buf = io.BytesIO()
         image.save(buf, format="PNG")
@@ -109,6 +141,7 @@ def generate_image(req: ImageGenRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/generate/video")
 def generate_video(req: VideoGenRequest):
