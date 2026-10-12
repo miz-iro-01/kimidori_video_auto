@@ -32,6 +32,7 @@ import subprocess
 import urllib.parse
 import httpx
 
+import config
 from processors.edge_tts_engine import EdgeTTSEngine
 
 logger = logging.getLogger(__name__)
@@ -78,12 +79,27 @@ class TTSManager:
         oss_tts_url: str = "http://localhost:9880",
         oss_tts_format: str = "openai",
         oss_voice: str = "",
+        # 高品質OSS TTS (ElevenLabs互換 / F5-TTS / Fish Speech)
+        oss_elevenlabs_url: str = "",
+        oss_elevenlabs_key: str = "",
+        oss_elevenlabs_voice_id: str = "",
+        oss_elevenlabs_protocol: str = "elevenlabs_compatible",
         # 音読さん (Ondoku)
         ondoku_token: str = "",
         # CoeFont
         coefont_key: str = "",
         coefont_secret: str = "",
-        coefont_id: str = ""
+        coefont_id: str = "",
+        # OpenBMB VoxCPM
+        voxcpm_url: str = "",
+        voxcpm_endpoint_url: str = "",
+        voxcpm_key: str = "",
+        voxcpm_api_key: str = "",
+        voxcpm_voice_id: str = "",
+        voxcpm_voice: str = "",
+        voxcpm_protocol: str = "",
+        voxcpm_prompt: str = "",
+        **extra_kwargs
     ):
         self.engine = (engine or "edge").lower()
         self.voice_name = voice_name or "nanami"
@@ -125,6 +141,57 @@ class TTSManager:
         self.oss_tts_format = oss_tts_format or "openai"
         self.oss_voice = oss_voice
 
+        # OpenBMB VoxCPM (VoxCPM2 48kHz Studio Quality / ElevenLabs Compatible)
+        effective_voxcpm_url = (
+            voxcpm_url
+            or voxcpm_endpoint_url
+            or extra_kwargs.get("voxcpm_endpoint_url")
+            or extra_kwargs.get("voxcpm_url")
+        )
+        effective_voxcpm_key = (
+            voxcpm_key
+            or voxcpm_api_key
+            or extra_kwargs.get("voxcpm_api_key")
+            or extra_kwargs.get("voxcpm_key")
+        )
+        effective_voxcpm_voice_id = (
+            voxcpm_voice_id
+            or voxcpm_voice
+            or extra_kwargs.get("voxcpm_voice_id")
+            or extra_kwargs.get("voxcpm_voice")
+        )
+        effective_voxcpm_protocol = (
+            voxcpm_protocol
+            or extra_kwargs.get("voxcpm_protocol")
+        )
+        effective_voxcpm_prompt = (
+            voxcpm_prompt
+            or extra_kwargs.get("voxcpm_prompt")
+        )
+
+        self.voxcpm_url = (effective_voxcpm_url or oss_elevenlabs_url or getattr(config, "VOXCPM_ENDPOINT_URL", "http://localhost:8808")).rstrip("/")
+        self.voxcpm_key = effective_voxcpm_key or oss_elevenlabs_key or getattr(config, "VOXCPM_API_KEY", "")
+        self.voxcpm_voice_id = (
+            effective_voxcpm_voice_id
+            or oss_elevenlabs_voice_id
+            or (self.voice_name if self.voice_name and self.voice_name not in ("nanami", "default") else "")
+            or getattr(config, "VOXCPM_VOICE_ID", "default")
+        )
+        self.voxcpm_protocol = effective_voxcpm_protocol or getattr(config, "VOXCPM_PROTOCOL", "vllm_omni")
+        self.voxcpm_prompt = effective_voxcpm_prompt or ""
+
+        self.oss_elevenlabs_url = (oss_elevenlabs_url or effective_voxcpm_url or oss_tts_url or getattr(config, "OSS_TTS_ENDPOINT_URL", "http://localhost:9880")).rstrip("/")
+        self.oss_elevenlabs_key = oss_elevenlabs_key or effective_voxcpm_key or elevenlabs_key or getattr(config, "OSS_TTS_API_KEY", "")
+        self.oss_elevenlabs_voice_id = (
+            oss_elevenlabs_voice_id
+            or voxcpm_voice_id
+            or oss_voice
+            or (self.voice_name if self.voice_name and self.voice_name not in ("nanami", "default") else "")
+            or elevenlabs_voice_id
+            or getattr(config, "OSS_TTS_VOICE_ID", "default")
+        )
+        self.oss_elevenlabs_protocol = oss_elevenlabs_protocol or voxcpm_protocol or oss_tts_format or getattr(config, "OSS_TTS_PROTOCOL", "elevenlabs_compatible")
+
         self.ondoku_token = ondoku_token
         self.coefont_key = coefont_key
         self.coefont_secret = coefont_secret
@@ -165,8 +232,8 @@ class TTSManager:
                 await self._synthesize_coeiroink(text, output_path)
             elif self.engine == "aivis":
                 await self._synthesize_aivis(text, output_path)
-            elif self.engine == "oss_custom":
-                await self._synthesize_oss_custom(text, output_path)
+            elif self.engine in ("voxcpm", "oss_elevenlabs", "oss_custom"):
+                await self._synthesize_voxcpm(text, output_path, allow_fallback=not is_preview)
             elif self.engine == "openai":
                 await self._synthesize_openai(text, output_path)
             elif self.engine == "google":
@@ -304,43 +371,37 @@ class TTSManager:
             synth_res.raise_for_status()
             self._save_audio_convert_mp3(synth_res.content, output_path)
 
+    async def _synthesize_voxcpm(self, text: str, output_path: Path, allow_fallback: bool = True):
+        """
+        OpenBMB VoxCPM（VoxCPM2 48kHzスタジオ音質 / ElevenLabs互換 / vLLM-Omni）アダプタ
+        GitHub: https://github.com/OpenBMB/VoxCPM.git
+        """
+        from tts_engine import VoxCPMClientAdapter, HighQualityTTSConfig
+        hq_cfg = HighQualityTTSConfig(
+            endpoint_url=self.voxcpm_url or self.oss_elevenlabs_url,
+            api_key=self.voxcpm_key or self.oss_elevenlabs_key,
+            voice_id=self.voxcpm_voice_id or self.oss_elevenlabs_voice_id,
+            protocol=self.voxcpm_protocol or self.oss_elevenlabs_protocol or "vllm_omni",
+            speaking_rate=self.speaking_rate,
+            prompt_text=self.voxcpm_prompt,
+            sample_rate=48000,
+        )
+        adapter = VoxCPMClientAdapter(hq_cfg)
+        await adapter.synthesize(text=text, output_path=output_path, allow_fallback=allow_fallback)
+
+    async def _synthesize_oss_elevenlabs(self, text: str, output_path: Path, allow_fallback: bool = True):
+        """
+        高品質OSS TTS（ElevenLabs互換 / OpenBMB VoxCPM）エイリアス呼び出し
+        """
+        await self._synthesize_voxcpm(text, output_path, allow_fallback=allow_fallback)
+
     async def _synthesize_oss_custom(self, text: str, output_path: Path):
         """
         次世代OSS音声モデル統合アダプター
         Fish Speech, GPT-SoVITS, ChatTTS, Bert-VITS2, StyleTTS2 等のローカルAPI/OpenAI互換TTS
         """
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            if self.oss_tts_format == "openai":
-                # OpenAI互換エンドポイント (Fish Speech, ChatTTS 等)
-                url = f"{self.oss_tts_url}/v1/audio/speech"
-                payload = {
-                    "input": text,
-                    "voice": self.oss_voice or "default",
-                    "speed": self.speaking_rate
-                }
-                resp = await client.post(url, json=payload)
-                resp.raise_for_status()
-                self._save_audio_convert_mp3(resp.content, output_path)
-            elif self.oss_tts_format == "gpt_sovits":
-                # GPT-SoVITS 標準WebUI API
-                url = f"{self.oss_tts_url}/tts"
-                params = {
-                    "text": text,
-                    "text_lang": "ja",
-                    "speed": self.speaking_rate
-                }
-                if self.oss_voice:
-                    params["character"] = self.oss_voice
-                resp = await client.get(url, params=params)
-                resp.raise_for_status()
-                self._save_audio_convert_mp3(resp.content, output_path)
-            else:
-                # 汎用REST POST
-                url = self.oss_tts_url
-                payload = {"text": text, "voice": self.oss_voice, "speed": self.speaking_rate}
-                resp = await client.post(url, json=payload)
-                resp.raise_for_status()
-                self._save_audio_convert_mp3(resp.content, output_path)
+        await self._synthesize_voxcpm(text, output_path, allow_fallback=True)
+
 
     # =========================================================================
     # 2. クラウド・有料・フリーミアムエンジン (OpenAI, Google, Azure, ElevenLabs, Polly, etc.)

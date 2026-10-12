@@ -99,20 +99,38 @@ class TimelineProject(BaseModel):
                 break
         self.updated_at = datetime.datetime.utcnow().isoformat()
 
-    def optimize_video_ratio(self, video_ratio: float = 0.2):
+    def optimize_video_ratio(self, video_ratio: float = 0.25):
         """
-        コスト最適化: 全カットのうち指定比率（デフォルト約20% = 1/5）のみを type: 'video' に設定し、
-        残りを type: 'image'（Ken Burns静止画演出）に配分
+        ハイブリッド動画生成コスト最適化:
+        導入（冒頭）・各章の開始カット・クライマックス（盛り上がり/epic/終盤）の重要カットを type: 'video'（AIアニメーション動画）に設定し、
+        通常の会話・解説カットを type: 'image'（キャラ固定静止画 ＋ カメラワークパン/ズーム ＋ セリフ浮き出し演出）に配分する。
         """
         total = len(self.scenes)
         if total == 0:
             return
-        video_count = max(1, int(total * video_ratio))
-        # 冒頭、各章の開始シーン、盛り上がりシーンにvideoを優先配分
-        step = max(1, total // video_count)
+        max_video = max(2, int(total * video_ratio))
+        used = 0
+        camera_cycle = ["zoom_in", "pan_right", "pan_left", "zoom_out"]
+
         for i, scene in enumerate(self.scenes):
-            if i % step == 0 and video_count > 0:
+            is_intro = (i == 0)
+            is_chapter_open = scene.cut_key.endswith("_cut1")
+            is_climax = (i == total - 1) or (scene.bgm_tag in ("epic", "suspense") and i >= int(total * 0.65))
+            explicit_video = (scene.type == "video")
+
+            if (is_intro or is_chapter_open or is_climax or explicit_video) and used < max_video:
                 scene.type = "video"
-                video_count -= 1
+                used += 1
             else:
                 scene.type = "image"
+
+            if scene.camera_work.effect in ("ken_burns", "none", ""):
+                scene.camera_work.effect = camera_cycle[i % len(camera_cycle)]  # type: ignore
+
+        # まだ枠が余っていれば均等ステップで重要箇所に配分
+        if used < max_video and total > 3:
+            step = max(2, total // max(1, (max_video - used + 1)))
+            for i, scene in enumerate(self.scenes):
+                if scene.type != "video" and i % step == 0 and used < max_video:
+                    scene.type = "video"
+                    used += 1

@@ -738,6 +738,11 @@ class VideoStockAndEditorService:
         bgm_volume = float(editor_state.get("bgm_volume", 0.20))
         visual_style = editor_state.get("visual_style", "anime_modern")
 
+        studio_cfg = editor_state.get("studio") or {}
+        studio_telops_override = bool(studio_cfg.get("telops_override")) and bool(studio_cfg.get("telops"))
+        if studio_cfg.get("bgm_muted"):
+            bgm_choice = "none"
+
         active_scenes = [s for s in editor_state.get("scenes", []) if s.get("enabled", True) is not False]
         if not active_scenes:
             raise ValueError("有効なカットが1つもありません。少なくとも1カットを有効にしてください。")
@@ -754,6 +759,8 @@ class VideoStockAndEditorService:
             speaker = sc.get("speaker", "ナレーション")
             narration = sc.get("narration", "")
             telop_text = sc.get("telop_text") if sc.get("telop_text") is not None else narration
+            if studio_telops_override:
+                telop_text = ""  # Studio telop clips are composited in the post process
             cut_font = sc.get("telop_font") or global_font
             cut_style = sc.get("telop_style") or global_style
             cut_size = sc.get("telop_font_size") or global_size
@@ -809,6 +816,17 @@ class VideoStockAndEditorService:
             se_file_path = self.ensure_se_file(se_id) if se_id and se_id != "none" else None
             se_volume = float(sc.get("se_volume", 0.70))
             se_delay = float(sc.get("se_delay", 0.0))
+
+            # Jet-cut: rebuild narration audio with the silent ranges removed
+            jet_keep = sc.get("jet_keep")
+            if jet_keep and audio_path.exists():
+                try:
+                    from studio_pro import build_jetcut_audio
+                    jc_path = work_dir / f"speech_{sc_id:03d}_jc.mp3"
+                    if build_jetcut_audio(audio_path, jc_path, jet_keep):
+                        audio_path = jc_path
+                except Exception as jc_err:
+                    logger.warning(f"jet-cut audio build skipped for scene {sc_id}: {jc_err}")
 
             scene_assets_for_composer.append({
                 "scene_number": sc_id,
@@ -871,6 +889,13 @@ class VideoStockAndEditorService:
             is_paid_member=True,
             bgm_volume=bgm_volume
         )
+
+        # Studio Pro: wipe / B-roll / studio telop post process
+        try:
+            from studio_pro import apply_studio_postprocess
+            apply_studio_postprocess(job_dir, output_mp4, editor_state, work_dir)
+        except Exception as sp_err:
+            logger.warning(f"studio post process skipped: {sp_err}")
 
         # ストック情報を更新
         stock_entry = self.register_completed_video(

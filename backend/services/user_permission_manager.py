@@ -34,34 +34,45 @@ class FeatureName(str, Enum):
     HIGH_QUALITY_VOICE = "high_quality_voice"
 
 
-# 基本（無料会員）で利用可能な音声モデル一覧
-BASIC_VOICE_MODELS = ["nanami", "keita", "edge_default"]
+# 基本（無料会員・ライトプラン）で利用可能な音声エンジン・モデル一覧
+BASIC_VOICE_MODELS = ["nanami", "keita", "edge_default", "edge", "voicevox", "gtts", "sharevox", "coeiroink", "aivis"]
 
-# 有料会員が利用可能な拡張音声モデル一覧
+# 有料会員・Pro版・BYOGモードが利用可能な拡張音声エンジン・モデル一覧
 PRO_VOICE_MODELS = [
-    "nanami", "keita", "edge_default",
-    "google_standard", "google_wavenet",
-    "elevenlabs_pro", "aivis_premium"
+    "nanami", "keita", "edge_default", "edge", "voicevox", "gtts",
+    "oss_elevenlabs", "oss_custom",
+    "google_standard", "google_wavenet", "google",
+    "elevenlabs_pro", "elevenlabs", "aivis_premium",
+    "openai", "azure", "amazon_polly", "ondoku", "coefont"
 ]
 
 
 class UserPermissionManager:
     """
-    ユーザーの会員区分（無料/有料サブスク/管理者）および各種機能の利用権限を管理するクラス
+    ユーザーの会員区分（無料/有料サブスク/管理者/BYOG）および各種機能の利用権限を管理するクラス
     """
 
     def __init__(self, firestore_service: Optional[FirestoreService] = None):
         self.firestore = firestore_service or FirestoreService()
 
-    def get_user_plan(self, user_id: str) -> Dict[str, Any]:
+    def get_user_plan(self, user_id: str, byog_enabled: bool = False) -> Dict[str, Any]:
         """
         ユーザーのプラン情報をFirestoreから取得する（管理者アカウントは常時最上位権限を保証）
+        can_use_premium_tts / can_direct_upload_youtube フラグを連動返却する。
         """
         if not user_id:
-            return {"plan": PlanType.FREE, "role": "user", "is_pro": False, "is_admin": False, "expire_date": None}
+            return {
+                "plan": PlanType.FREE,
+                "role": "user",
+                "is_pro": bool(byog_enabled),
+                "is_admin": False,
+                "byog_enabled": bool(byog_enabled),
+                "can_use_premium_tts": bool(byog_enabled),
+                "can_direct_upload_youtube": bool(byog_enabled),
+                "expire_date": None
+            }
 
         # 1. 予約済み管理者メールアドレス・UID・デフォルトユーザーの即時フル権限判定
-        # 管理者環境およびデフォルトID（user_123, default_user, admin）はすべてADMIN権限として完全解放
         admin_match_ids = {
             "oumaumauma32@gmail.com",
             "sl0wmugi9@gmail.com",
@@ -78,6 +89,9 @@ class UserPermissionManager:
                 "role": "admin",
                 "is_pro": True,
                 "is_admin": True,
+                "byog_enabled": True,
+                "can_use_premium_tts": True,
+                "can_direct_upload_youtube": True,
                 "expire_date": None,
                 "email": user_id if "@" in user_id else "oumaumauma32@gmail.com"
             }
@@ -86,7 +100,6 @@ class UserPermissionManager:
             # Firestoreの 'users' コレクションを取得
             doc = self.firestore.db.collection("users").document(user_id).get()
             if not doc.exists and "@" in user_id:
-                # メールアドレスで検索
                 query_res = list(self.firestore.db.collection("users").where("email", "==", user_id).limit(1).stream())
                 if query_res:
                     doc = query_res[0]
@@ -106,18 +119,21 @@ class UserPermissionManager:
                         "role": "admin",
                         "is_pro": True,
                         "is_admin": True,
+                        "byog_enabled": True,
+                        "can_use_premium_tts": True,
+                        "can_direct_upload_youtube": True,
                         "expire_date": None,
                         "email": email
                     }
 
                 # 有効期限のチェック
-                is_pro = (plan == PlanType.PRO)
-                if is_pro and expire_str:
+                is_pro = (plan == PlanType.PRO) or bool(byog_enabled)
+                if plan == PlanType.PRO and expire_str:
                     try:
                         exp_dt = datetime.fromisoformat(expire_str)
                         if datetime.now() > exp_dt:
                             logger.info(f"User {user_id} PRO subscription expired on {expire_str}")
-                            is_pro = False
+                            is_pro = bool(byog_enabled)
                             plan = PlanType.FREE
                     except Exception:
                         pass
@@ -127,14 +143,26 @@ class UserPermissionManager:
                     "role": role,
                     "is_pro": is_pro,
                     "is_admin": False,
+                    "byog_enabled": bool(byog_enabled),
+                    "can_use_premium_tts": is_pro,
+                    "can_direct_upload_youtube": is_pro,
                     "expire_date": expire_str,
                     "email": email
                 }
         except Exception as e:
             logger.warning(f"Failed to fetch user plan for {user_id}: {e}")
 
-        # デフォルトは無料会員
-        return {"plan": PlanType.FREE, "role": "user", "is_pro": False, "is_admin": False, "expire_date": None}
+        # デフォルトは無料会員（BYOG有効時は解放）
+        return {
+            "plan": PlanType.FREE,
+            "role": "user",
+            "is_pro": bool(byog_enabled),
+            "is_admin": False,
+            "byog_enabled": bool(byog_enabled),
+            "can_use_premium_tts": bool(byog_enabled),
+            "can_direct_upload_youtube": bool(byog_enabled),
+            "expire_date": None
+        }
 
     def update_user_plan(
         self,
@@ -165,24 +193,32 @@ class UserPermissionManager:
             logger.error(f"Failed to update plan for user {user_id}: {e}")
             return False
 
-    def check_feature_access(self, user_id: str, feature: Union[FeatureName, str]) -> Dict[str, Any]:
+    def check_feature_access(
+        self,
+        user_id: str,
+        feature: Union[FeatureName, str],
+        byog_enabled: bool = False
+    ) -> Dict[str, Any]:
         """
         指定された機能に対するユーザーの利用アクセス権限および制限条件を判定する
-        管理者・Pro会員は全機能が無制限で解放される。
+        管理者・Pro会員・BYOGモードは全機能（高品質OSS TTS、YouTube直接OAuth投稿・予約投稿）が解放される。
         """
-        user_info = self.get_user_plan(user_id)
+        user_info = self.get_user_plan(user_id, byog_enabled=byog_enabled)
         is_admin = user_info.get("is_admin", False)
-        is_pro = user_info.get("is_pro", False) or is_admin
+        is_pro = user_info.get("is_pro", False) or is_admin or bool(byog_enabled)
+        can_use_premium_tts = bool(user_info.get("can_use_premium_tts", is_pro))
+        can_direct_upload_youtube = bool(user_info.get("can_direct_upload_youtube", is_pro))
         feat_str = str(feature.value if isinstance(feature, FeatureName) else feature).lower()
 
-        # 管理者および有料会員はすべての機能が利用可能・ロゴ非表示・カスタムBGM自由
         if is_admin:
             return {
                 "allowed": True,
                 "watermark_required": False,
                 "custom_bgm_allowed": True,
+                "can_use_premium_tts": True,
+                "can_direct_upload_youtube": True,
                 "allowed_voice_models": PRO_VOICE_MODELS,
-                "reason": "システム管理者: 全機能無制限利用可能（完全解放・ロゴ非表示）"
+                "reason": "システム管理者: 全機能無制限利用可能（高品質OSS TTS・YouTube直接投稿解放）"
             }
 
         if is_pro:
@@ -190,27 +226,33 @@ class UserPermissionManager:
                 "allowed": True,
                 "watermark_required": False,
                 "custom_bgm_allowed": True,
+                "can_use_premium_tts": True,
+                "can_direct_upload_youtube": True,
                 "allowed_voice_models": PRO_VOICE_MODELS,
-                "reason": "有料サブスク会員: 全機能利用可能（ロゴ非表示・BGM自由変更）"
+                "reason": "Proプラン / BYOGモード: 全機能利用可能（高品質OSS TTS・YouTube直接OAuth投稿解放）"
             }
 
-        # --- 無料会員の機能別判定 ---
+        # --- 無料会員 / ライトプラン相当の機能別判定 ---
         if feat_str == FeatureName.SHORT_VIDEO_CREATE.value:
             return {
                 "allowed": True,
-                "watermark_required": True,       # ロゴ表示必須
-                "custom_bgm_allowed": False,      # TuneCore登録BGM固定
+                "watermark_required": True,
+                "custom_bgm_allowed": False,
+                "can_use_premium_tts": False,
+                "can_direct_upload_youtube": False,
                 "allowed_voice_models": BASIC_VOICE_MODELS,
-                "reason": "無料会員: ショート動画作成利用可能（指定BGM固定・ロゴ表示あり）"
+                "reason": "ライトプラン（簡易ショート）: 無料TTS（VOICEVOX / Edge-TTS）およびMP4ダウンロードのみ利用可能"
             }
 
         elif feat_str == FeatureName.LONG_VIDEO_CREATE.value:
             return {
                 "allowed": True,
-                "watermark_required": True,       # ロゴ表示必須
-                "custom_bgm_allowed": False,      # 感情タグ別TuneCore登録BGM割り当て固定
+                "watermark_required": True,
+                "custom_bgm_allowed": False,
+                "can_use_premium_tts": False,
+                "can_direct_upload_youtube": False,
                 "allowed_voice_models": BASIC_VOICE_MODELS,
-                "reason": "無料会員: 長尺動画作成利用可能（シーン別TuneCore指定BGM固定・ロゴ表示あり）"
+                "reason": "無料会員: 長尺動画作成利用可能（無料TTS・MP4ダウンロードのみ）"
             }
 
         elif feat_str in [
@@ -224,8 +266,10 @@ class UserPermissionManager:
                 "allowed": False,
                 "watermark_required": True,
                 "custom_bgm_allowed": False,
+                "can_use_premium_tts": can_use_premium_tts,
+                "can_direct_upload_youtube": can_direct_upload_youtube,
                 "allowed_voice_models": BASIC_VOICE_MODELS,
-                "reason": f"無料会員は '{feat_str}' 機能を利用できません。有料サブスク登録が必要です。"
+                "reason": f"ライトプランでは '{feat_str}' 機能を利用できません。ProプランまたはBYOG設定が必要です。"
             }
 
         elif feat_str == FeatureName.HIGH_QUALITY_VOICE.value:
@@ -233,14 +277,18 @@ class UserPermissionManager:
                 "allowed": False,
                 "watermark_required": True,
                 "custom_bgm_allowed": False,
+                "can_use_premium_tts": False,
+                "can_direct_upload_youtube": False,
                 "allowed_voice_models": BASIC_VOICE_MODELS,
-                "reason": "無料会員は基本音声のみ利用可能です。高クオリティ音声は有料サブスク会員限定です。"
+                "reason": "ライトプランは無料TTS（VOICEVOX / Edge-TTS）のみ利用可能です。高品質OSS TTSはPro版/BYOG限定です。"
             }
 
         return {
             "allowed": False,
             "watermark_required": True,
             "custom_bgm_allowed": False,
+            "can_use_premium_tts": False,
+            "can_direct_upload_youtube": False,
             "allowed_voice_models": BASIC_VOICE_MODELS,
             "reason": "未定義の機能権限要求です。"
         }

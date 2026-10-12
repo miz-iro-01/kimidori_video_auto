@@ -182,7 +182,11 @@ async def run_long_manga_pipeline(
     bgm_choice: Optional[str] = "auto_script",
     bgm_volume: float = 0.20,
     custom_reference_images: Optional[List[Dict[str, Any]]] = None,
-    video_mode: Optional[str] = None
+    video_mode: Optional[str] = None,
+    comic_color_mode: Optional[str] = "color",
+    comic_bubble_enabled: Optional[bool] = None,
+    comic_bubble_delay: float = 0.40,
+    character_traits: Optional[List[Dict[str, Any]]] = None
 ) -> str:
     """
     長尺漫画動画・Pro版ショート動画の全体生成パイプライン実行メイン関数。
@@ -222,11 +226,15 @@ async def run_long_manga_pipeline(
             or script_data.get("visual_style")
             or ("ukiyoe" if project.genre == "edoculture" else "anime_modern")
         )
+        if resolved_visual_style == "comic_manga" and (comic_color_mode or "").lower() == "monochrome":
+            resolved_visual_style = "comic_manga_mono"
+
         total_scenes = len(project.scenes)
         resolved_mode = video_mode or ("long_video" if total_scenes >= 15 else "pro_shorts")
+        video_cut_count = sum(1 for s in project.scenes if s.type == "video") if resolved_mode == "long_video" else total_scenes
         log_and_update(
             15, 1, "タイムライン構築完了", 
-            f"全 {total_scenes} カットをタイムライン設計書に展開（スタイル: {resolved_visual_style} / 画像生成 ➔ I2Vアニメーション動画化）"
+            f"全 {total_scenes} カットをタイムライン設計書に展開（スタイル: {resolved_visual_style} / 動画カット: {video_cut_count}本 / 静止画＋カメラワーク＋セリフ浮出: {total_scenes - video_cut_count}本）"
         )
 
         # project.json を一時ディレクトリに保存（単体再生成・リカバリー・編集スタジオ用）
@@ -239,6 +247,9 @@ async def run_long_manga_pipeline(
                 "theme": project.theme,
                 "genre": project.genre,
                 "visual_style": resolved_visual_style,
+                "comic_color_mode": comic_color_mode or "color",
+                "comic_bubble_enabled": bool(comic_bubble_enabled or resolved_visual_style in ("comic_manga", "comic_manga_mono")),
+                "comic_bubble_delay": float(comic_bubble_delay if comic_bubble_delay is not None else 0.40),
                 "tts_engine": tts_engine,
                 "voice_name": voice_name,
                 "telop_font": telop_font or "DelaGothicOne",
@@ -251,6 +262,7 @@ async def run_long_manga_pipeline(
                         "scene_id": s.scene_id,
                         "cut_key": s.cut_key,
                         "type": s.type,
+                        "camera_effect": s.camera_work.effect,
                         "status": s.status,
                         "duration": s.duration,
                         "speaker": s.speaker,
@@ -279,6 +291,38 @@ async def run_long_manga_pipeline(
             if resolved_visual_style == "ukiyoe"
             else f"distinctive character design in {resolved_visual_style} style, waist-up portrait on clean background"
         )
+
+        # ユーザー指定のキャラ固定特徴（服装・髪型・容姿）やリファレンス付属traitsを統合
+        merged_traits: List[Dict[str, Any]] = []
+        if character_traits and isinstance(character_traits, list):
+            merged_traits.extend(character_traits)
+        if custom_reference_images and isinstance(custom_reference_images, list):
+            for ref_item in custom_reference_images:
+                if isinstance(ref_item, dict) and (ref_item.get("traits") or ref_item.get("appearance_prompt_en")):
+                    merged_traits.append({
+                        "name": ref_item.get("label") or "主人公",
+                        "appearance_prompt_en": ref_item.get("appearance_prompt_en") or ref_item.get("traits")
+                    })
+
+        if merged_traits:
+            existing_by_name = {c.get("name"): c for c in (project.characters or []) if isinstance(c, dict) and c.get("name")}
+            for tr in merged_traits:
+                t_name = (tr.get("name") or "主人公").strip()
+                t_desc = (
+                    tr.get("appearance_prompt_en")
+                    or f"{tr.get('clothing', '')}, {tr.get('hairstyle', '')}, {tr.get('appearance', '')}".strip(", ")
+                )
+                if not t_desc:
+                    continue
+                if t_name in existing_by_name:
+                    existing_by_name[t_name]["appearance_prompt_en"] = f"{t_desc}, {existing_by_name[t_name].get('appearance_prompt_en', '')}".strip(", ")
+                else:
+                    existing_by_name[t_name] = {
+                        "name": t_name,
+                        "appearance_prompt_en": f"single character {t_name}, {t_desc}, {char_style_hint}"
+                    }
+            project.characters = list(existing_by_name.values())
+
         if not getattr(project, "characters", None):
             speaker_set = []
             for s in project.scenes:
@@ -325,27 +369,30 @@ async def run_long_manga_pipeline(
             )
             log_and_update(
                 20, 1, "マスターリファレンス画像確定完了",
-                f"基準マスター画像の準備が完了しました（{len(char_master_map)}件 / スタイル: {resolved_visual_style}）。これをリファレンスにして各シーン画像 ➔ アニメーション動画を生成します"
+                f"基準マスター画像の準備が完了しました（{len(char_master_map)}件 / スタイル: {resolved_visual_style}）。これを全シーンへ注入して生成します"
             )
         else:
             char_master_map = {}
 
-        # Step 2: 各シーンのアセット生成（Stage1: 画像生成 ➔ Stage2: I2Vアニメーション動画化 ➔ Stage3: プロ仕様テロップ）(20%〜65%)
+        # Step 2: 各シーンのアセット生成（Stage1: 画像生成 ➔ Stage2: ハイブリッドI2V/カメラワーク ➔ Stage3: テロップ/フキダシ）(20%〜65%)
         scene_assets = []
 
-        log_and_update(20, 2, "シーン画像＆I2Vアニメーション生成中", f"全 {total_scenes} カットの画像生成 ➔ リファレンスI2Vアニメーション動画化を開始します...")
+        log_and_update(20, 2, "シーン画像＆ハイブリッド演出生成中", f"全 {total_scenes} カットの生成を開始します...")
 
         for idx, scene in enumerate(project.scenes):
             scene_num = scene.scene_id
             curr_pct = 20 + int((idx / total_scenes) * 45) # 20% 〜 65%
+            cut_mode_label = "AIアニメーション動画" if (resolved_mode != "long_video" or scene.type == "video") else f"キャラ固定静止画＋{scene.camera_work.effect}"
             
             log_and_update(
-                curr_pct, 2, "画像生成 ➔ I2Vアニメーション変換中",
-                f"カット {idx + 1} / {total_scenes} 生成中 ({scene.speaker}: {scene.narration[:15]}...)"
+                curr_pct, 2, f"カット生成中 ({cut_mode_label})",
+                f"カット {idx + 1} / {total_scenes} [{cut_mode_label}] ({scene.speaker}: {scene.narration[:15]}...)"
             )
 
             scene_dict = {
                 "scene_number": scene_num,
+                "scene_type": scene.type,
+                "camera_effect": scene.camera_work.effect,
                 "speaker": scene.speaker,
                 "narration": scene.narration,
                 "character_prompt": scene.character_prompt or scene.description,
@@ -373,30 +420,44 @@ async def run_long_manga_pipeline(
                     telop_style=telop_style,
                     telop_mode=telop_mode,
                     telop_font_size=telop_font_size,
-                    telop_font=telop_font
+                    telop_font=telop_font,
+                    comic_color_mode=comic_color_mode,
+                    comic_bubble_enabled=comic_bubble_enabled,
+                    comic_bubble_delay=float(comic_bubble_delay if comic_bubble_delay is not None else 0.40),
+                    video_mode=resolved_mode
                 )
                 scene.status = "generated"
                 scene_assets.append(asset_res)
             except Exception as scene_err:
                 logger.warning(f"Scene {scene_num} asset generation warning: {scene_err}")
                 scene.status = "failed"
-                # 安全な美麗フォールバック
                 pil_ph = batch_gen._generate_artistic_backdrop(1080, 1920, scene.description, scene_num, genre=project.genre)
+                if resolved_visual_style == "comic_manga_mono" or (comic_color_mode or "").lower() == "monochrome":
+                    pil_ph = batch_gen._apply_monochrome_manga_filter(pil_ph)
                 ph_path = assets_dir / f"bg_{scene_num:03d}.png"
                 pil_ph.save(ph_path, "PNG")
 
+                use_cb = (
+                    resolved_visual_style in ("comic_manga", "comic_manga_mono")
+                    or bool(comic_bubble_enabled)
+                    or (resolved_mode == "long_video" and telop_mode not in ("standard_bottom", "dynamic"))
+                )
                 pil_ov = batch_gen._create_manga_bubble_overlay(
-                    1080, 1920, scene.speaker, scene.narration, genre=project.genre, telop_style=telop_style, telop_font=telop_font
+                    1080, 1920, scene.speaker, scene.narration, genre=project.genre,
+                    telop_style=telop_style, telop_font=telop_font, use_comic_bubble=use_cb
                 )
                 ov_path = assets_dir / f"overlay_{scene_num:03d}.png"
                 pil_ov.save(ov_path, "PNG")
 
-
                 scene_assets.append({
                     "scene_number": scene_num,
+                    "scene_type": scene.type,
+                    "camera_effect": scene.camera_work.effect,
                     "speaker": scene.speaker,
                     "narration": scene.narration,
                     "bgm_tag": scene.bgm_tag,
+                    "bottom_telop_suppressed": use_cb,
+                    "bubble_delay": float(comic_bubble_delay if comic_bubble_delay is not None else 0.40) if use_cb else 0.0,
                     "audio_path": None,
                     "base_image_path": str(ph_path),
                     "overlay_image_path": str(ov_path),
@@ -409,6 +470,7 @@ async def run_long_manga_pipeline(
                 "scene_id": s.scene_id,
                 "cut_key": s.cut_key,
                 "type": s.type,
+                "camera_effect": s.camera_work.effect,
                 "status": s.status,
                 "duration": s.duration,
                 "speaker": s.speaker,

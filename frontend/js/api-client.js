@@ -10,6 +10,67 @@ class ApiClient {
       : "https://kimidori-movie-auto-ey3qvn3ruq-an.a.run.app"; // 本番環境の最新Cloud Run URL
   }
 
+  /** サロン認証・BYOGヘッダーの自動付与 */
+  _getAuthHeaders(customHeaders = {}) {
+    const headers = { "Content-Type": "application/json", ...customHeaders };
+    const token = window.authSecurityManager ? window.authSecurityManager.getAuthToken() : (localStorage.getItem("kimidori_auth_token") || "");
+    if (token) {
+      headers["X-Salon-Token"] = token;
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    const isByog = window.settingsManager && window.settingsManager.isByogActive();
+    headers["X-BYOG-Active"] = isByog ? "true" : "false";
+    return headers;
+  }
+
+  /** ユーザーのクレジット残高・プラン情報取得 */
+  async getUserCredits() {
+    const userId = this._getUserId();
+    const res = await fetch(`${this.baseUrl}/api/billing/credits/${encodeURIComponent(userId)}`, {
+      headers: this._getAuthHeaders()
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    return { credits: 100, plan: "free", unlimited: false };
+  }
+
+  /** 利用可能プラン一覧の取得 */
+  async getBillingPlans() {
+    const res = await fetch(`${this.baseUrl}/api/billing/plans`, {
+      headers: this._getAuthHeaders()
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    return { plans: {}, credit_packs: {} };
+  }
+
+  /** Stripe Checkout Session 発行 */
+  async createCheckoutSession(itemType, itemId) {
+    const userId = this._getUserId();
+    const userEmail = localStorage.getItem("kimidori_user_email") || "";
+    const origin = window.location.origin;
+
+    const res = await fetch(`${this.baseUrl}/api/billing/create-checkout-session`, {
+      method: "POST",
+      headers: this._getAuthHeaders(),
+      body: JSON.stringify({
+        user_id: userId,
+        user_email: userEmail,
+        item_type: itemType,
+        item_id: itemId,
+        success_url: `${origin}/?checkout_success=true`,
+        cancel_url: `${origin}/?checkout_canceled=true`
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "チェックアウトセッションの作成に失敗しました");
+    }
+    return await res.json();
+  }
+
   /**
    * ユーザーのGemini APIキーで利用可能な最新モデル一覧を動的に解決
    * 廃止モデルを完全排除し、最新のFlash/Proモデルを優先
@@ -79,6 +140,15 @@ class ApiClient {
     const ossTtsUrl = window.settingsManager.get("ossTtsUrl") || "http://localhost:9880";
     const ossTtsFormat = window.settingsManager.get("ossTtsFormat") || "openai";
     const ossVoice = window.settingsManager.get("ossVoice") || "";
+    const ossElevenlabsUrl = window.settingsManager.get("ossElevenlabsUrl") || ossTtsUrl || "http://localhost:9880";
+    const ossElevenlabsKey = window.settingsManager.get("ossElevenlabsKey") || "";
+    const ossElevenlabsVoiceId = window.settingsManager.get("ossElevenlabsVoiceId") || "21m00Tcm4TlvDq8ikWAM";
+    const ossElevenlabsProtocol = window.settingsManager.get("ossElevenlabsProtocol") || "elevenlabs_compatible";
+    const voxcpmUrl = window.settingsManager.get("voxcpmUrl") || "http://localhost:8808";
+    const voxcpmKey = window.settingsManager.get("voxcpmKey") || "";
+    const voxcpmVoiceId = window.settingsManager.get("voxcpmVoiceId") || "default";
+    const voxcpmProtocol = window.settingsManager.get("voxcpmProtocol") || "vllm_omni";
+    const voxcpmPrompt = window.settingsManager.get("voxcpmPrompt") || "";
     const ondokuToken = window.settingsManager.get("ondokuToken") || "";
     const coefontKey = window.settingsManager.get("coefontKey") || "";
     const coefontId = window.settingsManager.get("coefontId") || "";
@@ -116,6 +186,15 @@ class ApiClient {
       oss_tts_url: ossTtsUrl,
       oss_tts_format: ossTtsFormat,
       oss_voice: ossVoice,
+      oss_elevenlabs_url: ossElevenlabsUrl,
+      oss_elevenlabs_key: ossElevenlabsKey,
+      oss_elevenlabs_voice_id: ossElevenlabsVoiceId,
+      oss_elevenlabs_protocol: ossElevenlabsProtocol,
+      voxcpm_endpoint_url: voxcpmUrl,
+      voxcpm_api_key: voxcpmKey,
+      voxcpm_voice_id: voxcpmVoiceId,
+      voxcpm_protocol: voxcpmProtocol,
+      voxcpm_prompt: voxcpmPrompt,
       ondoku_token: ondokuToken,
       coefont_key: coefontKey,
       coefont_id: coefontId,
@@ -129,7 +208,7 @@ class ApiClient {
 
     const res = await fetch(`${this.baseUrl}/api/process/mode-a`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this._getAuthHeaders(),
       body: JSON.stringify(payload)
     });
 
@@ -412,19 +491,34 @@ class ApiClient {
     return await res.json();
   }
 
-  /** ユーザーの会員プランおよび機能権限の取得 */
-  async getUserPermissions(feature = null) {
+  /** ユーザーの会員プランおよび機能権限の取得（BYOGモード連動） */
+  async getUserPermissions(feature = null, byogOverride = null) {
     const userId = this._getUserId();
-    let url = `${this.baseUrl}/api/user/permissions?user_id=${encodeURIComponent(userId)}`;
+    const isByog = byogOverride !== null
+      ? Boolean(byogOverride)
+      : (window.settingsManager && window.settingsManager.isByogActive ? window.settingsManager.isByogActive() : false);
+    let url = `${this.baseUrl}/api/user/permissions?user_id=${encodeURIComponent(userId)}&byog=${isByog}`;
     if (feature) {
       url += `&feature=${encodeURIComponent(feature)}`;
     }
     const res = await fetch(url);
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || "権限情報の取得に失敗しました。");
     }
-    return await res.json();
+    const data = await res.json();
+    if (window.settingsManager && data) {
+      if (data.can_use_premium_tts !== undefined) {
+        window.settingsManager.settings.canUsePremiumTts = Boolean(data.can_use_premium_tts);
+      }
+      if (data.can_direct_upload_youtube !== undefined) {
+        window.settingsManager.settings.canDirectUploadYoutube = Boolean(data.can_direct_upload_youtube);
+      }
+      if (data.plan) {
+        window.settingsManager.settings.planTier = data.plan;
+      }
+    }
+    return data;
   }
 
   /** 長尺漫画動画のシナリオ・コマ割りJSONの生成 */
@@ -483,6 +577,15 @@ class ApiClient {
       aivis_key: window.settingsManager.get("aivisKey") || "",
       oss_tts_url: window.settingsManager.get("ossTtsUrl") || "http://localhost:9880",
       oss_tts_format: window.settingsManager.get("ossTtsFormat") || "openai",
+      oss_elevenlabs_url: window.settingsManager.get("ossElevenlabsUrl") || window.settingsManager.get("ossTtsUrl") || "http://localhost:9880",
+      oss_elevenlabs_key: window.settingsManager.get("ossElevenlabsKey") || "",
+      oss_elevenlabs_voice_id: window.settingsManager.get("ossElevenlabsVoiceId") || "21m00Tcm4TlvDq8ikWAM",
+      oss_elevenlabs_protocol: window.settingsManager.get("ossElevenlabsProtocol") || "elevenlabs_compatible",
+      voxcpm_endpoint_url: window.settingsManager.get("voxcpmUrl") || "http://localhost:8808",
+      voxcpm_api_key: window.settingsManager.get("voxcpmKey") || "",
+      voxcpm_voice_id: window.settingsManager.get("voxcpmVoiceId") || "default",
+      voxcpm_protocol: window.settingsManager.get("voxcpmProtocol") || "vllm_omni",
+      voxcpm_prompt: window.settingsManager.get("voxcpmPrompt") || "",
       ondoku_token: window.settingsManager.get("ondokuToken") || "",
       coefont_key: window.settingsManager.get("coefontKey") || "",
       coefont_id: window.settingsManager.get("coefontId") || ""
@@ -509,19 +612,23 @@ class ApiClient {
       telop_font_size: options.telopFontSize || "medium",
       telop_font: options.telopFont || "DelaGothicOne",
       custom_reference_images: options.customReferenceImages || null,
-      video_mode: options.videoMode || null
+      video_mode: options.videoMode || null,
+      comic_color_mode: options.comicColorMode || "color",
+      comic_bubble_enabled: options.comicBubbleEnabled !== undefined ? Boolean(options.comicBubbleEnabled) : true,
+      comic_bubble_delay: options.comicBubbleDelay !== undefined ? parseFloat(options.comicBubbleDelay) : 0.4,
+      character_traits: options.characterTraits || null
     };
 
     let res;
     try {
       res = await fetch(`${this.baseUrl}/api/manga/generate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: this._getAuthHeaders(),
         body: JSON.stringify(payload)
       });
     } catch (fetchErr) {
       if (fetchErr.message && fetchErr.message.includes("Failed to fetch")) {
-        throw new Error("バックエンドAPIサーバー（port 8080）に接続できません。サーバーの稼働状態を確認してください。");
+        throw new Error("AI Coreに接続できません。しばらくしてからもう一度お試しください。");
       }
       throw fetchErr;
     }
@@ -679,19 +786,26 @@ ${ukiyoeInstruction}
   }
 
   /** 長尺動画（15〜20分）完全仕様の台本・人物シート生成（バックエンド ＋ 直接Gemini APIフォールバック・全キー両対応） */
-  async generateLongVideoScript(theme, genre = "story", targetMinutes = 15, researchNotes = "", visualStyle = null) {
+  async generateLongVideoScript(theme, genre = "story", targetMinutes = 15, researchNotes = "", visualStyle = null, extraOptions = {}) {
     const keys = window.settingsManager.getGeminiKeys();
     if (!keys || keys.length === 0) {
       throw new Error("Gemini APIキー（無料版または有料版）を設定画面で保存してください。");
     }
 
     const resolvedStyle = visualStyle || (genre === "edoculture" ? "ukiyoe" : "anime_modern");
+    const scriptMode = extraOptions.scriptMode || "western_book_adaptation";
+    const characterTraits = Array.isArray(extraOptions.characterTraits) && extraOptions.characterTraits.length > 0
+      ? extraOptions.characterTraits
+      : null;
+
     const payload = {
       theme: theme,
       genre: genre,
       visual_style: resolvedStyle,
       target_minutes: parseInt(targetMinutes, 10),
       research_notes: researchNotes,
+      script_mode: scriptMode,
+      character_traits: characterTraits,
       user_id: this._getUserId(),
       gemini_api_keys: keys
     };
@@ -719,13 +833,20 @@ ${ukiyoeInstruction}
 
     // 2. ブラウザ直結フォールバック
     const targetCuts = Math.max(60, Math.min(180, parseInt(targetMinutes, 10) * 8));
+    const westernNote = scriptMode === "western_book_adaptation"
+      ? "\n【洋書翻案ビジネス漫画ディレクティブ】: 海外のベストセラービジネス洋書の概念・行動経済学フレームワークを取り入れ、日本の職場（IT企業・営業部・企画チーム等）で直面するリアルな葛藤と逆転ストーリーの会話劇へ翻案してください。"
+      : "";
+    const charNote = characterTraits
+      ? `\n【固定キャラクター指定（全カット一貫維持）】:\n${characterTraits.map(c => `・${c.name || '主人公'} (${c.role || ''}): 服装=${c.clothing || ''}, 髪型=${c.hairstyle || ''}, 容姿=${c.appearance || ''}`).join("\n")}`
+      : "";
     const prompt = `あなたはYouTubeで100万再生を連発する長尺動画（${targetMinutes}分動画）のプロ脚本家・構成作家です。
 以下の条件に従い、全5章からなる本格的な長尺動画台本と、登場人物の英語指示文一覧表（キャラクターシート）を作成してください。
 
 【テーマ】: ${theme}
 【ジャンル】: ${genre}
+【絵柄スタイル】: ${resolvedStyle}
 【目標尺】: 約${targetMinutes}分（合計 ${targetCuts} カット程度、1カットあたり3〜8秒程度）
-【参考リサーチメモ】: ${researchNotes || '特になし（あなたの豊富な知識から最新の知見と大ヒット構成を展開してください）'}
+【参考リサーチメモ】: ${researchNotes || '特になし（あなたの豊富な知識から最新の知見と大ヒット構成を展開してください）'}${westernNote}${charNote}
 
 【出力フォーマット（厳密なJSON）】:
 必ず以下のJSON形式のみを出力してください（Markdownコードブロック \`\`\`json \`\`\` で囲んでください）。
@@ -947,11 +1068,23 @@ ${ukiyoeInstruction}
       }
     }
 
-    // クラウドエンジン (Edge, Google, OpenAI, ElevenLabs, Azure, Polly, etc.) またはリモートURLはバックエンドAPI経由で合成
+    // クラウドエンジン (Edge, Google, OpenAI, ElevenLabs, OSS ElevenLabs互換, Azure, Polly, etc.) またはリモートURLはバックエンドAPI経由で合成
+    const enrichedPayload = {
+      ...previewData,
+      oss_elevenlabs_url: previewData.oss_elevenlabs_url || (window.settingsManager && window.settingsManager.get("ossElevenlabsUrl")) || "http://localhost:9880",
+      oss_elevenlabs_key: previewData.oss_elevenlabs_key || (window.settingsManager && window.settingsManager.get("ossElevenlabsKey")) || "",
+      oss_elevenlabs_voice_id: previewData.oss_elevenlabs_voice_id || (window.settingsManager && window.settingsManager.get("ossElevenlabsVoiceId")) || "21m00Tcm4TlvDq8ikWAM",
+      oss_elevenlabs_protocol: previewData.oss_elevenlabs_protocol || (window.settingsManager && window.settingsManager.get("ossElevenlabsProtocol")) || "elevenlabs_compatible",
+      voxcpm_endpoint_url: previewData.voxcpm_endpoint_url || previewData.voxcpm_url || (window.settingsManager && window.settingsManager.get("voxcpmUrl")) || "http://localhost:8808",
+      voxcpm_api_key: previewData.voxcpm_api_key || (window.settingsManager && window.settingsManager.get("voxcpmKey")) || "",
+      voxcpm_voice_id: previewData.voxcpm_voice_id || previewData.voice_name || (window.settingsManager && window.settingsManager.get("voxcpmVoiceId")) || "default",
+      voxcpm_protocol: previewData.voxcpm_protocol || (window.settingsManager && window.settingsManager.get("voxcpmProtocol")) || "vllm_omni",
+      voxcpm_prompt: previewData.voxcpm_prompt || (window.settingsManager && window.settingsManager.get("voxcpmPrompt")) || ""
+    };
     const res = await fetch(`${this.baseUrl}/api/tts/preview`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(previewData)
+      body: JSON.stringify(enrichedPayload)
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -1106,12 +1239,12 @@ ${ukiyoeInstruction}
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Colab接続確認失敗 (${res.status})`);
+        throw new Error(err.detail || `AI Core接続確認失敗 (${res.status})`);
       }
       return await res.json();
     } catch (e) {
       if (e.message && e.message.includes("Failed to fetch")) {
-        throw new Error("バックエンドAPIサーバー（port 8080）に接続できません。サーバーが起動しているか確認してください。");
+        throw new Error("AI Coreに接続できません。しばらくしてからもう一度お試しください。");
       }
       throw e;
     }
@@ -1150,7 +1283,7 @@ ${ukiyoeInstruction}
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Colab画像生成失敗 (${res.status})`);
+      throw new Error(err.detail || `AI画像生成失敗 (${res.status})`);
     }
     return await res.json();
   }
@@ -1252,7 +1385,18 @@ ${ukiyoeInstruction}
         openai_key: window.settingsManager.get("openAiTtsKey") || "",
         azure_key: window.settingsManager.get("azureTtsKey") || "",
         azure_region: window.settingsManager.get("azureTtsRegion") || "japaneast",
-        voicevox_url: window.settingsManager.get("voicevoxUrl") || "http://localhost:50021"
+        voicevox_url: window.settingsManager.get("voicevoxUrl") || "http://localhost:50021",
+        oss_tts_url: window.settingsManager.get("ossTtsUrl") || "http://localhost:9880",
+        oss_tts_format: window.settingsManager.get("ossTtsFormat") || "openai",
+        oss_elevenlabs_url: window.settingsManager.get("ossElevenlabsUrl") || window.settingsManager.get("ossTtsUrl") || "http://localhost:9880",
+        oss_elevenlabs_key: window.settingsManager.get("ossElevenlabsKey") || "",
+        oss_elevenlabs_voice_id: window.settingsManager.get("ossElevenlabsVoiceId") || "21m00Tcm4TlvDq8ikWAM",
+        oss_elevenlabs_protocol: window.settingsManager.get("ossElevenlabsProtocol") || "elevenlabs_compatible",
+        voxcpm_endpoint_url: window.settingsManager.get("voxcpmUrl") || "http://localhost:8808",
+        voxcpm_api_key: window.settingsManager.get("voxcpmKey") || "",
+        voxcpm_voice_id: window.settingsManager.get("voxcpmVoiceId") || "default",
+        voxcpm_protocol: window.settingsManager.get("voxcpmProtocol") || "vllm_omni",
+        voxcpm_prompt: window.settingsManager.get("voxcpmPrompt") || ""
       }
     };
     const res = await fetch(`${this.baseUrl}/api/manga/editor/${encodeURIComponent(jobId)}/resynthesize-tts`, {
@@ -1297,9 +1441,111 @@ ${ukiyoeInstruction}
     }
     return await res.json();
   }
+
+  /** 長尺/Pro版ショート: AIキャラクターリファレンス画像＆固定特徴シートをワンクリック生成 */
+  async generateCharacterRef(params = {}) {
+    const keys = window.settingsManager.getGeminiKeys();
+    const paidKey = window.settingsManager.get("paidGeminiKey") || (keys.length > 0 ? keys[0] : "");
+    const payload = {
+      name: params.name || "主人公・佐藤",
+      role: params.role || "主人公（28歳・IT企業企画職）",
+      clothing: params.clothing || "濃紺のビジネススーツ、水色のネクタイ",
+      hairstyle: params.hairstyle || "黒髪ショートマッシュ",
+      appearance: params.appearance || "知的で親しみやすい表情、清潔感のある容姿",
+      visual_style: params.visualStyle || "comic_manga",
+      color_mode: params.colorMode || "color",
+      gemini_api_key: paidKey,
+      fal_api_key: window.settingsManager.get("falApiKey") || ""
+    };
+    const res = await fetch(`${this.baseUrl}/api/studio/generate-character-ref`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `AIキャラクター生成エラー (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  // ==============================================================
+  // YouTube Data API (OAuth 2.0) 直接アップロード ＆ 予約投稿 API
+  // ==============================================================
+
+  /** YouTube OAuth 2.0 連携ステータスおよび連携済みチャンネル一覧を取得 */
+  async getYoutubeOAuthStatus() {
+    const userId = this._getUserId();
+    const res = await fetch(`${this.baseUrl}/api/youtube/oauth-status?user_id=${encodeURIComponent(userId)}`);
+    if (!res.ok) {
+      return { success: false, connected: false, channels: [] };
+    }
+    return await res.json();
+  }
+
+  /** YouTube OAuth 2.0 認証URLを取得 */
+  async getYoutubeAuthUrl(clientId = null, clientSecret = null) {
+    const userId = this._getUserId();
+    const cId = clientId !== null ? clientId : (window.settingsManager && window.settingsManager.get("youtubeClientId")) || "";
+    const cSecret = clientSecret !== null ? clientSecret : (window.settingsManager && window.settingsManager.get("youtubeClientSecret")) || "";
+    const params = new URLSearchParams({ user_id: userId });
+    if (cId) params.set("client_id", cId);
+    if (cSecret) params.set("client_secret", cSecret);
+
+    const res = await fetch(`${this.baseUrl}/api/auth/youtube/url?${params.toString()}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `YouTube OAuth認証URLの取得に失敗しました (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** YouTube OAuth 連携チャンネルの解除 */
+  async disconnectYoutubeChannel(channelId) {
+    const userId = this._getUserId();
+    const res = await fetch(`${this.baseUrl}/api/youtube/channels/${encodeURIComponent(channelId)}?user_id=${encodeURIComponent(userId)}`, {
+      method: "DELETE"
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `YouTubeチャンネル解除に失敗しました (${res.status})`);
+    }
+    return await res.json();
+  }
+
+  /** YouTube Data API (OAuth 2.0) チャンク分割直接アップロード ＆ 予約投稿・サムネイル設定 */
+  async directUploadYoutube(uploadParams) {
+    const userId = this._getUserId();
+    const isByog = (window.settingsManager && window.settingsManager.isByogActive) ? window.settingsManager.isByogActive() : true;
+    const payload = {
+      job_id: uploadParams.jobId,
+      user_id: userId,
+      channel_id: uploadParams.channelId || null,
+      title: uploadParams.title || "AI Generated Video",
+      description: uploadParams.description || "",
+      tags: Array.isArray(uploadParams.tags) ? uploadParams.tags : [],
+      privacy_status: uploadParams.privacyStatus || "private",
+      publish_at: uploadParams.publishAt || null,
+      thumbnail_mode: uploadParams.thumbnailMode || "none",
+      thumbnail_cut_index: uploadParams.thumbnailCutIndex !== undefined ? parseInt(uploadParams.thumbnailCutIndex, 10) : 0,
+      thumbnail_base64: uploadParams.thumbnailBase64 || null,
+      byog: isByog
+    };
+    const res = await fetch(`${this.baseUrl}/api/youtube/direct-upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `YouTube直接投稿に失敗しました (${res.status})`);
+    }
+    return await res.json();
+  }
 }
 
 window.apiClient = new ApiClient();
+
 
 
 

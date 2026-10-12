@@ -64,15 +64,19 @@ class LongVideoEngine:
         genre: str = "story",
         target_minutes: int = 15,
         research_notes: str = "",
-        visual_style: Optional[str] = None
+        visual_style: Optional[str] = None,
+        script_mode: str = "standard",
+        character_traits: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         題材やリサーチメモから、1場面3〜8秒のセリフと状況説明からなる台本を作成。
         同時に登場人物の英語指示文一覧表（容姿統一）を作成。
+        script_mode == 'western_book_adaptation' の場合は海外ビジネス洋書の概念・ノウハウを
+        日本のビジネスパーソン向けの共感ストーリー・ビジネス漫画会話劇へ自動翻案する。
         """
         genre_spec = GENRE_SPECS.get(genre, GENRE_SPECS["story"])
         style_key = visual_style or ("ukiyoe" if genre == "edoculture" else "anime_modern")
-        target_cuts = max(80, min(180, int(target_minutes * 8)))
+        target_cuts = max(40, min(180, int(target_minutes * 8)))
 
         style_example = (
             "an Edo-period Japanese merchant, chonmage topknot, indigo kimono, authentic Edo Ukiyo-e woodblock print by Hokusai and Kuniyoshi, slender ukiyo-e eyes, sumi-e ink outlines on handmade washi paper, strictly NO anime style"
@@ -80,18 +84,46 @@ class LongVideoEngine:
             else "a 32-year-old Japanese male researcher, glasses, wearing modern casual workwear, cinematic anime style"
         )
 
+        western_adaptation_directive = ""
+        if script_mode == "western_book_adaptation" or "洋書" in (theme or "") or "翻案" in (research_notes or ""):
+            western_adaptation_directive = """
+【洋書翻案ビジネス漫画モード（最重要ディレクティブ）】:
+・海外のベストセラービジネス洋書の概念・フレームワーク・行動科学ノウハウを、単なる要約解説ではなく、
+  「日本の職場で働く若手〜中堅ビジネスパーソン（主人公）と、本質を突くメンター（上司・先輩・専門家）のリアルな会話劇・共感ストーリー漫画」へ完全に翻案してください。
+・海外特有の事例（シリコンバレーの役員報酬や欧米の個人主義的な交渉等）は、日本のオフィス現場（営業会議、企画プレゼン、チームの人間関係、残業・キャリアの悩み等）でそのまま使える具体的なエピソードへローカライズしてください。
+・構成は【第1章：日本の職場でのリアルな挫折・共感フック（AI動画重要カット）】➔【第2章：メンターとの出会いと洋書フレームワークの提示】➔【第3章：現場での実践と壁】➔【第4章：ブレイクスルーと周囲の変化】➔【第5章：明日から使える3つの実践アクション（クライマックスAI動画カット）】としてください。
+"""
+
+        fixed_char_directive = ""
+        if character_traits and isinstance(character_traits, list) and len(character_traits) > 0:
+            lines_tr = []
+            for ct in character_traits:
+                if isinstance(ct, dict) and (ct.get("name") or ct.get("clothing") or ct.get("hairstyle") or ct.get("appearance") or ct.get("appearance_prompt_en")):
+                    c_name = ct.get("name") or "主人公"
+                    c_role = ct.get("role") or "メインキャラ"
+                    c_traits = ct.get("appearance_prompt_en") or f"服装:{ct.get('clothing','')}, 髪型:{ct.get('hairstyle','')}, 容姿:{ct.get('appearance','')}"
+                    lines_tr.append(f"  - {c_name} ({c_role}): {c_traits}")
+            if lines_tr:
+                fixed_char_directive = (
+                    "\n【キャラクター固定設定（全シーン一貫維持）】:\n"
+                    "以下のキャラクター設定（名前・服装・髪型・容姿）を characters 配列および全カットの description に100%反映し、途中で服装や髪型が変わらないよう固定してください:\n"
+                    + "\n".join(lines_tr) + "\n"
+                )
+
         prompt = f"""
 あなたはYouTubeで100万再生を連発する長尺動画（{target_minutes}分動画）のプロ脚本家・構成作家です。
 以下の条件に従い、全5章からなる本格的な長尺動画台本と、登場人物の英語指示文一覧表（キャラクターシート）を作成してください。
 
 【テーマ】: {theme}
+【台本生成モード】: {script_mode}
 【ジャンル】: {genre_spec['label']}（{genre_spec['description']}）
 【絵柄・ビジュアルスタイル】: {style_key}
 【目標尺】: 約{target_minutes}分（合計 {target_cuts} カット程度、1カットあたり3〜8秒程度）
 【参考リサーチメモ】: {research_notes or '特になし（一次情報・具体的ファクトに基づいて構成してください）'}
+{western_adaptation_directive}{fixed_char_directive}
 【禁止事項】：
 ・使い古された定番ステレオタイプ（江戸＝うんち換金、都市伝説＝頭の上の余命数字、ビジネス＝45歳佐藤さん等）は【絶対に使用禁止】。
-・登場人物の名前はテーマや舞台にふさわしい独自の自然な名前を動的に命名すること（「佐藤」「健一」等の安易な定番名の流用は禁止）。
+・登場人物の名前はテーマや舞台にふさわしい独自の自然な名前を動的に命名すること（キャラクター固定設定がある場合はその名前を使用）。
 ・特に絵柄が ukiyoe の場合は、『江戸時代のアニメ』にならないよう、appearance_prompt_en に anime という単語を絶対に含めず、伝統木版画（Ukiyo-e woodblock print, Nishiki-e, sumi-e ink outlines, washi paper texture）として記述すること。
 
 【出力フォーマット（厳格なJSON）】:
@@ -101,11 +133,12 @@ class LongVideoEngine:
   "theme": "{theme}",
   "genre": "{genre}",
   "visual_style": "{style_key}",
+  "script_mode": "{script_mode}",
   "characters": [
     {{
-      "name": "テーマに応じた独自の登場人物名",
-      "role": "主人公 / 同僚 / 専門家 / ナレーター など",
-      "appearance_prompt_en": "英語の外見・服装・画風指示（例: {style_example}）"
+      "name": "登場人物名",
+      "role": "主人公 / メンター / 同僚 / 専門家 / ナレーター など",
+      "appearance_prompt_en": "英語の外見・服装・髪型・画風指示（例: {style_example}）"
     }}
   ],
   "main_locations": [
@@ -123,10 +156,10 @@ class LongVideoEngine:
           "cut_id": "Cut_001",
           "speaker": "話者名（ナレーション または 登場人物名）",
           "dialogue": "セリフまたはナレーション本文（1場面あたり20〜60文字程度、3〜8秒で話せる長さ）",
-          "description": "ト書き（画面の状況、人物の表情や動作、場所）",
+          "description": "ト書き（画面の状況、人物の固定された服装・髪型・表情や動作、場所）",
           "bgm_tag": "cheerful / warm / touching / suspense / frightening / funny / epic / neutral から選択",
           "camera_effect": "固定 / ズームイン / パン左 / パン右 / 動画(アクション)",
-          "is_video_cut": true または false（冒頭の約10箇所や重要シーンのみtrue、基本はfalse）
+          "is_video_cut": true または false（導入・各章冒頭・クライマックスの重要カットのみtrue、通常の会話・解説カットはfalse）
         }}
       ]
     }}

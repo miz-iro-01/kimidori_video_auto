@@ -894,3 +894,67 @@
   }
 
 
+/* ==========================================================================
+   Phase 1: Cyber Future Theme (#0B0F19 base / emerald + cyan accents)
+   ========================================================================== */
+:root {
+  --bg-base: #0B0F19;
+  --bg-surface: rgba(15, 23, 42, 0.62);
+  --bg-surface-hover: rgba(22, 34, 58, 0.85);
+  --bg-overlay: rgba(5, 8, 15, 0.88);
+  --accent-primary: #10b981;
+  --accent-secondary: #22d3ee;
+  --accent-secondary-glow: rgba(34, 211, 238, 0.3);
+  --border-color: rgba(34, 211, 238, 0.12);
+  --border-highlight: rgba(34, 211, 238, 0.32);
+}
+body {
+  background-color: #0B0F19;
+  background-image:
+    radial-gradient(900px 500px at 12% -8%, rgba(34, 211, 238, 0.10), transparent 60%),
+    radial-gradient(800px 480px at 100% 105%, rgba(16, 185, 129, 0.09), transparent 60%);
+  background-attachment: fixed;
+}
+.sidebar { background: linear-gradient(180deg, #0B0F19 0%, #0d1424 100%); border-right: 1px solid rgba(34, 211, 238, 0.14); }
+.glass-card { border: 1px solid rgba(34, 211, 238, 0.12); box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.04), 0 8px 32px rgba(0, 0, 0, 0.35); }
+.nav-item.active { box-shadow: inset 3px 0 0 #22d3ee; }
+.status-indicator { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; letter-spacing: 0.04em; color: var(--text-secondary); }
+.status-dot { width: 9px; height: 9px; border-radius: 50%; background: #475569; display: inline-block; flex-shrink: 0; }
+.status-dot.ready { background: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18), 0 0 12px rgba(34, 211, 238, 0.7); animation: aiCorePulse 2.4s ease-in-out infinite; }
+@keyframes aiCorePulse { 0%, 100% { box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18), 0 0 8px rgba(34, 211, 238, 0.5); } 50% { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.10), 0 0 16px rgba(34, 211, 238, 0.9); } }
+.btn-studio-handoff {
+  background: linear-gradient(135deg, #10b981 0%, #22d3ee 100%) !important;
+  border-color: #22d3ee !important; color: #04121a !important; font-weight: 800 !important;
+  display: inline-flex; align-items: center; gap: 8px; padding: 0.7rem 1.4rem !important; font-size: 0.95rem !important;
+  box-shadow: 0 0 22px rgba(34, 211, 238, 0.35);
+}
+.btn-studio-handoff:hover { box-shadow: 0 0 30px rgba(34, 211, 238, 0.6); transform: translateY(-1px); }
+.btn-locked { opacity: 0.55; cursor: not-allowed !important; display: inline-flex; align-items: center; gap: 6px; border-style: dashed; }
+.editor-handoff-panel { padding: 1.1rem 1.25rem; margin-bottom: 1rem; border: 1px solid rgba(34, 211, 238, 0.35); border-radius: var(--radius-md); background: rgba(11, 15, 25, 0.8); box-shadow: 0 0 24px rgba(34, 211, 238, 0.08) inset; }
+
+/* ==========================================================================
+   Phase 2: Studio Pro (jet-cut / B-roll / wipe / telop clips / BGM track)
+   ========================================================================== */
+.pro-editor-timeline-pane { max-height: 320px; }
+.studio-extra-tracks { margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.studio-track-row { display: flex; align-items: center; gap: 0.5rem; }
+.studio-track-label { flex: 0 0 74px; font-size: 0.68rem; font-weight: 700; color: #94a3b8; letter-spacing: 0.04em; }
+.studio-track-lane { position: relative; flex: 1; height: 26px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 6px; overflow: hidden; }
+.studio-chip { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; font-size: 0.64rem; line-height: 20px; padding: 0 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #f8fafc; outline: none; }
+.studio-chip.broll { background: rgba(168, 85, 247, 0.55); border: 1px solid #a855f7; }
+.studio-chip.telop { background: rgba(250, 204, 21, 0.28); border: 1px solid #facc15; cursor: text; }
+.studio-chip.wipe { background: rgba(34, 211, 238, 0.28); border: 1px solid #22d3ee; }
+.studio-chip.bgm { background: rgba(16, 185, 129, 0.3); border: 1px solid #10b981; }
+.studio-chip.muted { opacity: 0.35; text-decoration: line-through; }
+.studio-bgm-ctrl { display: inline-flex; gap: 4px; align-items: center; margin-left: 6px; }
+.studio-wipe-preview { position: absolute; z-index: 6; overflow: hidden; border: 2px solid #fff; background: #0B0F19; cursor: move; touch-action: none; }
+.studio-wipe-preview.circle { border-radius: 50%; }
+.studio-wipe-preview.rounded { border-radius: 18%; }
+.studio-wipe-preview video, .studio-wipe-preview img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.studio-wipe-char { position: relative; width: 100%; height: 100%; }
+.studio-wipe-char img { transform-origin: 50% 70%; will-change: transform; }
+.studio-wipe-mouth { position: absolute; left: 50%; top: 74.5%; width: 17%; height: 2%; background: rgba(60, 12, 20, 0.95); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.studio-list-row { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; background: rgba(2, 6, 23, 0.55); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 0.4rem 0.5rem; font-size: 0.74rem; color: #e2e8f0; }
+.studio-list-row input[type=text] { flex: 1 1 140px; min-width: 0; }
+.studio-list-row input[type=number] { width: 62px; }
+.studio-list-row img { width: 44px; height: 30px; object-fit: cover; border-radius: 4px; }

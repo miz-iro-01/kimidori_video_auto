@@ -158,11 +158,13 @@ class ColabGpuClient:
         output_path: Optional[str] = None,
         timeout_sec: int = 300,
         image_path: Optional[str] = None,
+        workflow_type: str = "auto",
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Google Colab上のComfyUI (LTX-Video) へワークフローを投入し、
-        生成されたシーン画像（image_path）をリファレンス（Image-to-Video）としてアニメーション動画（MP4）を生成・保存する。
+        Google Colab上のComfyUI二刀流エンジン（LTX-Video / MiniMax H3）へワークフローを投入し、
+        リクエスト種別（ショート動画: LTX-Video, 長尺動画重要カット: MiniMax H3）に応じて自動切り替え実行する。
+        ComfyUIキュー待機・ポーリング監視・タイムアウト処理を行う。
         """
         import asyncio
         import random
@@ -175,7 +177,13 @@ class ColabGpuClient:
         base_url = self.worker_url.rstrip("/")
         seed = random.randint(1, 1000000000)
 
-        def build_t2v_workflow() -> Dict[str, Any]:
+        # 二刀流判定: 明示的指定がなければ、アスペクト比またはkwargsのvideo_modeから判定
+        # ショート動画（縦長 9:16、height > width）-> LTX-Video
+        # 長尺動画（横長 16:9、width >= height）または "minimax" 指定 -> MiniMax H3
+        is_long_cut = (workflow_type == "minimax") or (workflow_type == "auto" and (width > height or kwargs.get("is_long_cut") or kwargs.get("video_mode") == "long"))
+
+        # --- 1. LTX-Video ワークフロー（ショート動画向け・高速アニメーション） ---
+        def build_ltx_t2v_workflow() -> Dict[str, Any]:
             return {
                 "1": {
                     "inputs": {"ckpt_name": "ltx-video-2b-v0.9.1.safetensors"},
@@ -209,9 +217,9 @@ class ColabGpuClient:
                 "7": {
                     "inputs": {
                         "images": ["6", 0],
-                        "frame_rate": 25,
+                        "frame_rate": fps,
                         "loop_count": 0,
-                        "filename_prefix": "LTXVideo",
+                        "filename_prefix": "LTXVideo_Shorts",
                         "format": "video/h264-mp4",
                         "pingpong": False,
                         "save_output": True
@@ -220,7 +228,7 @@ class ColabGpuClient:
                 }
             }
 
-        def build_i2v_workflow(uploaded_img_name: str) -> Dict[str, Any]:
+        def build_ltx_i2v_workflow(uploaded_img_name: str) -> Dict[str, Any]:
             return {
                 "1": {
                     "inputs": {"ckpt_name": "ltx-video-2b-v0.9.1.safetensors"},
@@ -267,9 +275,68 @@ class ColabGpuClient:
                 "7": {
                     "inputs": {
                         "images": ["6", 0],
-                        "frame_rate": 25,
+                        "frame_rate": fps,
                         "loop_count": 0,
-                        "filename_prefix": "LTXVideo_I2V",
+                        "filename_prefix": "LTXVideo_I2V_Shorts",
+                        "format": "video/h264-mp4",
+                        "pingpong": False,
+                        "save_output": True
+                    },
+                    "class_type": "VHS_VideoCombine"
+                }
+            }
+
+        # --- 2. MiniMax H3 ワークフロー（長尺動画重要カット向け・超高精細映画級） ---
+        def build_minimax_h3_i2v_workflow(uploaded_img_name: str) -> Dict[str, Any]:
+            return {
+                "1": {
+                    "inputs": {"ckpt_name": "minimax_h3_high_precision.safetensors"},
+                    "class_type": "CheckpointLoaderSimple"
+                },
+                "2": {
+                    "inputs": {"text": prompt, "clip": ["1", 1]},
+                    "class_type": "CLIPTextEncode"
+                },
+                "3": {
+                    "inputs": {"text": negative_prompt, "clip": ["1", 1]},
+                    "class_type": "CLIPTextEncode"
+                },
+                "8": {
+                    "inputs": {"image": uploaded_img_name},
+                    "class_type": "LoadImage"
+                },
+                "4": {
+                    "inputs": {
+                        "positive": ["2", 0],
+                        "negative": ["3", 0],
+                        "vae": ["1", 2],
+                        "image": ["8", 0],
+                        "width": width,
+                        "height": height,
+                        "length": min(num_frames, 120),
+                        "batch_size": 1
+                    },
+                    "class_type": "LTXVImgToVideo"
+                },
+                "5": {
+                    "inputs": {
+                        "seed": seed, "steps": 25, "cfg": 3.5,
+                        "sampler_name": "euler", "scheduler": "normal", "denoise": 0.80,
+                        "model": ["1", 0], "positive": ["4", 0], "negative": ["4", 1],
+                        "latent_image": ["4", 2]
+                    },
+                    "class_type": "KSampler"
+                },
+                "6": {
+                    "inputs": {"samples": ["5", 0], "vae": ["1", 2]},
+                    "class_type": "VAEDecode"
+                },
+                "7": {
+                    "inputs": {
+                        "images": ["6", 0],
+                        "frame_rate": fps,
+                        "loop_count": 0,
+                        "filename_prefix": "MiniMax_H3_LongCut",
                         "format": "video/h264-mp4",
                         "pingpong": False,
                         "save_output": True
@@ -279,6 +346,18 @@ class ColabGpuClient:
             }
 
         async with aiohttp.ClientSession() as session:
+            # キュー状態の確認（順番待ち情報のロギング）
+            try:
+                async with session.get(f"{base_url}/queue", timeout=aiohttp.ClientTimeout(total=5)) as q_resp:
+                    if q_resp.status == 200:
+                        q_data = await q_resp.json()
+                        pending_count = len(q_data.get("queue_pending", []))
+                        running_count = len(q_data.get("queue_running", []))
+                        if pending_count > 0 or running_count > 0:
+                            logger.info(f"ComfyUI Queue: {running_count} running, {pending_count} pending jobs ahead.")
+            except Exception:
+                pass
+
             uploaded_image_name = None
             if image_path and Path(image_path).exists():
                 try:
@@ -296,11 +375,24 @@ class ColabGpuClient:
                 except Exception as up_err:
                     logger.warning(f"ComfyUI image upload skipped ({up_err}), falling back to T2V workflow")
 
-            # 1. プロンプト投入（I2V優先 ➔ 失敗時はT2Vへ自動フォールバック）
+            # ワークフロー候補の確定（二刀流ロジック）
+            workflows_to_try = []
+            engine_name = "MiniMax H3" if is_long_cut else "LTX-Video"
+            logger.info(f"ComfyUI Dual-Engine Select: Using [{engine_name}] for {'Long Video Cut' if is_long_cut else 'Short Video Cut'}")
+
+            if is_long_cut:
+                if uploaded_image_name:
+                    workflows_to_try.append(build_minimax_h3_i2v_workflow(uploaded_image_name))
+                    workflows_to_try.append(build_ltx_i2v_workflow(uploaded_image_name))
+                workflows_to_try.append(build_ltx_t2v_workflow())
+            else:
+                if uploaded_image_name:
+                    workflows_to_try.append(build_ltx_i2v_workflow(uploaded_image_name))
+                workflows_to_try.append(build_ltx_t2v_workflow())
+
+            # 1. プロンプト投入
             prompt_url = f"{base_url}/prompt"
             prompt_id = None
-            workflows_to_try = [build_i2v_workflow(uploaded_image_name), build_t2v_workflow()] if uploaded_image_name else [build_t2v_workflow()]
-
             last_err = None
             for wf in workflows_to_try:
                 try:
@@ -320,7 +412,7 @@ class ColabGpuClient:
                 logger.warning(f"Failed to queue ComfyUI prompt: {last_err}")
                 raise last_err or RuntimeError("ComfyUIから有効な prompt_id を取得できませんでした")
 
-            # 2. 完了ポーリング
+            # 2. 完了ポーリング（順番待ちキュー対応）
             history_url = f"{base_url}/history/{prompt_id}"
             start_time = asyncio.get_event_loop().time()
             output_file_info = None
@@ -364,7 +456,8 @@ class ColabGpuClient:
                             "success": True,
                             "video_path": str(out_path),
                             "video_url": view_url,
-                            "prompt_id": prompt_id
+                            "prompt_id": prompt_id,
+                            "engine": engine_name
                         }
                     else:
                         raise RuntimeError(f"ComfyUI動画ダウンロード失敗 ({resp.status})")
@@ -372,5 +465,6 @@ class ColabGpuClient:
             return {
                 "success": True,
                 "video_url": view_url,
-                "prompt_id": prompt_id
+                "prompt_id": prompt_id,
+                "engine": engine_name
             }

@@ -105,3 +105,109 @@
 - `backend/utils/key_manager.py`: Gemini API キーローテーション・リトライ管理ユーティリティ
 - `backend/assets/fonts/`: YouTube定番極太日本語フォント8種 (`DelaGothicOne-Regular.ttf`, `ReggaeOne-Regular.ttf`, `MochiyPopOne-Regular.ttf`, `ShipporiMinchoB1-ExtraBold.ttf`, `MPLUSRounded1c-Black.ttf`, `RocknRollOne-Regular.ttf`, `ZenMaruGothic-Black.ttf`, `RampartOne-Regular.ttf`)
 
+
+## Phase 1: Cyber UI / Own-script / Studio Handoff
+- Cyber theme (#0B0F19 base, emerald/cyan accents) appended to frontend/css/style.css; status shown as AI Core: Online/Standby dot indicator.
+- Internal terms sanitized in UI text, api-client errors and showToast (_sanitizeUserMessage in app.js).
+- Simple Short own-script input (direct / file / Drive) rewrites via getScriptPreview (btnNormalizeSimpleScript).
+- Pro Short and Long: 'Open in editing studio' button (btnStudioHandoffPro/Long) saves kimidori_editor_handoff (video_url, audio_tracks, telops) to localStorage and opens view-edit with handoff panel and timeline.
+- Simple Short: MP4 save only; studio button locked (btnStudioLockedSimple).
+- Standalone editor drag-and-drop (uploadZoneB) retained.
+
+
+## Phase 2: Studio Pro (jet-cut / wipe / B-roll / telop clips / BGM track)
+- New files: frontend/js/studio-pro.js (editor extension, state in editorState.studio), backend/studio_pro.py (router + FFmpeg postprocess).
+- Editor tabs 5 (jet-cut, Pexels B-roll, bottom-right wipe) and 6 (telop clips, BGM track); extra timeline lanes B-ROLL / TELOP CLIP / WIPE / BGM (studioExtraTracks).
+- Jet-cut: Web Audio RMS analysis (threshold dB, min silence 0.3s), scene.jet_keep ranges + duration shortened; backend rebuilds narration audio via ffmpeg atrim/concat (build_jetcut_audio).
+- Wipe: face camera video or talking character (loudness-driven jaw/mouth/bob animation), circle or rounded, size/position sliders and drag; live preview in stage; rendered by apply_studio_postprocess.
+- B-roll: keyword extraction (Intl.Segmenter) + POST /api/studio/pexels-search (Gemini keyword translation optional), 3-5s overlays that return to main video.
+- Telop clips: auto placement from script, inline timeline editing, size/colour/timing; telops_override disables per-cut telops at render.
+- BGM track: default builtin:upbeat_business at 15% for new projects, volume slider, mute (bgm_muted), custom upload (/api/studio/{job}/upload-asset kind=bgm into data/bgm).
+- Phase 1 theme and kimidori_editor_handoff are unchanged.
+
+## Phase 3: Pro Shorts Comic Manga Style & Long Video Business Manga (Character Consistency / Western Book Adaptation / Hybrid Generation)
+- **Pro版ショート「漫画風（コミック）」スタイル (`comic_manga` / `comic_manga_mono`)**:
+  - スタイル選択肢に「漫画風」を追加（`#inputProShortsVisualStyle`, `#inputLongVideoVisualStyle`）。
+  - 漫画演出オプションUI（`#proShortsComicOptionsBox`, `#longVideoComicOptionsBox`）:
+    1. カラー / 白黒（モノクロ・スクリーントーン調）切り替えトグル（`#proShortsComicColorMode`, `#longVideoComicColorMode`）。
+    2. セリフ後出し演出（`#proShortsComicBubbleDelay`, `#longVideoComicBubbleDelay`、デフォルト `+0.40s`）: 映像/コマ静止画の表示から少し遅れて話者バッジ付きフキダシ（`_create_comic_speech_bubble_card`）がポップに浮き出るアニメーション合成。
+  - 下部通常字幕テロップの自動非表示（`bottom_telop_suppressed = True`）: 「漫画風」選択時は画面内フキダシ演出と被らないよう下部の通常テロップ（TELOP）を自動的にオフ化。
+- **Pro版長尺動画（15〜20分）キャラクター一貫性（キャラ固定・2系統UI）**:
+  - `POST /api/studio/generate-character-ref` (`backend/studio_pro.py`) による「1. AIでキャラクター生成」（`#btnGenerateAiCharLong`）と「2. 手持ちのキャラクター画像をアップロード」（`#fileRefImagesLongVideo`）の2系統UIを実装。
+  - 指定されたキャラクターの特徴（名前・役割・服装 `clothing`・髪型 `hairstyle`・容姿 `appearance`）およびリファレンス画像を `character_traits` / `custom_reference_images` として全シーンの生成パイプラインへ一貫注入。
+- **Pro版長尺動画：洋書翻案ビジネス漫画台本 ＆ 自前台本連携**:
+  - 台本生成モード選択（`#longVideoScriptModeSelect`: `western_book_adaptation` / `custom_script_rewrite` / `standard`）。
+  - 「洋書翻案モード」: 海外のベストセラービジネス洋書の概念・ノウハウを取り入れ、日本のビジネスパーソン向けの共感ストーリー・会話劇へ自動翻案（`backend/processors/long_video_engine.py`）。
+  - 「自前台本持ち込み」: テキスト直貼り・ファイル選択（`.txt/.md/.json`）・Google Drive連携で投入された自作台本を長尺用の全5章・複数シーンカット割りJSONへ正確にリライト分解。
+- **長尺ハイブリッド動画生成 ＆ スタジオ引き渡し**:
+  - ハイブリッド生成ロジック（`backend/models/timeline.py` `optimize_video_ratio`, `backend/processors/batch_asset_generator.py`, `backend/processors/manga_video_composer.py`）:
+    - 導入（冒頭カット）・各章の幕開け（`_cut1`）・クライマックスの重要カット（`scene.type == "video"`）: Stage 2 AIアニメーション動画（I2V）を生成。
+    - 通常の会話・解説カット（`scene.type == "image"`）: キャラ固定静止画 ＋ カメラワーク（`zoom_in` / `pan_right` / `pan_left` / `zoom_out` Ken Burns演出） ＋ セリフ後出しフキダシ浮き出し演出で高速・高品質に合成。
+  - 編集スタジオ連携: 長尺プレビュー画面の「動画編集スタジオで開く」（`#btnStudioHandoffLong`）押下時、生成された全カット・音声・セリフ/テロップ・BGMをエディタ側のタイムラインへ展開した状態でシームレスに遷移。
+
+## Phase 4: High-Quality OSS TTS Adapter (ElevenLabs Compatible) & YouTube Direct OAuth 2.0 Upload / Scheduled Publishing
+- **高品質OSS TTS（ElevenLabs互換）アダプタ層 (`backend/tts_engine.py`, `backend/processors/tts_manager.py`, `backend/main.py`)**:
+  - `HighQualityOSSTTSAdapter` (`oss_elevenlabs` / `voxcpm`) を実装し、以下のエンドポイント形式に単一アダプタで対応:
+    1. **OpenBMB VoxCPM** (`https://github.com/OpenBMB/VoxCPM.git`): Tokenizer-free 2Bアーキテクチャ、48kHzスタジオ音質、vLLM-Omni (`POST /v1/audio/speech`)、FastAPI (`POST /v1/tts`)、およびElevenLabs互換API対応。Voice Designプロンプト（`voxcpm_prompt`）による自然言語トーン制御と接続不能時のEdge-TTS自動フォールバックを完備。
+    2. ElevenLabs互換 `POST /v1/text-to-speech/{voice_id}` および `POST /v1/text-to-speech`
+    3. OpenAI Audio Speech互換 `POST /v1/audio/speech` (Kokoro-FastAPI, OpenedAI-Speech等)
+    4. F5-TTS / Fish Speech / GPT-SoVITS 汎用 `POST /v1/tts`・`POST /tts`
+  - 設定画面（`#groupOssElevenlabs`）および `.env` (`VOXCPM_ENDPOINT_URL`, `VOXCPM_API_KEY`, `VOXCPM_VOICE_ID`, `VOXCPM_PROTOCOL`, `VOXCPM_SAMPLE_RATE`, `OSS_TTS_ENDPOINT_URL`, `OSS_TTS_API_KEY`, `OSS_TTS_VOICE_ID`, `OSS_TTS_PROTOCOL`) で外部TTSエンドポイントURL、APIキー、ボイスID、通信プロトコル、Voice Designプロンプトを指定可能。
+  - 音声選択UI（`#proShortsTtsEngine`, `#longVideoTtsEngine`, `#setTtsEngine`, `#editorCutTtsEngine`）において、「無料TTS（VOICEVOX / Edge-TTS）」と「OpenBMB VoxCPM (48kHzスタジオ音質・ElevenLabs互換OSS)」を明快にグループ分けして切り替え可能。
+- **YouTube Data API (OAuth 2.0) 直接アップロード ＆ 予約投稿機能 (`backend/services/youtube_service.py`, `backend/main.py`, `#youtubeDirectUploadModal`)**:
+  - GoogleアカウントOAuth 2.0連携フロー（`youtube.upload` スコープ対応）とローカルJSON永続化フォールバック（`backend/data/youtube_oauth.json`）を実装。
+  - Pro版ショート・Pro版長尺・自動編集画面・動画編集スタジオ書き出し画面に「YouTubeに直接投稿（OAuth・予約投稿）」ボタンおよび専用設定モーダル（`#youtubeDirectUploadModal`）を設置。
+  - 投稿設定UI: 動画タイトル、概要欄（説明文）、タグ/ハッシュタグ、公開設定（「公開 `public`」「非公開 `private`」「限定公開 `unlisted`」「予約投稿 `scheduled` + ISO 8601 `publish_at` 日時指定」）、サムネイル画像設定（動画内カット選択またはカスタム画像アップロード）。
+  - バックエンドの `POST /api/youtube/direct-upload` にて、`google-api-python-client` の `MediaFileUpload(..., chunksize=10*1024*1024, resumable=True)` を用いたチャンク分割アップロード（Resumable Upload）および `youtube.thumbnails().set` によるカスタムサムネイル自動反映を実装。
+- **権限制御・利用可否の基盤連動 (`can_use_premium_tts`, `can_direct_upload_youtube`)**:
+  - `backend/services/user_permission_manager.py` および `frontend/js/settings-manager.js` に `can_use_premium_tts`・`can_direct_upload_youtube` フラグを導入:
+    - **簡易ショート / ライトプラン相当 (`simple_shorts`)**: 無料TTSのみ、YouTube直接投稿はロックバッジ付きで無効化し、MP4ダウンロードのみに制限。
+    - **Pro版 / プロプラン以上（またはBYOGモード）**: 高品質OSS TTSの選択・合成、およびYouTube直接投稿・予約投稿機能を解放。
+
+## Phase 5: Colab Dual-Engine Workflow, BYOG Mode, Stripe Billing & Cloud Run Security Guard
+- **ComfyUI 二刀流エンジン切り替えロジック (`backend/processors/colab_gpu_client.py`, `backend/processors/batch_asset_generator.py`)**:
+  - 単一のComfyUIエンドポイントに対し、動画リクエスト種別に応じて適切なワークフローJSONを自動ロード・送信:
+    1. ショート動画リクエスト（9:16縦型）: **LTX-Video ワークフロー**（T2V / I2V）で高速モーションアニメーション化。
+    2. 長尺動画重要カット（16:9横型、scene.type == 'video'）: **MiniMax H3 ワークフロー**で超高精細映画級アニメーション動画を生成。
+  - ComfyUIの `/queue` 監視および `/history/{prompt_id}` のタイムアウト付き非同期ポーリングにより、複数リクエスト到達時でも順番待ち処理を担保。
+- **BYOG（ユーザー環境持ち込み）設定UI ＆ ルーティング (`#cardByogSettings`, `frontend/js/settings-manager.js`, `frontend/js/app.js`, `frontend/js/api-client.js`)**:
+  - 設定画面（`#view-settings`）に「BYOG（自前環境接続）モード」設定パネルを設置:
+    1. 自前 ComfyUI URL（trycloudflare / ngrok / ローカル）および自前 Gemini API キーの入力欄。
+    2. 「接続テスト」ボタンによる ComfyUI 疎通確認（`/system_stats` / `/queue`）。
+    3. BYOG有効時（`byogEnabled: true` または自前URL/キー設定時）、動画生成リクエストは運営側APIではなくユーザー独自のComfyUIエンドポイントへルーティングされ、クレジット消費0で実行可能。
+- **Stripe サブスクリプション ＆ クレジット管理システム (`backend/services/billing_manager.py`, `backend/config.py`, `backend/main.py`)**:
+  - 料金プラン体系:
+    - **ライト**（月額 1,980円）: 300クレジット/月、無料TTSのみ、BGM固定、YouTube直接投稿不可、MP4ダウンロードのみ、スタジオ利用不可。
+    - **プロ**（月額 3,980円）: 1,000クレジット/月、高品質VoxCPM TTS開放、BGM差し替え開放、YouTube直接投稿開放、スタジオ利用可能。
+    - **プレミアム**（月額 7,980円）: 3,000クレジット/月、全機能フル開放、生成優先キュー。
+    - **追加クレジットチャージ（買い切り）**: 200pt (980円) / 600pt (2,480円) / 1,500pt (4,980円)。
+  - Stripe Webhook処理 (`POST /api/stripe/webhook`): `checkout.session.completed`, `customer.subscription.created/updated/deleted` を受信し、Firestoreへサブスクリプション有効期限・クレジット残高を自動同期。
+  - クレジット減算処理: ショート動画（1カット5pt）および長尺動画（1シーン12pt）の生成前に残高を検証し、不足時はHTTP 402エラーを返却。BYOGモード時は0消費で実行。
+- **Cloud Run 本番セキュリティ保護 ＆ アクセス制御 (`backend/main.py`, `frontend/js/auth.js`)**:
+  - サロンiframe連携判定: URLパラメータ（`auth_token`, `salon_plan`）および `window.postMessage` (`SALON_AUTH_SYNC`) からトークンを抽出し保持。
+  - バックエンドAPI保護ミドルウェア (`security_and_auth_middleware`): 主要生成・投稿エンドポイントへのアクセスに対し、サロントークン（`X-Salon-Token`）またはBearer認証を検証。
+  - 単体URL直接アクセスガード: 未認証かつBYOG未設定の場合は画面上部にサロン連携案内バナーを表示。
+
+## Phase 6: マーケティング自動化基盤（外部Webhook/シナリオ連動API）＆ 最終デプロイ準備
+- **マーケティング自動化・外部トリガーAPI (`backend/main.py`)**:
+  - `POST /api/marketing/trigger-video-job`: 外部シナリオツール（LINE配信, X自動化, ブログ連携等）から完全自動で動画生成ジョブをキックできる汎用エンドポイント。
+    - リクエストパラメータ: `marketing_source` (line/x_auto/blog/affiliate等), `topic`/`script` (どちらか必須), `mode` (pro_shorts or long_manga), `style`, `tts_engine`, `webhook_callback_url`, `user_id`
+    - 認証: `X-Marketing-Token` ヘッダー（Firestoreに保存された `marketing_api_token` フィールドと照合）
+    - バックグラウンドで動画生成パイプラインを実行し、完了時に `webhook_callback_url` へ動画URL・タイトル・概要・テロップ含むJSONをPOST通知
+    - レスポンス: `job_id`, `status: "accepted"`, `accepted_at`
+  - `POST /api/marketing/generate-token`: Marketing API Tokenの新規発行・再生成（Firestoreの `users/{user_id}.marketing_api_token` に保存）
+  - `GET /api/marketing/token/{user_id}`: 現在のトークンのマスク表示取得
+  - `POST /api/marketing/test-webhook`: 指定URLへのテスト送信（テストペイロードを使用して疎通確認）
+  - Webhook完了通知ライブラリ: `httpx.AsyncClient` による非同期POST（タイムアウト15秒、失敗時は警告ログのみ）
+- **外部連携ステータス ＆ Webhook設定UI (`#cardMarketingWebhook`, `frontend/index.html`, `frontend/js/app.js`, `frontend/js/settings-manager.js`)**:
+  - 設定画面（`#view-settings`）に「マーケティング連携・Webhook設定」パネルを設置:
+    1. Marketing API Token 発行・再生成UI（`#btnGenerateMarketingToken`, `#marketingApiTokenDisplay`）
+    2. 外部トリガーAPIエンドポイント情報表示（エンドポイント, 必須ヘッダー, パラメータ一覧）
+    3. 完了通知Webhook URLの設定（`#setMarketingWebhookUrl`）とテスト送信ボタン（`#btnTestMarketingWebhook`）
+    4. Webhook URL保存ボタン（`#btnSaveMarketingWebhook`、`settingsManager` の `marketingWebhookUrl` キーに永続化）
+- **本番デプロイ（Cloud Run）向け環境変数テンプレート (`.env.example`)**:
+  - 全環境変数を網羅: Gemini API, Firebase/Firestore, YouTube OAuth 2.0, Stripe (Secret/Publishable/Webhook), VoxCPM/OSS TTS, Cloudflare Tunnel/ComfyUI, セキュリティ (SALON_SHARED_SECRET, REQUIRE_AUTH_API), Marketing API, Cloud Run デプロイ設定, GCS バケット
+  - 各変数にコメントでデプロイ手順・注意事項を記載済み
+  - 本番環境では `REQUIRE_AUTH_API=true` を推奨
+
+

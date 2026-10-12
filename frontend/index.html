@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -80,7 +80,7 @@
       <div class="sidebar-footer" style="display: flex; flex-direction: column; gap: 1rem; padding: 1.5rem; border-top: 1px solid var(--border-color);">
         <div class="status-indicator">
           <div class="status-dot" id="systemStatusDot"></div>
-          <span id="systemStatusText">システム待機中</span>
+          <span id="systemStatusText">AI Core: Standby</span>
         </div>
         <div id="currentUserDisplay" style="font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-top: 0.25rem;"></div>
         <button class="btn btn-outline" id="btnLogout" style="width: 100%; padding: 0.5rem; font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
@@ -172,6 +172,22 @@
                 </div>
               </div>
 
+              <!-- 自前台本の持ち込み（直接入力 / ファイル / Drive）→ 標準フォーマットへリライト -->
+              <div style="margin-top: 1.25rem; padding: 1.1rem 1.25rem; border: 1px dashed rgba(34, 211, 238, 0.35); border-radius: var(--radius-md); background: rgba(15, 23, 42, 0.5);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                  <span style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary);">自前の台本入力欄（任意：直接入力・ファイル読込・Drive連携）</span>
+                  <span class="badge" style="font-size: 0.72rem; background: rgba(16, 185, 129, 0.15); color: var(--accent-primary);">入力時は当ツール標準フォーマットへ自動変換</span>
+                </div>
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                  <label class="btn btn-outline" style="cursor: pointer; padding: 0.4rem 0.8rem; font-size: 0.8rem;">
+                    ファイル選択 (.txt / .md / .json)
+                    <input type="file" id="fileImportSimple" accept=".txt,.md,.json" style="display: none;">
+                  </label>
+                  <button type="button" class="btn btn-outline" id="btnDriveImportSimple" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Google Driveから読み込み</button>
+                  <button type="button" class="btn btn-outline" id="btnNormalizeSimpleScript" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; border-color: var(--accent-primary); color: var(--accent-primary); margin-left: auto;">入力台本を標準フォーマットへリライト</button>
+                </div>
+                <textarea id="inputRawScriptSimple" class="form-input form-textarea" rows="4" placeholder="自前の台本や原稿を貼り付けてください（リライトすると STEP 3 の台本編集画面へ進みます）。" style="font-size: 0.84rem;"></textarea>
+              </div>
               <div class="action-footer">
                 <button class="btn btn-primary btn-large" id="btnRunResearch">リサーチを開始する</button>
               </div>
@@ -290,9 +306,17 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
                     最初から新しく作成する
                   </button>
-                  <a href="#" class="btn btn-outline" id="btnDownloadFinal" download>ダウンロード</a>
-                  <button class="btn btn-primary" id="btnPostToYouTube">
-                    <span class="icon-youtube"></span> YouTubeに投稿する
+                  <a href="#" class="btn btn-primary" id="btnDownloadFinal" download style="display: inline-flex; align-items: center; gap: 6px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    MP4をダウンロード保存
+                  </a>
+                  <button type="button" class="btn btn-outline btn-locked" id="btnStudioLockedSimple" disabled title="動画編集スタジオはPro版ショート動画・長尺動画でご利用いただけます">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    動画編集スタジオ <span class="badge badge-pro" style="font-size: 0.65rem; padding: 2px 5px; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border-radius: 4px; margin-left: 4px;">Pro</span>
+                  </button>
+                  <button type="button" class="btn btn-outline btn-locked" id="btnPostToYouTube" disabled title="YouTube直接投稿・予約投稿はPro版ショート・長尺動画・プロ編集スタジオでご利用いただけます">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    YouTubeに直接投稿 <span class="badge badge-pro" style="font-size: 0.65rem; padding: 2px 5px; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border-radius: 4px; margin-left: 4px;">Pro</span>
                   </button>
                 </div>
               </div>
@@ -382,10 +406,43 @@
                   <option value="ukiyoe">本格浮世絵・江戸木版画（北斎・広重・国芳風の伝統錦絵・和紙と墨線）</option>
                   <option value="anime_modern" selected>王道シネマティックアニメ（高精細アニメーション）</option>
                   <option value="manga_dramatic">劇画・青年漫画スタイル（重厚な陰影・迫力ある劇画タッチ）</option>
+                  <option value="comic_manga">漫画風（コミック・セリフ後出しフキダシ演出）</option>
                   <option value="watercolor_ink">水墨画・淡彩日本画絵巻（和紙・墨の濃淡・情緒ある和風画）</option>
                   <option value="flat_2d_motion">モダン2D解説イラスト（ビジネス・教養向けクリーン描画）</option>
                   <option value="photoreal_cinematic">実写映画・シネマティック写実（リアルな映画風映像）</option>
                 </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2.2 漫画風（コミック）オプションUI（カラー/白黒切替 ＆ セリフ後出し演出 ＆ 下部テロップ自動オフ） -->
+          <div id="proShortsComicOptionsBox" style="display: none; margin-top: 0.75rem; margin-bottom: 1rem; padding: 1rem 1.25rem; border: 1px solid rgba(16, 185, 129, 0.45); border-radius: var(--radius-md); background: rgba(6, 24, 38, 0.82);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
+              <span style="font-size: 0.86rem; font-weight: 700; color: #34d399; display: flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                漫画風（コミック）演出オプション
+              </span>
+              <span id="proShortsBottomTelopOffBadge" class="badge" style="font-size: 0.72rem; background: rgba(16, 185, 129, 0.18); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4);">下部通常字幕テロップ（TELOP）：自動オフ（フキダシ被り防止）</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; align-items: end;">
+              <div>
+                <label class="form-label" style="font-size: 0.76rem; margin-bottom: 0.35rem;">1. カラー / 白黒（モノクロ）切替</label>
+                <div class="custom-select-wrapper">
+                  <select id="proShortsComicColorMode" class="form-input form-select" style="font-size: 0.83rem; padding: 0.55rem 2.2rem 0.55rem 0.75rem;">
+                    <option value="color" selected>フルカラー漫画（鮮やかなコミック彩色）</option>
+                    <option value="monochrome">白黒モノクロ漫画（Gペン線画＋スクリーントーン）</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="form-label" style="font-size: 0.76rem; margin-bottom: 0.35rem;">2. セリフ後出し演出（フキダシ浮き出し遅延）</label>
+                <div class="custom-select-wrapper">
+                  <select id="proShortsComicBubbleDelay" class="form-input form-select" style="font-size: 0.83rem; padding: 0.55rem 2.2rem 0.55rem 0.75rem;">
+                    <option value="0.40" selected>ON：0.40秒遅れてポップ出現（推奨）</option>
+                    <option value="0.25">ON：0.25秒遅れて素早く出現</option>
+                    <option value="0.60">ON：0.60秒遅れて余韻後に浮き出し</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
@@ -463,9 +520,9 @@
                 <h4 style="margin: 0; font-size: 1.05rem; color: #f8fafc;">AI動画生成ワーカー（音声試聴・テロップ即時プレビュー・BGM設定）</h4>
               </div>
               <div style="display: flex; align-items: center; gap: 8px; background: rgba(0, 210, 255, 0.08); border: 1px solid rgba(0, 210, 255, 0.25); border-radius: 6px; padding: 0.35rem 0.75rem;">
-                <span style="font-size: 0.78rem; color: var(--text-secondary);">ComfyUI / LTX-Video I2V:</span>
+                <span style="font-size: 0.78rem; color: var(--text-secondary);">AI Core:</span>
                 <span id="proShortsColabStatusBadge" style="font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; background: rgba(0, 210, 255, 0.15); color: #00d2ff; font-family: monospace;">未確認</span>
-                <button type="button" class="btn btn-text" id="btnQuickCheckColabPro" style="font-size: 0.75rem; color: #00d2ff; padding: 2px 6px; text-decoration: underline; cursor: pointer;">接続テスト</button>
+                <button type="button" class="btn btn-text" id="btnQuickCheckColabPro" style="font-size: 0.75rem; color: #00d2ff; padding: 2px 6px; text-decoration: underline; cursor: pointer;">状態確認</button>
               </div>
             </div>
 
@@ -477,27 +534,37 @@
                   <span style="font-size: 0.72rem; color: var(--text-secondary);">その場で声を確認</span>
                 </div>
 
-                <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.35rem;">TTSエンジン</label>
+                <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.35rem;">TTSエンジン（無料TTS / 高品質OSS TTS切替）</label>
                 <div class="custom-select-wrapper" style="margin-bottom: 0.65rem;">
                   <select id="proShortsTtsEngine" class="form-input form-select" style="font-size: 0.85rem; padding: 0.65rem 2.5rem 0.65rem 0.85rem;">
-                    <option value="edge" selected>Edge-TTS (無料・高品質ニューラル)</option>
-                    <option value="openai">OpenAI TTS (超自然・最高峰AI音声)</option>
-                    <option value="voicevox">VOICEVOX (キャラクター音声)</option>
-                    <option value="google">Google Cloud TTS</option>
-                    <option value="elevenlabs">ElevenLabs (映画級クオリティ)</option>
-                    <option value="azure">Azure Speech (高精細)</option>
+                    <optgroup label="── 無料TTS（VOICEVOX / Edge-TTS） ──">
+                      <option value="edge" selected>無料TTS: Edge-TTS (高品質ニューラル)</option>
+                      <option value="voicevox">無料TTS: VOICEVOX (ずんだもん・キャラクター音声)</option>
+                    </optgroup>
+                    <optgroup label="── 高品質OSS TTS（プロ向け・ElevenLabs互換） ──">
+                      <option value="voxcpm">OpenBMB VoxCPM (48kHzスタジオ音質・ElevenLabs互換OSS)</option>
+                      <option value="oss_elevenlabs">高品質OSS TTS: ElevenLabs互換 (F5-TTS / Fish Speech / REST)</option>
+                      <option value="elevenlabs">ElevenLabs Cloud (映画級クオリティ)</option>
+                      <option value="openai">OpenAI TTS (超自然・最高峰AI音声)</option>
+                      <option value="google">Google Cloud TTS</option>
+                      <option value="azure">Azure Speech (高精細)</option>
+                    </optgroup>
                   </select>
                 </div>
 
                 <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
                   <div style="flex: 1;">
-                    <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.35rem;">声色・キャラクター</label>
+                    <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.35rem;">声色・キャラクター / ボイスID</label>
                     <div class="custom-select-wrapper">
                       <select id="proShortsVoiceName" class="form-input form-select" style="font-size: 0.82rem; padding: 0.6rem 2.2rem 0.6rem 0.75rem;">
                         <option value="nanami" selected>七海 (落ち着いた女性・王道解説)</option>
                         <option value="keita">慶太 (爽やかな青年男性)</option>
                         <option value="aoi">あおい (明るい若手女性)</option>
                         <option value="daichi">大地 (渋みのある落ち着いた男性)</option>
+                        <option value="21m00Tcm4TlvDq8ikWAM">Rachel (高品質OSS / ElevenLabs 知的女性)</option>
+                        <option value="pNInz6obpgDQGcFmaJgB">Adam (高品質OSS / ElevenLabs 重厚ナレーター)</option>
+                        <option value="EXAVITQu4vr4xnSDxMaL">Bella (高品質OSS / ElevenLabs 穏やか女性)</option>
+                        <option value="oss_default">OSSカスタムボイス (設定画面のVoice IDを使用)</option>
                         <option value="alloy">Alloy (OpenAI 明瞭・中性的)</option>
                         <option value="echo">Echo (OpenAI 深みのある男性)</option>
                         <option value="shimmer">Shimmer (OpenAI 温かみのある女性)</option>
@@ -664,11 +731,19 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
                 最初から新しく作成する
               </button>
+              <button type="button" class="btn btn-primary btn-studio-handoff" id="btnStudioHandoffPro" data-handoff-mode="pro_shorts">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 12h18"/><path d="M17 3v18"/></svg>
+                動画編集スタジオで開く
+              </button>
               <button type="button" class="btn btn-primary" id="btnEditProShortsVideo" style="background: linear-gradient(135deg, #00d2ff 0%, #0284c7 100%); border-color: #38bdf8; color: #ffffff; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                 編集する（タイムライン編集スタジオ）
               </button>
-              <a id="btnDownloadProShorts" class="btn btn-primary" href="#" download="pro_shorts.mp4">完成動画を保存</a>
+              <button type="button" class="btn btn-primary" id="btnOpenYoutubeUploadProShorts" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); border-color: #f87171; color: #ffffff; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                <span class="icon-youtube"></span>
+                YouTubeに直接投稿（OAuth・予約投稿）
+              </button>
+              <a id="btnDownloadProShorts" class="btn btn-outline" href="#" download="pro_shorts.mp4" style="border-color: var(--accent-primary); color: var(--accent-primary);">完成動画を保存</a>
             </div>
           </div>
         </div>
@@ -754,9 +829,21 @@
                   <option value="ukiyoe">本格浮世絵・江戸木版画（北斎・広重・国芳風の伝統錦絵）</option>
                   <option value="anime_modern" selected>王道シネマティックアニメ（高精細アニメーション）</option>
                   <option value="manga_dramatic">劇画・青年漫画スタイル（重厚な陰影・劇画タッチ）</option>
+                  <option value="comic_manga">漫画風（ビジネス漫画・セリフ後出しフキダシ演出）</option>
                   <option value="watercolor_ink">水墨画・淡彩日本画絵巻（和紙と墨・情緒ある和風画）</option>
                   <option value="flat_2d_motion">モダン2D解説イラスト（ビジネス・教養向け描画）</option>
                   <option value="photoreal_cinematic">実写映画・シネマティック写実（リアル映画風）</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">台本生成モード（洋書翻案 / 自前台本連携）</label>
+              <div class="custom-select-wrapper">
+                <select id="longVideoScriptModeSelect" class="form-input form-select">
+                  <option value="western_book_adaptation" selected>洋書翻案モード（ビジネス漫画・共感会話劇へ自動翻案）</option>
+                  <option value="custom_script_rewrite">自前台本持ち込み（全5章・複数カットJSONへ精密分解）</option>
+                  <option value="standard">通常テーマ執筆モード（テーマから全5章を構築）</option>
                 </select>
               </div>
             </div>
@@ -773,20 +860,65 @@
             </div>
           </div>
 
-          <!-- ユーザー側リファレンス画像アップロード欄（長尺動画用） -->
-          <div id="longVideoRefUploadBox" style="margin-top: 1rem; padding: 1rem 1.25rem; border: 1px solid rgba(0, 210, 255, 0.3); border-radius: var(--radius-md); background: rgba(11, 20, 38, 0.65);">
+          <!-- 長尺ハイブリッド生成 ＆ 漫画演出オプション -->
+          <div id="longVideoComicOptionsBox" style="margin-top: 0.5rem; margin-bottom: 1rem; padding: 0.95rem 1.25rem; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: var(--radius-md); background: rgba(6, 24, 38, 0.78);">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.65rem;">
-              <span style="font-size: 0.85rem; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #00d2ff;"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                リファレンス画像アップロード（任意：キャラクター・画風基準を指定）
+              <span style="font-size: 0.85rem; font-weight: 700; color: #34d399; display: flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                長尺ハイブリッド動画生成 ＆ セリフ浮き出し演出
               </span>
-              <span class="badge" style="font-size: 0.72rem; background: rgba(0, 210, 255, 0.14); color: #38bdf8;">アップロードした画像を最優先リファレンスとして画像・アニメーション動画化</span>
+              <span class="badge" style="font-size: 0.72rem; background: rgba(16, 185, 129, 0.16); color: #6ee7b7;">重要カット＝AIアニメーション動画 / 通常会話＝キャラ固定静止画＋カメラワーク＋セリフ後出し浮出</span>
             </div>
-            <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
-              <input type="text" id="inputRefLabelLongVideo" class="form-input" placeholder="対象キャラ名または『共通』（空欄＝全カット共通リファレンス）" style="flex: 1; min-width: 210px; font-size: 0.82rem; padding: 0.5rem 0.75rem;">
-              <label class="btn btn-outline" style="cursor: pointer; padding: 0.5rem 0.9rem; font-size: 0.8rem; border-color: #00d2ff; color: #00d2ff; display: inline-flex; align-items: center; gap: 6px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+              <div>
+                <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.3rem;">漫画カラー / 白黒（モノクロ）切替</label>
+                <div class="custom-select-wrapper">
+                  <select id="longVideoComicColorMode" class="form-input form-select" style="font-size: 0.82rem; padding: 0.5rem 2.2rem 0.5rem 0.75rem;">
+                    <option value="color" selected>フルカラー（ビジネス漫画・アニメ彩色）</option>
+                    <option value="monochrome">白黒モノクロ（Gペン線画＋スクリーントーン）</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.3rem;">セリフ後出し演出（フキダシ浮き出しディレイ）</label>
+                <div class="custom-select-wrapper">
+                  <select id="longVideoComicBubbleDelay" class="form-input form-select" style="font-size: 0.82rem; padding: 0.5rem 2.2rem 0.5rem 0.75rem;">
+                    <option value="0.40" selected>ON：0.40秒遅れてフキダシ浮き出し（下部字幕オフ）</option>
+                    <option value="0.25">ON：0.25秒遅れて素早く浮き出し（下部字幕オフ）</option>
+                    <option value="0.00">通常下部テロップ表示（フキダシオフ）</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- キャラクター一貫性（キャラ固定）2系統パネル：1. AIでキャラクター生成 / 2. 手持ちのキャラクター画像をアップロード -->
+          <div id="longVideoRefUploadBox" style="margin-top: 1rem; padding: 1.1rem 1.25rem; border: 1px solid rgba(0, 210, 255, 0.35); border-radius: var(--radius-md); background: rgba(11, 20, 38, 0.72);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;">
+              <span style="font-size: 0.88rem; font-weight: 700; color: #f8fafc; display: flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #00d2ff;"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                キャラクター一貫性（キャラ固定・全シーン共通リファレンス注入）
+              </span>
+              <span class="badge" style="font-size: 0.72rem; background: rgba(0, 210, 255, 0.14); color: #38bdf8;">服装・髪型・容姿の特徴と基準画像を全シーンの生成パイプラインへ固定注入</span>
+            </div>
+
+            <!-- 固定するキャラクター特徴入力（AI生成・手持ちアップロード共通） -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 0.6rem; margin-bottom: 0.75rem;">
+              <input type="text" id="inputRefLabelLongVideo" class="form-input" placeholder="キャラ名（例: 主人公・蒼井）" style="font-size: 0.81rem; padding: 0.48rem 0.7rem;">
+              <input type="text" id="inputCharRoleLong" class="form-input" placeholder="役割（例: 若手営業 / メンター）" style="font-size: 0.81rem; padding: 0.48rem 0.7rem;">
+              <input type="text" id="inputCharClothingLong" class="form-input" placeholder="服装（例: 紺スーツと緑ネクタイ）" style="font-size: 0.81rem; padding: 0.48rem 0.7rem;">
+              <input type="text" id="inputCharHairstyleLong" class="form-input" placeholder="髪型（例: 黒髪ショートマッシュ）" style="font-size: 0.81rem; padding: 0.48rem 0.7rem;">
+              <input type="text" id="inputCharAppearanceLong" class="form-input" placeholder="容姿（例: 20代後半・銀縁眼鏡）" style="font-size: 0.81rem; padding: 0.48rem 0.7rem;">
+            </div>
+
+            <div style="display: flex; gap: 0.65rem; align-items: center; flex-wrap: wrap;">
+              <button type="button" class="btn btn-outline" id="btnGenerateAiCharLong" style="padding: 0.5rem 0.95rem; font-size: 0.8rem; border-color: #10b981; color: #34d399; background: rgba(16, 185, 129, 0.1); display: inline-flex; align-items: center; gap: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/></svg>
+                1. AIでキャラクター生成（特徴から固定マスター作成）
+              </button>
+              <label class="btn btn-outline" style="cursor: pointer; padding: 0.5rem 0.95rem; font-size: 0.8rem; border-color: #00d2ff; color: #00d2ff; display: inline-flex; align-items: center; gap: 6px;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                リファレンス画像を選択（複数可）
+                2. 手持ちのキャラクター画像をアップロード
                 <input type="file" id="fileRefImagesLongVideo" accept="image/*" multiple style="display: none;">
               </label>
               <button type="button" class="btn btn-text" id="btnClearRefImagesLongVideo" style="font-size: 0.78rem; color: #94a3b8; display: none;">すべてクリア</button>
@@ -855,27 +987,37 @@
                   <span style="font-size: 0.72rem; color: var(--text-secondary);">その場で声を確認</span>
                 </div>
 
-                <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.35rem;">TTSエンジン</label>
+                <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.35rem;">TTSエンジン（無料TTS / 高品質OSS TTS切替）</label>
                 <div class="custom-select-wrapper" style="margin-bottom: 0.65rem;">
                   <select id="longVideoTtsEngine" class="form-input form-select" style="font-size: 0.85rem; padding: 0.65rem 2.5rem 0.65rem 0.85rem;">
-                    <option value="edge" selected>Edge-TTS (無料・高品質ニューラル)</option>
-                    <option value="openai">OpenAI TTS (超自然・最高峰AI音声)</option>
-                    <option value="voicevox">VOICEVOX (キャラクター音声)</option>
-                    <option value="google">Google Cloud TTS</option>
-                    <option value="elevenlabs">ElevenLabs (映画級クオリティ)</option>
-                    <option value="azure">Azure Speech (高精細)</option>
+                    <optgroup label="── 無料TTS（VOICEVOX / Edge-TTS） ──">
+                      <option value="edge" selected>無料TTS: Edge-TTS (高品質ニューラル)</option>
+                      <option value="voicevox">無料TTS: VOICEVOX (ずんだもん・キャラクター音声)</option>
+                    </optgroup>
+                    <optgroup label="── 高品質OSS TTS（プロ向け・ElevenLabs互換） ──">
+                      <option value="voxcpm">OpenBMB VoxCPM (48kHzスタジオ音質・ElevenLabs互換OSS)</option>
+                      <option value="oss_elevenlabs">高品質OSS TTS: ElevenLabs互換 (F5-TTS / Fish Speech / REST)</option>
+                      <option value="elevenlabs">ElevenLabs Cloud (映画級クオリティ)</option>
+                      <option value="openai">OpenAI TTS (超自然・最高峰AI音声)</option>
+                      <option value="google">Google Cloud TTS</option>
+                      <option value="azure">Azure Speech (高精細)</option>
+                    </optgroup>
                   </select>
                 </div>
 
                 <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
                   <div style="flex: 1;">
-                    <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.35rem;">声色・キャラクター</label>
+                    <label class="form-label" style="font-size: 0.75rem; margin-bottom: 0.35rem;">声色・キャラクター / ボイスID</label>
                     <div class="custom-select-wrapper">
                       <select id="longVideoVoiceName" class="form-input form-select" style="font-size: 0.82rem; padding: 0.6rem 2.2rem 0.6rem 0.75rem;">
                         <option value="nanami" selected>七海 (落ち着いた女性・王道解説)</option>
                         <option value="keita">慶太 (爽やかな青年男性)</option>
                         <option value="aoi">あおい (明るい若手女性)</option>
                         <option value="daichi">大地 (渋みのある落ち着いた男性)</option>
+                        <option value="21m00Tcm4TlvDq8ikWAM">Rachel (高品質OSS / ElevenLabs 知的女性)</option>
+                        <option value="pNInz6obpgDQGcFmaJgB">Adam (高品質OSS / ElevenLabs 重厚ナレーター)</option>
+                        <option value="EXAVITQu4vr4xnSDxMaL">Bella (高品質OSS / ElevenLabs 穏やか女性)</option>
+                        <option value="oss_default">OSSカスタムボイス (設定画面のVoice IDを使用)</option>
                         <option value="alloy">Alloy (OpenAI 明瞭・中性的)</option>
                         <option value="echo">Echo (OpenAI 深みのある男性)</option>
                         <option value="shimmer">Shimmer (OpenAI 温かみのある女性)</option>
@@ -1104,11 +1246,19 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
                 最初から新しく作成する
               </button>
+              <button type="button" class="btn btn-primary btn-studio-handoff" id="btnStudioHandoffLong" data-handoff-mode="long_video">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 12h18"/><path d="M17 3v18"/></svg>
+                動画編集スタジオで開く
+              </button>
               <button type="button" class="btn btn-primary" id="btnEditLongVideo" style="background: linear-gradient(135deg, #00d2ff 0%, #0284c7 100%); border-color: #38bdf8; color: #ffffff; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                 編集する（タイムライン編集スタジオ）
               </button>
-              <a id="btnDownloadLongVideo" class="btn btn-primary" href="#" download="long_video.mp4">完成動画を保存</a>
+              <button type="button" class="btn btn-primary" id="btnOpenYoutubeUploadLongVideo" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); border-color: #f87171; color: #ffffff; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                <span class="icon-youtube"></span>
+                YouTubeに直接投稿（OAuth・予約投稿）
+              </button>
+              <a id="btnDownloadLongVideo" class="btn btn-outline" href="#" download="long_video.mp4" style="border-color: var(--accent-primary); color: var(--accent-primary);">完成動画を保存</a>
             </div>
           </div>
         </div>
@@ -1122,6 +1272,28 @@
         </header>
 
         <div class="glass-card main-form-card">
+          <!-- 生成画面からの引き継ぎパネル（Pro版ショート / 長尺動画） -->
+          <div id="editorHandoffPanel" class="editor-handoff-panel" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.9rem;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="status-dot ready"></span>
+                <strong id="editorHandoffTitle" style="font-size: 0.95rem; color: #f8fafc;">生成画面から動画を引き継ぎました</strong>
+              </div>
+              <span id="editorHandoffMeta" class="badge" style="background: rgba(34, 211, 238, 0.14); color: #22d3ee; font-size: 0.74rem;"></span>
+            </div>
+            <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: flex-start;">
+              <video id="editorHandoffVideo" controls playsinline preload="metadata" style="width: 200px; max-width: 100%; border-radius: 10px; border: 1px solid rgba(34, 211, 238, 0.35); background: #000;"></video>
+              <div style="flex: 1; min-width: 240px;">
+                <p style="font-size: 0.82rem; color: var(--text-secondary); margin: 0 0 0.6rem 0; line-height: 1.5;">動画・ナレーション音声・テロップデータがタイムラインに自動配置されています。</p>
+                <div id="editorHandoffSummary" style="font-size: 0.78rem; color: #cbd5e1; line-height: 1.7;"></div>
+                <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.9rem;">
+                  <button type="button" class="btn btn-primary" id="btnHandoffOpenTimeline" style="font-weight: 700;">タイムライン編集を開く</button>
+                  <button type="button" class="btn btn-outline" id="btnHandoffClear">引き継ぎを解除</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="editorHandoffDivider" style="display: none; margin: 1.25rem 0 1rem 0; font-size: 0.78rem; color: var(--text-muted); text-align: center;">または、手持ち動画をアップロードして編集</div>
           <form id="formEdit" onsubmit="return false;">
             
             <div class="upload-zone" id="uploadZoneB">
@@ -1246,11 +1418,57 @@
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
                   別の動画を編集する
                 </button>
-                <a href="#" class="btn btn-primary" id="btnDownloadFinalB" download="edited_video.mp4" style="display: inline-flex; align-items: center; gap: 6px;">
+                <button type="button" class="btn btn-primary" id="btnOpenYoutubeUploadModeB" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); border-color: #f87171; color: #ffffff; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                  <span class="icon-youtube"></span>
+                  YouTubeに直接投稿（OAuth・予約投稿）
+                </button>
+                <a href="#" class="btn btn-outline" id="btnDownloadFinalB" download="edited_video.mp4" style="display: inline-flex; align-items: center; gap: 6px; border-color: var(--accent-primary); color: var(--accent-primary);">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                   編集完了動画をダウンロード
                 </a>
               </div>
+            </div>
+          </div>
+
+          <!-- マーケティング連携・Webhook設定パネル -->
+          <div class="glass-card" id="cardMarketingWebhook">
+            <div class="card-header-icon" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                <h3>マーケティング連携・Webhook設定</h3>
+              </div>
+              <span class="badge" id="marketingTokenBadge" style="background: rgba(245,158,11,0.15); color: #f59e0b; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">未設定</span>
+            </div>
+            <p class="card-desc">外部シナリオツール（LINE配信, X自動化, ブログ連携等）から完全自動で動画生成をキックできます。発行したMarketing API Tokenと完了通知Webhook URLを使用してください。</p>
+            <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
+              <div class="form-group">
+                <label class="form-label">Marketing API Token（外部システム連携用）</label>
+                <div class="input-action-wrapper">
+                  <input type="text" id="marketingApiTokenDisplay" class="form-input" placeholder="未発行（右のボタンで発行）" readonly style="font-family: monospace; font-size: 0.8rem; background: rgba(0,0,0,0.3);">
+                  <button class="btn btn-primary" id="btnGenerateMarketingToken" style="white-space: nowrap;">発行/再生成</button>
+                </div>
+                <span style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; display: block;">このTokenを外部システムのX-Marketing-Tokenヘッダーに設定してください。再生成すると旧Tokenは無効になります。</span>
+              </div>
+              <div class="guide-box" style="background: rgba(0,0,0,0.2);">
+                <h4 style="font-size: 0.85rem; color: var(--accent-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 6px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                  外部トリガー APIエンドポイント
+                </h4>
+                <code style="display: block; font-size: 0.75rem; color: #a3e635; background: rgba(0,0,0,0.3); padding: 0.5rem 0.75rem; border-radius: 4px; word-break: break-all;">POST /api/marketing/trigger-video-job</code>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.7;">
+                  <strong style="color: #ffffff;">必須ヘッダー:</strong> X-Marketing-Token: &lt;Your Token&gt;<br>
+                  <strong style="color: #ffffff;">パラメータ:</strong> marketing_source, topic / script, mode (pro_shorts / long_manga), style, tts_engine, webhook_callback_url, user_id
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">完了通知 Webhook URL</label>
+                <div class="input-action-wrapper">
+                  <input type="url" id="setMarketingWebhookUrl" class="form-input" placeholder="https://your-tool.example.com/webhook">
+                  <button class="btn btn-outline" id="btnTestMarketingWebhook" style="white-space: nowrap;">テスト送信</button>
+                </div>
+                <div id="marketingWebhookStatus" style="font-size: 0.78rem; margin-top: 0.35rem; color: var(--text-secondary);">Webhook送信ステータス: 未確認</div>
+              </div>
+              <button class="btn btn-primary" id="btnSaveMarketingWebhook" style="width: 100%;">Webhook URL を保存</button>
             </div>
           </div>
 
@@ -1346,28 +1564,47 @@
             </div>
           </div>
 
-          <!-- YouTube 連携 (OAuth) -->
+          <!-- YouTube 連携 (OAuth 2.0) -->
           <div class="glass-card">
-            <div class="card-header-icon"><span class="icon-youtube"></span> <h3>YouTube 連携 (OAuth)</h3></div>
-            <p class="card-desc">YouTubeへの自動投稿機能を使用するための連携設定を行います。</p>
+            <div class="card-header-icon" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="icon-youtube"></span> <h3>YouTube Data API 連携 (OAuth 2.0)</h3>
+              </div>
+              <span class="badge" id="ytOAuthStatusBadge" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; padding: 0.2rem 0.55rem; border-radius: 4px; font-size: 0.72rem; font-weight: 600;">youtube.upload スコープ対応</span>
+            </div>
+            <p class="card-desc">YouTubeへの直接チャンク分割アップロード（Resumable Upload）、予約投稿（日時指定）、カスタムサムネイル設定を行うためのGoogleアカウント連携です。</p>
             
             <!-- かんたん連携用の案内 -->
             <div class="guide-box" id="ytNormalUserGuide" style="margin-bottom: 1rem; border-left: 3px solid var(--accent-primary); background: rgba(57, 255, 20, 0.03);">
               <p style="font-size: 0.85rem; color: var(--text-primary); margin: 0; line-height: 1.4;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg><strong>かんたん連携が有効です</strong><br>
-                面倒なAPIキー等の取得や設定は一切不要です。下のボタンを押すだけで、ご自身のチャンネルを安全に連携・認証できます。
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg><strong>Google OAuth 2.0 かんたん連携が有効です</strong><br>
+                下のボタンからGoogleアカウントで認証するだけで、ご自身のYouTubeチャンネルへの直接アップロード・予約投稿権限（youtube.upload）を安全に保持できます。
               </p>
             </div>
-
-
 
             <div class="youtube-accounts-list" id="ytAccountList">
               <!-- JSでアカウント一覧を描画 -->
             </div>
 
-            <button class="btn btn-primary" id="btnAddYoutube" style="width: 100%; margin-top: 1rem;">
-              新しいYouTubeチャンネルを認証する
+            <button class="btn btn-primary" id="btnAddYoutube" style="width: 100%; margin-top: 1rem; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              <span class="icon-youtube"></span>
+              Googleアカウント連携（YouTubeチャンネル認証）
             </button>
+
+            <details style="margin-top: 0.85rem; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; padding: 0.65rem 0.85rem; background: rgba(15, 23, 42, 0.5);">
+              <summary style="font-size: 0.78rem; color: #38bdf8; cursor: pointer; font-weight: 600;">BYOG用：独自のGoogle Cloud OAuth Client ID / Secretを使用する場合</summary>
+              <div style="margin-top: 0.65rem; display: flex; flex-direction: column; gap: 0.6rem;">
+                <div>
+                  <label class="form-label" style="font-size: 0.74rem;">OAuth 2.0 Client ID</label>
+                  <input type="text" id="setYoutubeClientId" class="form-input" placeholder="xxx.apps.googleusercontent.com" style="font-size: 0.8rem;">
+                </div>
+                <div>
+                  <label class="form-label" style="font-size: 0.74rem;">OAuth 2.0 Client Secret</label>
+                  <input type="password" id="setYoutubeClientSecret" class="form-input" placeholder="GOCSPX-..." style="font-size: 0.8rem;">
+                </div>
+                <button type="button" class="btn btn-outline" id="btnSaveYoutubeByogCreds" style="font-size: 0.78rem; padding: 0.45rem;">独自OAuthクライアント設定を保存</button>
+              </div>
+            </details>
           </div>
 
           <!-- 音声設定 (完全無料・フリーミアム・有料TTS対応) -->
@@ -1381,28 +1618,30 @@
             <p class="card-desc">完全無料のEdge/VOICEVOXから、超自然なOpenAI/ElevenLabsまで、お好みの音声エンジンを自由に選択・設定できます。</p>
             
             <div class="form-group" style="margin-top: 1rem;">
-              <label class="form-label">TTSエンジン</label>
+              <label class="form-label">TTSエンジン（無料TTS / 高品質OSS TTS切替）</label>
               <div class="custom-select-wrapper">
                 <select id="setTtsEngine" class="form-input form-select">
-                  <optgroup label="── 完全無料（API不要 / ローカル / OSS） ──">
-                    <option value="edge">Edge TTS (Microsoft Neural・完全無料・推奨)</option>
-                    <option value="gtts">Google翻訳 TTS (gTTS・完全無料・API不要)</option>
-                    <option value="voicevox">VOICEVOX (ずんだもん・めたん等・商用無料)</option>
-                    <option value="sharevox">SHAREVOX (小春音アミ等・商用無料)</option>
-                    <option value="coeiroink">COEIROINK (つくよみちゃん等・無料)</option>
-                    <option value="aivis">AivisSpeech / Aivis Cloud (無料/高品質)</option>
-                    <option value="oss_custom">次世代OSS (Fish Speech / GPT-SoVITS / ChatTTS / StyleTTS2)</option>
+                  <optgroup label="── 無料TTS（VOICEVOX / Edge-TTS / ローカル） ──">
+                    <option value="edge">無料TTS: Edge-TTS (Microsoft Neural・完全無料・推奨)</option>
+                    <option value="voicevox">無料TTS: VOICEVOX (ずんだもん・めたん等・商用無料)</option>
+                    <option value="gtts">無料TTS: Google翻訳 TTS (gTTS・API不要)</option>
+                    <option value="sharevox">無料TTS: SHAREVOX (小春音アミ等・商用無料)</option>
+                    <option value="coeiroink">無料TTS: COEIROINK (つくよみちゃん等・無料)</option>
+                    <option value="aivis">無料TTS: AivisSpeech / Aivis Cloud (無料/高品質)</option>
                   </optgroup>
-                  <optgroup label="── 制限付き無料 / フリーミアム ──">
-                    <option value="elevenlabs">ElevenLabs (月10,000字無料 / 有料・最高峰音声)</option>
-                    <option value="google">Google Cloud TTS (月数百万字無料 / Neural2)</option>
-                    <option value="azure">Microsoft Azure Speech (月50万字無料 F0 / 有料)</option>
-                    <option value="amazon_polly">Amazon Polly (AWS 12ヶ月無料枠 / 有料)</option>
-                    <option value="ondoku">音読さん Ondoku (月5,000字無料 / 有料)</option>
-                    <option value="coefont">CoeFont (API対応 / 有料)</option>
+                  <optgroup label="── 高品質OSS TTS（プロ向け・ElevenLabs互換） ──">
+                    <option value="voxcpm">OpenBMB VoxCPM (48kHzスタジオ音質・ElevenLabs互換・最新OSS)</option>
+                    <option value="oss_elevenlabs">高品質OSS TTS: ElevenLabs互換アダプタ (POST /v1/text-to-speech・F5-TTS・Fish Speech)</option>
+                    <option value="oss_custom">次世代OSS汎用 (Fish Speech / GPT-SoVITS / ChatTTS / StyleTTS2)</option>
                   </optgroup>
-                  <optgroup label="── 完全有料 / 従量課金 ──">
+                  <optgroup label="── クラウドTTS（フリーミアム / 従量課金） ──">
+                    <option value="elevenlabs">ElevenLabs Cloud (月10,000字無料 / 最高峰音声)</option>
                     <option value="openai">OpenAI TTS (tts-1 / tts-1-hd・最高レベルの自然さ)</option>
+                    <option value="google">Google Cloud TTS (Neural2)</option>
+                    <option value="azure">Microsoft Azure Speech (高精細)</option>
+                    <option value="amazon_polly">Amazon Polly (AWS Neural)</option>
+                    <option value="ondoku">音読さん Ondoku</option>
+                    <option value="coefont">CoeFont (API対応)</option>
                   </optgroup>
                 </select>
               </div>
@@ -1446,6 +1685,41 @@
               <div class="form-group" id="groupElevenLabsKey" style="display:none;">
                 <label class="form-label">ElevenLabs API キー (xi-api-key)</label>
                 <input type="password" id="setElevenLabsKey" class="form-input" placeholder="sk_...">
+              </div>
+
+              <!-- 高品質OSS TTS（OpenBMB VoxCPM / ElevenLabs互換 / F5-TTS / Fish Speech） -->
+              <div id="groupOssElevenlabs" style="display:none; flex-direction: column; gap: 0.75rem; background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 0.9rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 0.82rem; font-weight: 700; color: var(--accent-primary);">高品質OSS TTS（OpenBMB VoxCPM / ElevenLabs互換）接続設定</span>
+                  <span class="badge" style="background: rgba(34, 211, 238, 0.15); color: #22d3ee; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;">Pro / BYOG対応</span>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label class="form-label" style="font-size: 0.76rem;">外部TTSエンドポイントURL (VoxCPM / ElevenLabs互換 / REST)</label>
+                  <input type="text" id="setOssElevenlabsUrl" class="form-input" placeholder="例: http://localhost:8808 (VoxCPM) または http://localhost:9880">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label class="form-label" style="font-size: 0.76rem;">プロトコル / サーバー種別</label>
+                  <select id="setOssElevenlabsProtocol" class="form-input form-select">
+                    <option value="vllm_omni" selected>OpenBMB VoxCPM / vLLM-Omni (POST /v1/audio/speech・48kHzスタジオ音質)</option>
+                    <option value="elevenlabs_compatible">ElevenLabs互換 (POST /v1/text-to-speech/{voice_id})</option>
+                    <option value="f5_fish">F5-TTS / Fish Speech / GPT-SoVITS (/v1/tts)</option>
+                    <option value="openai_compatible">OpenAI Speech互換 (POST /v1/audio/speech)</option>
+                  </select>
+                </div>
+                <div class="form-grid-2" style="gap: 0.65rem;">
+                  <div class="form-group" style="margin: 0;">
+                    <label class="form-label" style="font-size: 0.76rem;">ボイスID (Voice ID / キャラクター)</label>
+                    <input type="text" id="setOssElevenlabsVoiceId" class="form-input" placeholder="例: default, announcer_female, 21m00Tcm4TlvDq8ikWAM">
+                  </div>
+                  <div class="form-group" style="margin: 0;">
+                    <label class="form-label" style="font-size: 0.76rem;">APIキー (認証が必要な場合のみ)</label>
+                    <input type="password" id="setOssElevenlabsKey" class="form-input" placeholder="Bearer / xi-api-key (任意)">
+                  </div>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label class="form-label" style="font-size: 0.76rem;">Voice Design プロンプト (VoxCPM 声質・ニュアンス指定・任意)</label>
+                  <input type="text" id="setVoxcpmPrompt" class="form-input" placeholder="例: 落ち着いた大人の女性アナウンサー。明瞭で聞き取りやすい日本語。">
+                </div>
               </div>
 
               <!-- OpenAI TTS -->
@@ -1610,37 +1884,177 @@
             </div>
           </div>
 
-          <!-- Google Colab 無料T4 GPU API ワーカー -->
+          <!-- AI Core 接続設定 -->
           <div class="glass-card">
             <div class="card-header-icon" style="display: flex; align-items: center; justify-content: space-between;">
               <div style="display: flex; align-items: center; gap: 8px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #00d2ff;"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h10v10H7z"/><path d="M10 10h4v4h-4z"/></svg>
-                <h3>Google Colab 無料T4 GPUワーカー</h3>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #22d3ee;"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h10v10H7z"/><path d="M10 10h4v4h-4z"/></svg>
+                <h3>AI Core 接続設定</h3>
               </div>
-              <span class="badge" style="background: rgba(0, 210, 255, 0.15); color: #00d2ff; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">完全無料 / 負荷ゼロ</span>
+              <span class="badge" style="background: rgba(34, 211, 238, 0.15); color: #22d3ee; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">AI動画生成エンジン</span>
             </div>
-            <p class="card-desc">Google Colabの無料枠（T4 GPU / 16GB VRAM）を活用し、完全無料で FLUX.1 [schnell] 画像生成や動画生成を実行します。</p>
-
-            <div class="guide-box" style="border-left: 3px solid #00d2ff; background: rgba(0, 210, 255, 0.03);">
-              <p style="font-size: 0.82rem; color: var(--text-primary); margin: 0; line-height: 1.5;">
-                <strong>ワンクリック起動手順:</strong><br>
-                1. Google Colabで「T4 GPU」を選択し、付属のNotebookを実行。<br>
-                2. 出力された公開URL（https://xxxx.trycloudflare.com 等）を下に貼り付けて「接続テスト」を押してください。<br>
-                <a href="/colab_worker/kimidori_colab_gpu_worker.ipynb" download="kimidori_colab_gpu_worker.ipynb" style="color: #00d2ff; text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                  Colab Notebook (.ipynb) をダウンロード
-                </a>
-              </p>
-            </div>
+            <p class="card-desc">画像生成・アニメーション動画生成を実行するAI Coreの接続先を設定します。</p>
 
             <div class="form-group" style="margin-top: 1rem;">
-              <label class="form-label">Colab ワーカー公開URL</label>
+              <label class="form-label">AI Core 接続URL</label>
               <div class="input-action-wrapper">
-                <input type="text" id="setColabWorkerUrl" class="form-input" placeholder="https://xxxx.trycloudflare.com">
-                <button class="btn btn-outline" id="btnTestColab" style="white-space: nowrap;">接続テスト</button>
+                <input type="text" id="setColabWorkerUrl" class="form-input" placeholder="https://ai-core.example.com">
+                <button class="btn btn-outline" id="btnTestColab" style="white-space: nowrap;">状態確認</button>
                 <button class="btn btn-primary" id="btnSaveColab">保存</button>
               </div>
               <div id="colabStatusMsg" style="font-size: 0.8rem; margin-top: 0.5rem; color: var(--text-secondary);">ステータス: 未接続</div>
+            </div>
+          </div>
+
+          <!-- BYOG（自前環境接続）モード設定パネル -->
+          <div class="glass-card" id="cardByogSettings">
+            <div class="card-header-icon" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="m9.2 22 3-7"/><path d="m9 15 3 7"/><path d="m15 15 3 7"/></svg>
+                <h3>BYOG（自前環境接続）モード</h3>
+              </div>
+              <span class="badge" id="byogStatusBadge" style="background: rgba(57, 255, 20, 0.15); color: var(--accent-primary); padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">クレジット消費0</span>
+            </div>
+            <p class="card-desc">ご自身のGoogle Colab（A100 / T4 GPU）や自前ComfyUIエンドポイント、独自のGemini APIキーを接続します。BYOG有効時は運営側APIではなく自前環境へ直接ルーティングされ、月間クレジットを消費せずに動画生成を実行できます。</p>
+
+            <div class="form-group" style="margin-top: 1rem;">
+              <label class="form-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="setByogEnabled" style="width: 16px; height: 16px; accent-color: var(--accent-primary);">
+                <span style="font-weight: 600; color: #ffffff;">BYOGモードを有効化（自前エンドポイントを最優先で使用）</span>
+              </label>
+            </div>
+
+            <div id="byogDetailPanel" style="display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.5rem;">
+              <div class="form-group">
+                <label class="form-label">自前 ComfyUI URL（trycloudflare / ngrok / ローカル）</label>
+                <div class="input-action-wrapper">
+                  <input type="text" id="setByogComfyUrl" class="form-input" placeholder="https://xxxx.trycloudflare.com または http://127.0.0.1:8188">
+                  <button class="btn btn-outline" id="btnTestByogComfy" style="white-space: nowrap;">接続テスト</button>
+                </div>
+                <div id="byogComfyStatusMsg" style="font-size: 0.78rem; margin-top: 0.35rem; color: var(--text-secondary);">ComfyUI (/system_stats /queue) 疎通状況: 未確認</div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">自前 Gemini API キー（BYOG専用）</label>
+                <input type="password" id="setByogGeminiKey" class="form-input" placeholder="AIzaSy...">
+                <span style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; display: block;">※空欄の場合は「Gemini API設定」のメインキーが使用されます。</span>
+              </div>
+
+              <button class="btn btn-primary" id="btnSaveByogSettings" style="width: 100%;">BYOG設定を保存</button>
+            </div>
+          </div>
+
+          <!-- Stripe サブスクリプション & クレジット残高カード -->
+          <div class="glass-card" id="cardSubscriptionBilling">
+            <div class="card-header-icon" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                <h3>プラン ＆ クレジット残高</h3>
+              </div>
+              <span class="badge" id="currentPlanBadge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">プロプラン</span>
+            </div>
+            <p class="card-desc">保有クレジット数および契約中の料金プランを確認・アップグレードできます。</p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin: 1rem 0;">
+              <div class="glass-card" style="padding: 0.85rem; background: rgba(255,255,255,0.02); text-align: center;">
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">保有クレジット</span>
+                <div style="font-size: 1.6rem; font-weight: 700; color: var(--accent-primary); margin-top: 0.2rem;" id="userCreditDisplay">100 pt</div>
+              </div>
+              <div class="glass-card" style="padding: 0.85rem; background: rgba(255,255,255,0.02); text-align: center;">
+                <span style="font-size: 0.75rem; color: var(--text-secondary);">プラン区分</span>
+                <div style="font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-top: 0.4rem;" id="userPlanNameDisplay">プロプラン</div>
+              </div>
+            </div>
+
+            <!-- プラン比較 & 申込みボタングループ -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-top: 0.5rem;">
+              <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.85rem; background: rgba(0,0,0,0.2);">
+                <div style="font-weight: 700; font-size: 0.95rem; color: #ffffff;">ライト</div>
+                <div style="font-size: 1.25rem; font-weight: 700; color: var(--accent-secondary); margin: 0.2rem 0;">月額 1,980円</div>
+                <ul style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.6; padding-left: 1rem; margin: 0.5rem 0;">
+                  <li>300 pt / 月</li>
+                  <li>無料TTSのみ</li>
+                  <li>MP4ダウンロードのみ</li>
+                  <li>スタジオ利用不可</li>
+                </ul>
+                <button type="button" class="btn btn-outline btn-subscribe-plan" data-plan="lite" style="width: 100%; font-size: 0.8rem; padding: 0.4rem;">ライトに加入</button>
+              </div>
+
+              <div style="border: 2px solid var(--accent-primary); border-radius: 8px; padding: 0.85rem; background: rgba(57, 255, 20, 0.04); position: relative;">
+                <span style="position: absolute; top: -10px; right: 10px; background: var(--accent-primary); color: #000; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px;">人気</span>
+                <div style="font-weight: 700; font-size: 0.95rem; color: #ffffff;">プロ</div>
+                <div style="font-size: 1.25rem; font-weight: 700; color: var(--accent-primary); margin: 0.2rem 0;">月額 3,980円</div>
+                <ul style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.6; padding-left: 1rem; margin: 0.5rem 0;">
+                  <li>1,000 pt / 月</li>
+                  <li>高品質VoxCPM TTS</li>
+                  <li>YouTube直接OAuth投稿</li>
+                  <li>エディタ＆BGM完全自由</li>
+                </ul>
+                <button type="button" class="btn btn-primary btn-subscribe-plan" data-plan="pro" style="width: 100%; font-size: 0.8rem; padding: 0.4rem;">プロに加入</button>
+              </div>
+
+              <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.85rem; background: rgba(0,0,0,0.2);">
+                <div style="font-weight: 700; font-size: 0.95rem; color: #ffffff;">プレミアム</div>
+                <div style="font-size: 1.25rem; font-weight: 700; color: #38bdf8; margin: 0.2rem 0;">月額 7,980円</div>
+                <ul style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.6; padding-left: 1rem; margin: 0.5rem 0;">
+                  <li>3,000 pt / 月</li>
+                  <li>全機能フル開放</li>
+                  <li>生成優先キュー</li>
+                </ul>
+                <button type="button" class="btn btn-outline btn-subscribe-plan" data-plan="premium" style="width: 100%; font-size: 0.8rem; padding: 0.4rem;">プレミアム加入</button>
+              </div>
+            </div>
+
+            <!-- 単発クレジットチャージ -->
+            <div style="margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+              <span style="font-size: 0.8rem; color: var(--text-secondary);">クレジット単発追加チャージ:</span>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button type="button" class="btn btn-outline btn-charge-credits" data-pack="pack_small" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">+200pt (980円)</button>
+                <button type="button" class="btn btn-outline btn-charge-credits" data-pack="pack_medium" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">+600pt (2,480円)</button>
+                <button type="button" class="btn btn-outline btn-charge-credits" data-pack="pack_large" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">+1500pt (4,980円)</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- マーケティング連携・Webhook設定パネル -->
+          <div class="glass-card" id="cardMarketingWebhook">
+            <div class="card-header-icon" style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #f59e0b;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                <h3>マーケティング連携・Webhook設定</h3>
+              </div>
+              <span class="badge" id="marketingTokenBadge" style="background: rgba(245,158,11,0.15); color: #f59e0b; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">未設定</span>
+            </div>
+            <p class="card-desc">外部シナリオツール（LINE配信, X自動化, ブログ連携等）から完全自動で動画生成をキックできます。発行したMarketing API Tokenと完了通知Webhook URLを使用してください。</p>
+            <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem;">
+              <div class="form-group">
+                <label class="form-label">Marketing API Token（外部システム連携用）</label>
+                <div class="input-action-wrapper">
+                  <input type="text" id="marketingApiTokenDisplay" class="form-input" placeholder="未発行（右のボタンで発行）" readonly style="font-family: monospace; font-size: 0.8rem; background: rgba(0,0,0,0.3);">
+                  <button class="btn btn-primary" id="btnGenerateMarketingToken" style="white-space: nowrap;">発行/再生成</button>
+                </div>
+                <span style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; display: block;">このTokenを外部システムのX-Marketing-Tokenヘッダーに設定してください。再生成すると旧Tokenは無効になります。</span>
+              </div>
+              <div class="guide-box" style="background: rgba(0,0,0,0.2);">
+                <h4 style="font-size: 0.85rem; color: var(--accent-primary); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 6px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                  外部トリガー APIエンドポイント
+                </h4>
+                <code style="display: block; font-size: 0.75rem; color: #a3e635; background: rgba(0,0,0,0.3); padding: 0.5rem 0.75rem; border-radius: 4px; word-break: break-all;">POST /api/marketing/trigger-video-job</code>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem; line-height: 1.7;">
+                  <strong style="color: #ffffff;">必須ヘッダー:</strong> X-Marketing-Token: &lt;Your Token&gt;<br>
+                  <strong style="color: #ffffff;">パラメータ:</strong> marketing_source, topic / script, mode (pro_shorts / long_manga), style, tts_engine, webhook_callback_url, user_id
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">完了通知 Webhook URL</label>
+                <div class="input-action-wrapper">
+                  <input type="url" id="setMarketingWebhookUrl" class="form-input" placeholder="https://your-tool.example.com/webhook">
+                  <button class="btn btn-outline" id="btnTestMarketingWebhook" style="white-space: nowrap;">テスト送信</button>
+                </div>
+                <div id="marketingWebhookStatus" style="font-size: 0.78rem; margin-top: 0.35rem; color: var(--text-secondary);">Webhook送信ステータス: 未確認</div>
+              </div>
+              <button class="btn btn-primary" id="btnSaveMarketingWebhook" style="width: 100%;">Webhook URL を保存</button>
             </div>
           </div>
 
@@ -1814,49 +2228,43 @@
           </div>
         </div>
 
-        <!-- ==================== Google Colab (ComfyUI / LTX-Video) 接続・起動管理 ==================== -->
-        <div class="glass-card" style="margin-top: 2rem; border-top: 2px solid #00d2ff;">
+        <!-- ==================== AI Core 接続管理 ==================== -->
+        <div class="glass-card" style="margin-top: 2rem; border-top: 2px solid #22d3ee;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
             <div style="display: flex; align-items: center; gap: 10px;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #00d2ff;"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h10v10H7z"/><path d="M10 10h4v4h-4z"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #22d3ee;"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h10v10H7z"/><path d="M10 10h4v4h-4z"/></svg>
               <div>
-                <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-primary);">Google Colab (ComfyUI / LTX-Video) 接続・起動管理</h3>
-                <p style="margin: 0.25rem 0 0 0; font-size: 0.82rem; color: var(--text-secondary);">Pro版ショート動画用無料GPUワーカー（Cloudflareトンネル）の接続URL設定・疎通確認</p>
+                <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-primary);">AI Core 接続管理</h3>
+                <p style="margin: 0.25rem 0 0 0; font-size: 0.82rem; color: var(--text-secondary);">Pro版動画生成用AI演算コアの接続先設定・疎通確認</p>
               </div>
             </div>
-            <span id="adminColabStatusBadge" class="badge" style="background: rgba(0, 210, 255, 0.15); color: #00d2ff; padding: 0.3rem 0.75rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">未確認</span>
+            <span id="adminColabStatusBadge" class="badge" style="background: rgba(34, 211, 238, 0.15); color: #22d3ee; padding: 0.3rem 0.75rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">未確認</span>
           </div>
 
-          <div class="guide-box" style="border-left: 3px solid #00d2ff; background: rgba(0, 210, 255, 0.03); margin-bottom: 1.25rem;">
+          <div class="guide-box" style="border-left: 3px solid #22d3ee; background: rgba(34, 211, 238, 0.03); margin-bottom: 1.25rem;">
             <p style="font-size: 0.82rem; color: var(--text-primary); margin: 0; line-height: 1.6;">
-              <strong>Colabワーカー運用手順:</strong><br>
-              1. Google ColabでComfyUI（LTX-Video搭載）ノートブックを実行し、Cloudflareトンネルを起動します。<br>
-              2. 出力された公開URL（例: <code style="background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 3px;">https://xxxx.trycloudflare.com</code>）を下記に入力して「保存」および「接続テスト」を実行してください。<br>
-              3. 接続成功後は、Pro版ショート動画の一括生成時に自動でこのGPUワーカーへリクエストが投入されます。
+              <strong>運用手順:</strong><br>
+              1. 管理者から共有されたAI Core接続URLを下記に入力します。<br>
+              2. 「保存」後に「状態確認」を実行し、AI Core: Online になることを確認してください。<br>
+              3. 接続後は、Pro版ショート動画の一括生成時に自動でAI Coreへ処理が割り当てられます。
             </p>
           </div>
 
           <div class="form-group" style="margin-bottom: 0.75rem;">
-            <label class="form-label" style="font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center;">
-              <span>Colab / ComfyUI 公開接続URL</span>
-              <a href="https://colab.research.google.com/" target="_blank" rel="noopener noreferrer" style="color: #00d2ff; font-size: 0.8rem; text-decoration: underline; display: inline-flex; align-items: center; gap: 4px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                Google Colabを開く
-              </a>
-            </label>
+            <label class="form-label" style="font-size: 0.85rem;">AI Core 接続URL</label>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-              <input type="text" id="adminColabWorkerUrl" class="form-input" placeholder="https://alexander-cedar-pastor-cornell.trycloudflare.com" style="flex: 1; min-width: 280px; font-family: monospace; font-size: 0.85rem;">
+              <input type="text" id="adminColabWorkerUrl" class="form-input" placeholder="https://ai-core.example.com" style="flex: 1; min-width: 280px; font-family: monospace; font-size: 0.85rem;">
               <button class="btn btn-primary" id="btnAdminSaveColab" style="white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
                 保存
               </button>
-              <button class="btn btn-outline" id="btnAdminTestColab" style="white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; border-color: #00d2ff; color: #00d2ff;">
+              <button class="btn btn-outline" id="btnAdminTestColab" style="white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; border-color: #22d3ee; color: #22d3ee;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-                接続テスト
+                状態確認
               </button>
             </div>
             <div id="adminColabStatusMsg" style="font-size: 0.82rem; margin-top: 0.6rem; color: var(--text-secondary); line-height: 1.5;">
-              ステータス: 未確認（URLを設定して「保存」「接続テスト」を行ってください）
+              ステータス: 未確認（接続先を設定して「保存」「状態確認」を行ってください）
             </div>
           </div>
         </div>
@@ -2087,6 +2495,10 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             編集内容を反映してMP4を再書き出し
           </button>
+          <button type="button" class="btn btn-primary" id="btnEditorDirectUploadYoutube" style="padding: 0.48rem 0.95rem; font-size: 0.82rem; font-weight: 700; background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); border-color: #f87171; color: #ffffff; display: inline-flex; align-items: center; gap: 5px;">
+            <span class="icon-youtube"></span>
+            YouTubeに直接投稿
+          </button>
           <a href="#" id="btnEditorDownloadMp4" class="btn btn-outline" download="edited_video.mp4" style="padding: 0.45rem 0.85rem; font-size: 0.8rem; border-color: var(--accent-primary); color: var(--accent-primary); display: inline-flex; align-items: center; gap: 5px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             現在のMP4を保存
@@ -2126,6 +2538,13 @@
               <video id="editorCutVideoEl" muted loop playsinline style="width: 100%; height: 100%; object-fit: cover; display: none;"></video>
               <img id="editorCutImageEl" alt="Cut Visual" style="width: 100%; height: 100%; object-fit: cover; display: none;" />
               <!-- ドラッグ可能なライブテロップボックス -->
+              <div id="studioWipePreview" class="studio-wipe-preview" style="display: none;">
+                <video id="studioWipeFaceEl" muted loop playsinline style="display: none;"></video>
+                <div id="studioWipeCharWrap" class="studio-wipe-char" style="display: none;">
+                  <img id="studioWipeCharImg" alt="character">
+                  <span id="studioWipeMouthEl" class="studio-wipe-mouth"></span>
+                </div>
+              </div>
               <div id="editorDraggableTelopBox" class="editor-draggable-telop" title="上下にドラッグしてテロップ位置を直感的に変更できます" style="top: 76%;">
                 <div id="editorLiveTelopText" class="editor-live-telop-text">テロッププレビュー</div>
               </div>
@@ -2157,6 +2576,8 @@
             <button type="button" class="pro-editor-tab" data-editor-tab="narration">2. ナレーション変更</button>
             <button type="button" class="pro-editor-tab" data-editor-tab="cut">3. カット作業・素材</button>
             <button type="button" class="pro-editor-tab" data-editor-tab="audio">4. 効果音(SE)・BGM</button>
+            <button type="button" class="pro-editor-tab" data-editor-tab="studio">5. ジェットカット・B-roll・ワイプ</button>
+            <button type="button" class="pro-editor-tab" data-editor-tab="studio2">6. テロップクリップ・BGMトラック</button>
           </div>
 
           <!-- Tab 1: テロップ種類・位置・サイズ編集 -->
@@ -2250,11 +2671,17 @@
                 <label class="form-label" style="font-size: 0.75rem;">TTSエンジン</label>
                 <div class="custom-select-wrapper">
                   <select id="editorCutTtsEngine" class="form-input form-select" style="font-size: 0.8rem; padding: 0.5rem 2rem 0.5rem 0.65rem;">
-                    <option value="edge">Edge-TTS (標準)</option>
-                    <option value="openai">OpenAI TTS</option>
-                    <option value="voicevox">VOICEVOX</option>
-                    <option value="google">Google Cloud TTS</option>
-                    <option value="elevenlabs">ElevenLabs</option>
+                    <optgroup label="── 無料TTS ──">
+                      <option value="edge">無料TTS: Edge-TTS (標準)</option>
+                      <option value="voicevox">無料TTS: VOICEVOX</option>
+                    </optgroup>
+                    <optgroup label="── 高品質OSS TTS / Pro ──">
+                      <option value="voxcpm">OpenBMB VoxCPM (48kHzスタジオ音質・ElevenLabs互換)</option>
+                      <option value="oss_elevenlabs">高品質OSS TTS (ElevenLabs互換)</option>
+                      <option value="elevenlabs">ElevenLabs Cloud</option>
+                      <option value="openai">OpenAI TTS</option>
+                      <option value="google">Google Cloud TTS</option>
+                    </optgroup>
                   </select>
                 </div>
               </div>
@@ -2266,6 +2693,13 @@
                     <option value="keita">慶太 (男性・爽やか)</option>
                     <option value="aoi">あおい (女性・若手)</option>
                     <option value="daichi">大地 (男性・渋め)</option>
+                    <option value="default">VoxCPM 標準 (48kHzスタジオクリア)</option>
+                    <option value="announcer_female">VoxCPM 女性アナウンサー</option>
+                    <option value="narrator_male">VoxCPM 男性ナレーター</option>
+                    <option value="21m00Tcm4TlvDq8ikWAM">Rachel (高品質OSS / ElevenLabs)</option>
+                    <option value="pNInz6obpgDQGcFmaJgB">Adam (高品質OSS / ElevenLabs)</option>
+                    <option value="EXAVITQu4vr4xnSDxMaL">Bella (高品質OSS / ElevenLabs)</option>
+                    <option value="oss_default">OSSカスタムボイス (設定画面ID)</option>
                     <option value="alloy">Alloy (OpenAI)</option>
                     <option value="echo">Echo (OpenAI)</option>
                     <option value="shimmer">Shimmer (OpenAI)</option>
@@ -2412,6 +2846,110 @@
               </div>
             </div>
           </div>
+
+          <!-- Tab 5: ジェットカット / Pexels B-roll / 右下ワイプ -->
+          <div class="pro-editor-tab-content" id="editorTabStudio" style="display: none;">
+            <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(34, 211, 238, 0.28); border-radius: 10px; padding: 0.9rem; margin-bottom: 0.85rem;">
+              <div style="font-size: 0.84rem; font-weight: 700; color: #22d3ee; margin-bottom: 0.55rem;">自動ジェットカット（無音区間の自動トリミング）</div>
+              <div class="form-grid-2" style="gap: 0.75rem; margin-bottom: 0.6rem;">
+                <div>
+                  <label class="form-label" style="font-size: 0.75rem;">無音しきい値: <span id="studioJetThresholdLabel" style="color: #22d3ee;">-40 dB</span></label>
+                  <input type="range" id="studioJetThreshold" class="form-range" min="-60" max="-20" step="1" value="-40">
+                </div>
+                <div>
+                  <label class="form-label" style="font-size: 0.75rem;">最短無音長: <span id="studioJetMinLabel" style="color: #22d3ee;">0.30秒</span></label>
+                  <input type="range" id="studioJetMinSilence" class="form-range" min="0.1" max="1.0" step="0.05" value="0.3">
+                </div>
+              </div>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button type="button" class="btn btn-primary" id="btnStudioJetCut" style="flex: 1; padding: 0.55rem 0.9rem; font-size: 0.82rem; font-weight: 700;">自動ジェットカットを実行</button>
+                <button type="button" class="btn btn-outline" id="btnStudioJetReset" style="padding: 0.55rem 0.9rem; font-size: 0.78rem;">元の尺に戻す</button>
+              </div>
+              <div id="studioJetResult" style="font-size: 0.76rem; color: #94a3b8; margin-top: 0.5rem;">全カットの音声波形を解析し、無音区間を詰めて前詰めします。</div>
+            </div>
+
+            <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(34, 211, 238, 0.28); border-radius: 10px; padding: 0.9rem; margin-bottom: 0.85rem;">
+              <div style="font-size: 0.84rem; font-weight: 700; color: #22d3ee; margin-bottom: 0.55rem;">Pexels 文脈B-roll自動カットイン</div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.6rem; margin-bottom: 0.6rem;">
+                <div>
+                  <label class="form-label" style="font-size: 0.75rem;">素材タイプ</label>
+                  <div class="custom-select-wrapper"><select id="studioBrollKind" class="form-input form-select" style="font-size: 0.8rem; padding: 0.45rem 2rem 0.45rem 0.65rem;"><option value="video">フリー動画</option><option value="photo">フリー画像</option></select></div>
+                </div>
+                <div>
+                  <label class="form-label" style="font-size: 0.75rem;">挿入秒数 (3-5秒)</label>
+                  <input type="number" id="studioBrollDur" class="form-input" min="3" max="5" step="0.5" value="4" style="padding: 0.4rem 0.6rem; font-size: 0.82rem;">
+                </div>
+                <div>
+                  <label class="form-label" style="font-size: 0.75rem;">挿入間隔 (Nカットごと)</label>
+                  <input type="number" id="studioBrollEvery" class="form-input" min="1" max="10" step="1" value="2" style="padding: 0.4rem 0.6rem; font-size: 0.82rem;">
+                </div>
+              </div>
+              <button type="button" class="btn btn-primary" id="btnStudioBrollAuto" style="width: 100%; padding: 0.55rem 0.9rem; font-size: 0.82rem; font-weight: 700;">キーワード抽出 + B-roll自動配置</button>
+              <div id="studioBrollList" style="margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.4rem;"></div>
+            </div>
+
+            <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(34, 211, 238, 0.28); border-radius: 10px; padding: 0.9rem; margin-bottom: 0.85rem;">
+              <div style="font-size: 0.84rem; font-weight: 700; color: #22d3ee; margin-bottom: 0.55rem;">右下ワイプ（実写顔 / トーキングキャラ）</div>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #e2e8f0; cursor: pointer; margin-bottom: 0.6rem;">
+                <input type="checkbox" id="studioWipeEnabled"> ワイプを合成する
+              </label>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.6rem; margin-bottom: 0.6rem;">
+                <div>
+                  <label class="form-label" style="font-size: 0.75rem;">ワイプ種別</label>
+                  <div class="custom-select-wrapper"><select id="studioWipeMode" class="form-input form-select" style="font-size: 0.8rem; padding: 0.45rem 2rem 0.45rem 0.65rem;"><option value="character">トーキングキャラ（口パク）</option><option value="face">実写顔カメラ映像</option></select></div>
+                </div>
+                <div>
+                  <label class="form-label" style="font-size: 0.75rem;">形状</label>
+                  <div class="custom-select-wrapper"><select id="studioWipeShape" class="form-input form-select" style="font-size: 0.8rem; padding: 0.45rem 2rem 0.45rem 0.65rem;"><option value="circle">円形</option><option value="rounded">角丸</option></select></div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem;">
+                <label class="btn btn-outline" style="cursor: pointer; padding: 0.45rem 0.8rem; font-size: 0.78rem;">キャラ画像・顔写真を選択
+                  <input type="file" id="fileStudioChar" accept="image/*" style="display: none;">
+                </label>
+                <label class="btn btn-outline" style="cursor: pointer; padding: 0.45rem 0.8rem; font-size: 0.78rem;">顔カメラ映像を選択 (.mp4)
+                  <input type="file" id="fileStudioFace" accept="video/*" style="display: none;">
+                </label>
+              </div>
+              <div id="studioWipeFileInfo" style="font-size: 0.74rem; color: #94a3b8; margin-bottom: 0.6rem;">素材未選択</div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.6rem;">
+                <div><label class="form-label" style="font-size: 0.75rem;">サイズ: <span id="studioWipeSizeLabel" style="color: #22d3ee;">26%</span></label><input type="range" id="studioWipeSize" class="form-range" min="14" max="45" value="26"></div>
+                <div><label class="form-label" style="font-size: 0.75rem;">横位置: <span id="studioWipeXLabel" style="color: #22d3ee;">80%</span></label><input type="range" id="studioWipeX" class="form-range" min="10" max="92" value="80"></div>
+                <div><label class="form-label" style="font-size: 0.75rem;">縦位置: <span id="studioWipeYLabel" style="color: #22d3ee;">62%</span></label><input type="range" id="studioWipeY" class="form-range" min="10" max="92" value="62"></div>
+              </div>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 0.76rem; color: #cbd5e1; cursor: pointer; margin-top: 0.5rem;">
+                <input type="checkbox" id="studioWipeMouth" checked> 口パクを強調（キャラ用）
+              </label>
+            </div>
+          </div>
+
+          <!-- Tab 6: テロップクリップ / BGMトラック -->
+          <div class="pro-editor-tab-content" id="editorTabStudio2" style="display: none;">
+            <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(34, 211, 238, 0.28); border-radius: 10px; padding: 0.9rem; margin-bottom: 0.85rem;">
+              <div style="font-size: 0.84rem; font-weight: 700; color: #22d3ee; margin-bottom: 0.55rem;">テロップクリップ（自動生成・直接編集）</div>
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: #e2e8f0; cursor: pointer; margin-bottom: 0.55rem;">
+                <input type="checkbox" id="studioTelopsOverride"> このテロップクリップを書き出しに使う（カット別テロップは無効化）
+              </label>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem;">
+                <button type="button" class="btn btn-primary" id="btnStudioTelopAuto" style="flex: 1; padding: 0.5rem 0.8rem; font-size: 0.8rem; font-weight: 700;">台本・音声から自動配置</button>
+                <button type="button" class="btn btn-outline" id="btnStudioTelopAdd" style="padding: 0.5rem 0.8rem; font-size: 0.78rem;">テロップを追加</button>
+              </div>
+              <div id="studioTelopList" style="display: flex; flex-direction: column; gap: 0.45rem;"></div>
+            </div>
+
+            <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(34, 211, 238, 0.28); border-radius: 10px; padding: 0.9rem; margin-bottom: 0.85rem;">
+              <div style="font-size: 0.84rem; font-weight: 700; color: #22d3ee; margin-bottom: 0.55rem;">BGMトラック（タイムライン最下部）</div>
+              <div id="studioBgmInfo" style="font-size: 0.76rem; color: #94a3b8; margin-bottom: 0.5rem;">BGM: --</div>
+              <label class="form-label" style="font-size: 0.75rem;">BGM音量: <span id="studioBgmVolLabel" style="color: #22d3ee; font-weight: 700;">15%</span></label>
+              <input type="range" id="studioBgmVol" class="form-range" min="0" max="100" step="1" value="15">
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem;">
+                <button type="button" class="btn btn-outline" id="btnStudioBgmMute" style="padding: 0.45rem 0.8rem; font-size: 0.78rem;">ミュート</button>
+                <label class="btn btn-outline" style="cursor: pointer; padding: 0.45rem 0.8rem; font-size: 0.78rem;">手持ち音源に差し替え (.mp3/.wav)
+                  <input type="file" id="fileStudioBgm" accept="audio/*" style="display: none;">
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2427,6 +2965,150 @@
         <div id="editorTimelineTracksContainer" class="pro-editor-timeline-tracks">
           <!-- JSで各カットのマルチトラックブロックを動的描画 -->
         </div>
+        <div id="studioExtraTracks" class="studio-extra-tracks"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== YouTube Data API (OAuth 2.0) 直接投稿 ＆ 予約投稿パネル ==================== -->
+  <div class="modal-overlay" id="youtubeDirectUploadModal" style="display: none; z-index: 10050;">
+    <div class="modal-content glass-card" style="max-width: 680px; width: 94%; max-height: 92vh; overflow-y: auto; text-align: left; padding: 1.5rem 1.75rem; border: 1px solid rgba(239, 68, 68, 0.45); background: rgba(11, 15, 25, 0.98);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.1rem; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(148, 163, 184, 0.2);">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="icon-youtube" style="transform: scale(1.15);"></span>
+          <div>
+            <h2 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #f8fafc;">YouTubeに直接投稿（OAuth 2.0・予約投稿）</h2>
+            <div id="ytUploadJobMetaText" style="font-size: 0.75rem; color: #94a3b8; margin-top: 2px;">Google API Client チャンク分割アップロード（Resumable Upload）対応</div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-text" id="btnCloseYoutubeUploadModal" style="color: #94a3b8; font-size: 0.85rem;">閉じる [X]</button>
+      </div>
+
+      <!-- 1. OAuth 2.0 アカウント連携・チャンネル選択 -->
+      <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.22); border-radius: 10px; padding: 1rem; margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.65rem;">
+          <label class="form-label" style="margin: 0; font-size: 0.82rem; font-weight: 700; color: #f8fafc;">1. 投稿先YouTubeチャンネル（Google OAuth 2.0 連携）</label>
+          <span id="ytUploadConnBadge" class="badge" style="background: rgba(148, 163, 184, 0.2); color: #cbd5e1; font-size: 0.72rem; padding: 2px 8px; border-radius: 4px;">確認中...</span>
+        </div>
+        <div style="display: flex; gap: 0.65rem; flex-wrap: wrap; align-items: center;">
+          <div class="custom-select-wrapper" style="flex: 1; min-width: 220px;">
+            <select id="ytUploadChannelSelect" class="form-input form-select" style="font-size: 0.84rem; padding: 0.55rem 2.2rem 0.55rem 0.75rem;">
+              <option value="">-- Googleアカウントを連携してください --</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-outline" id="btnConnectYoutubeInModal" style="padding: 0.55rem 0.95rem; font-size: 0.8rem; border-color: #ef4444; color: #f87171; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;">
+            <span class="icon-youtube"></span>
+            Googleアカウント連携 (OAuth 2.0)
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. 動画タイトル・概要欄・タグ設定 -->
+      <div class="form-group" style="margin-bottom: 0.9rem;">
+        <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">2. 動画タイトル (最大100文字)</label>
+        <input type="text" id="ytUploadTitle" class="form-input" maxlength="100" placeholder="動画のタイトルを入力してください" style="font-size: 0.88rem;">
+      </div>
+
+      <div class="form-group" style="margin-bottom: 0.9rem;">
+        <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">3. 概要欄・説明文 (Description)</label>
+        <textarea id="ytUploadDescription" class="form-input form-textarea" rows="3" placeholder="動画の説明文、目次、関連リンク、ハッシュタグを入力してください" style="font-size: 0.84rem;"></textarea>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 1rem;">
+        <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">4. タグ / ハッシュタグ（カンマ区切り）</label>
+        <input type="text" id="ytUploadTags" class="form-input" placeholder="例: Shorts, ビジネス漫画, 雑学, AI解説" style="font-size: 0.84rem;">
+      </div>
+
+      <!-- 3. 公開設定 ＆ 予約投稿（日時指定） -->
+      <div class="form-grid-2" style="gap: 0.85rem; margin-bottom: 1rem;">
+        <div>
+          <label class="form-label" style="font-size: 0.8rem; font-weight: 600;">5. 公開設定 (Privacy Status)</label>
+          <div class="custom-select-wrapper">
+            <select id="ytUploadPrivacyStatus" class="form-input form-select" style="font-size: 0.84rem; padding: 0.55rem 2.2rem 0.55rem 0.75rem;">
+              <option value="private">非公開 (Private - 自分のみ確認)</option>
+              <option value="unlisted">限定公開 (Unlisted - リンク共有のみ)</option>
+              <option value="public">公開 (Public - 今すぐ全体公開)</option>
+              <option value="scheduled">予約投稿 (Scheduled - 指定日時に自動公開)</option>
+            </select>
+          </div>
+        </div>
+        <div id="ytUploadScheduleGroup" style="display: none;">
+          <label class="form-label" style="font-size: 0.8rem; font-weight: 600; color: #38bdf8;">予約投稿日時 (ローカル日時)</label>
+          <input type="datetime-local" id="ytUploadScheduleDatetime" class="form-input" style="font-size: 0.84rem; padding: 0.5rem 0.7rem;">
+        </div>
+      </div>
+
+      <!-- 4. サムネイル画像設定（動画内カット または 自前画像） -->
+      <div style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(148, 163, 184, 0.22); border-radius: 10px; padding: 0.95rem; margin-bottom: 1.15rem;">
+        <label class="form-label" style="font-size: 0.82rem; font-weight: 700; color: var(--accent-primary); margin-bottom: 0.55rem;">6. サムネイル画像設定（動画内カット または 自前画像）</label>
+        <div class="form-grid-2" style="gap: 0.75rem; align-items: start;">
+          <div>
+            <div class="custom-select-wrapper" style="margin-bottom: 0.6rem;">
+              <select id="ytUploadThumbnailMode" class="form-input form-select" style="font-size: 0.82rem; padding: 0.5rem 2rem 0.5rem 0.7rem;">
+                <option value="cut" selected>動画内カット画像を使用</option>
+                <option value="custom">自前のサムネイル画像をアップロード</option>
+                <option value="none">YouTube自動サムネイル（設定しない）</option>
+              </select>
+            </div>
+
+            <!-- 動画内カット選択 -->
+            <div id="ytUploadThumbCutBox">
+              <label class="form-label" style="font-size: 0.75rem;">使用するカット番号</label>
+              <div class="custom-select-wrapper">
+                <select id="ytUploadThumbnailCutSelect" class="form-input form-select" style="font-size: 0.8rem; padding: 0.45rem 2rem 0.45rem 0.65rem;">
+                  <option value="0">Cut #1 (冒頭フック・表紙カット)</option>
+                  <option value="1">Cut #2</option>
+                  <option value="2">Cut #3</option>
+                  <option value="3">Cut #4</option>
+                  <option value="4">Cut #5</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 自前画像アップロード -->
+            <div id="ytUploadThumbCustomBox" style="display: none;">
+              <label class="btn btn-outline" style="cursor: pointer; width: 100%; padding: 0.5rem; font-size: 0.78rem; text-align: center; display: block;">
+                サムネイル画像を選択 (.png / .jpg)
+                <input type="file" id="fileYtUploadCustomThumb" accept="image/png,image/jpeg,image/webp" style="display: none;">
+              </label>
+              <div id="ytUploadCustomThumbName" style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px;">未選択</div>
+            </div>
+          </div>
+
+          <div style="text-align: center; background: #070b14; border: 1px dashed rgba(148, 163, 184, 0.3); border-radius: 8px; padding: 0.5rem; min-height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <span style="font-size: 0.68rem; color: #94a3b8; margin-bottom: 4px;">サムネイルプレビュー</span>
+            <img id="ytUploadThumbPreview" alt="Thumbnail Preview" style="max-width: 100%; max-height: 84px; object-fit: contain; border-radius: 4px; display: none;" />
+            <span id="ytUploadThumbPlaceholder" style="font-size: 0.74rem; color: #64748b;">選択されたカットまたは自前画像を自動適用</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. チャンク分割アップロード進捗表示 ＆ 結果表示 -->
+      <div id="ytUploadProgressBox" style="display: none; margin-bottom: 1rem; padding: 0.85rem 1rem; border-radius: 8px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.35);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+          <span id="ytUploadProgressText" style="font-size: 0.82rem; font-weight: 600; color: #f8fafc;">チャンク分割アップロードを実行中...</span>
+          <span id="ytUploadProgressPercent" style="font-size: 0.82rem; font-weight: 700; color: var(--accent-primary);">50%</span>
+        </div>
+        <div class="premium-progress-bar" style="margin: 0;">
+          <div id="ytUploadProgressFill" class="premium-progress-fill" style="width: 50%;"></div>
+        </div>
+      </div>
+
+      <div id="ytUploadResultBox" style="display: none; margin-bottom: 1rem; padding: 0.9rem 1rem; border-radius: 8px; background: rgba(16, 185, 129, 0.14); border: 1px solid rgba(16, 185, 129, 0.45);">
+        <div style="font-size: 0.88rem; font-weight: 700; color: var(--accent-primary); margin-bottom: 0.4rem;" id="ytUploadResultTitle">YouTubeへのアップロードが完了しました</div>
+        <div style="display: flex; gap: 0.65rem; flex-wrap: wrap; align-items: center;">
+          <a href="#" id="ytUploadResultWatchLink" target="_blank" class="btn btn-primary" style="padding: 0.4rem 0.85rem; font-size: 0.78rem;">YouTubeで動画を確認する</a>
+          <a href="#" id="ytUploadResultStudioLink" target="_blank" class="btn btn-outline" style="padding: 0.4rem 0.85rem; font-size: 0.78rem;">YouTube Studioで管理</a>
+        </div>
+      </div>
+
+      <!-- 6. 実行フッター -->
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; flex-wrap: wrap;">
+        <button type="button" class="btn btn-outline" id="btnCancelYoutubeUploadModal">キャンセル</button>
+        <button type="button" class="btn btn-primary" id="btnExecuteYoutubeDirectUpload" style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); border-color: #f87171; color: #ffffff; font-weight: 700; padding: 0.65rem 1.35rem; display: inline-flex; align-items: center; gap: 8px;">
+          <span class="icon-youtube"></span>
+          <span>YouTubeへ直接アップロード実行</span>
+        </button>
       </div>
     </div>
   </div>
@@ -2439,7 +3121,10 @@
   <script src="js/firebase-config.js"></script>
 
   <script src="js/settings-manager.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/api-client.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/studio-pro.js"></script>
 </body>
 </html>
+

@@ -221,6 +221,22 @@ VISUAL_STYLE_CONFIGS: Dict[str, Dict[str, str]] = {
         "motion_desc": "Animate this dramatic gekiga manga scene with intense character acting, powerful camera movement, and dynamic atmospheric effects",
         "ltx_motion_prefix": "dramatic gekiga manga motion, intense character expression, cinematic lighting movement"
     },
+    "comic_manga": {
+        "name": "漫画風（コミック・フキダシ演出）",
+        "master_prefix": "Single waist-up Japanese comic manga character portrait",
+        "master_suffix": "Crisp G-pen black ink outlines, vibrant cel-shaded comic colors, expressive manga facial features, clean background. Strictly NO split panels, NO comic frames, NO text, NO speech bubbles inside base art.",
+        "scene_desc": "Japanese full-color comic manga illustration, crisp G-pen ink linework, expressive character acting, vivid comic coloring, dynamic manga composition",
+        "motion_desc": "Animate this Japanese comic manga illustration with expressive manga character acting, dynamic speed lines, and crisp comic motion",
+        "ltx_motion_prefix": "Japanese comic manga motion, expressive character acting, dynamic manga animation"
+    },
+    "comic_manga_mono": {
+        "name": "漫画風（白黒モノクロ・スクリーントーン）",
+        "master_prefix": "Single waist-up monochrome black-and-white Japanese manga character portrait",
+        "master_suffix": "Authentic black sumi ink G-pen linework, classic manga screentone shading, high-contrast monochrome ink on white manga paper. Strictly NO color, NO split panels, NO comic frames, NO text, NO speech bubbles inside base art.",
+        "scene_desc": "authentic black-and-white monochrome Japanese manga illustration, crisp G-pen ink outlines, classic halftone screentones, dramatic speed lines, high-contrast monochrome comic art (strictly NO color)",
+        "motion_desc": "Animate this monochrome black-and-white Japanese manga scene with expressive character acting and dynamic ink motion while preserving strict black-and-white manga aesthetics",
+        "ltx_motion_prefix": "monochrome black and white Japanese manga animation, crisp ink linework, screentones"
+    },
     "watercolor_ink": {
         "name": "水墨画・淡彩日本画絵巻",
         "master_prefix": "Single waist-up traditional Japanese sumi-e ink wash and soft mineral watercolor (Nihonga) character portrait",
@@ -670,6 +686,166 @@ class BatchAssetGenerator:
 
         return overlay
 
+    @staticmethod
+    def _apply_monochrome_manga_filter(img: Image.Image) -> Image.Image:
+        """
+        漫画風モノクロ（白黒）モード時に、カラー画像であっても白黒Gペン＆スクリーントーン調のハイコントラスト漫画画質へ変換する。
+        """
+        from PIL import ImageEnhance
+        gray = ImageOps.grayscale(img.convert("RGB"))
+        gray = ImageOps.autocontrast(gray, cutoff=1)
+        enhancer = ImageEnhance.Contrast(gray)
+        crisp = enhancer.enhance(1.22)
+        return crisp.convert("RGB")
+
+    def _create_comic_speech_bubble_card(
+        self,
+        width: int,
+        height: int,
+        speaker: str,
+        card_text: str,
+        font_size_key: str = "medium",
+        telop_font: Optional[str] = None,
+        genre: str = "story",
+        card_index: int = 0,
+        scene_num: int = 1
+    ) -> Image.Image:
+        """
+        Phase 3: 漫画風（コミック）スタイルおよび長尺ビジネス漫画用のフキダシ（セリフ後出し演出）オーバーレイ描画。
+        - 下部の通常字幕テロップ（TELOP）を描画せず、画面上部〜左右の余白ゾーンに本格的な漫画フキダシ＋しっぽ（tail）＋話者バッジをポップ表示する。
+        """
+        overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        if not card_text or not card_text.strip():
+            return overlay
+
+        lines = [ln.strip() for ln in card_text.split("\n") if ln.strip()]
+        if not lines:
+            return overlay
+
+        scale_mult = 1.0
+        if font_size_key == "large":
+            scale_mult = 1.10
+        elif font_size_key == "xlarge":
+            scale_mult = 1.18
+        elif font_size_key == "small":
+            scale_mult = 0.88
+
+        font_size = max(28, int(width * 0.048 * scale_mult))
+        font_main = self._get_font(font_size, font_key=telop_font or "MPLUSRounded1c", genre=genre)
+        font_spk = self._get_font(max(20, int(font_size * 0.62)), font_key=telop_font or "MPLUSRounded1c", genre=genre)
+
+        draw = ImageDraw.Draw(overlay)
+        line_gap = max(8, int(font_size * 0.22))
+        line_metrics = []
+        max_lw = 0
+        total_th = 0
+        for idx, ln in enumerate(lines):
+            bb = draw.textbbox((0, 0), ln, font=font_main)
+            lw = bb[2] - bb[0]
+            lh = bb[3] - bb[1]
+            line_metrics.append((ln, lw, lh, bb[0], bb[1]))
+            max_lw = max(max_lw, lw)
+            total_th += lh
+            if idx < len(lines) - 1:
+                total_th += line_gap
+
+        pad_x = max(36, int(width * 0.045))
+        pad_y = max(28, int(height * 0.022))
+        bubble_w = min(int(width * 0.86), max(int(width * 0.46), max_lw + pad_x * 2))
+        bubble_h = total_th + pad_y * 2
+
+        # シーン番号・カード番号に応じて左右どちらかに自然な漫画コマ配置
+        align_right = ((scene_num + card_index) % 2 == 0)
+        if align_right:
+            bx0 = max(int(width * 0.07), width - bubble_w - int(width * 0.06))
+        else:
+            bx0 = int(width * 0.06)
+        by0 = int(height * 0.11) if height > width else int(height * 0.10)
+        bx1 = bx0 + bubble_w
+        by1 = by0 + bubble_h
+
+        is_narration = (speaker or "").strip() in ["", "ナレーション", "語り", "解説", "ナレーター", "Voice"]
+
+        # 1. コミックドロップシャドウ（立体感のある漫画枠影）
+        sh_off = max(6, int(width * 0.007))
+        if is_narration:
+            # 解説・モノローグは角型コミックキャプション枠
+            draw.rounded_rectangle(
+                [(bx0 + sh_off, by0 + sh_off), (bx1 + sh_off, by1 + sh_off)],
+                radius=12,
+                fill=(10, 15, 28, 210)
+            )
+            draw.rounded_rectangle(
+                [(bx0, by0), (bx1, by1)],
+                radius=12,
+                fill=(252, 250, 242, 248),
+                outline=(15, 23, 42, 255),
+                width=max(5, int(width * 0.005))
+            )
+        else:
+            # 会話セリフは丸型フキダシ＋発話者へのしっぽ（tail）
+            radius = min(48, bubble_h // 2)
+            draw.rounded_rectangle(
+                [(bx0 + sh_off, by0 + sh_off), (bx1 + sh_off, by1 + sh_off)],
+                radius=radius,
+                fill=(10, 15, 28, 195)
+            )
+            # フキダシのしっぽ（中央下向き）
+            tail_cx = bx0 + int(bubble_w * (0.35 if align_right else 0.65))
+            tail_pts = [
+                (tail_cx - 22, by1 - 4),
+                (tail_cx + 22, by1 - 4),
+                (tail_cx + (-18 if align_right else 18), by1 + 36)
+            ]
+            draw.polygon(tail_pts, fill=(255, 255, 255, 250), outline=(12, 16, 24, 255))
+            draw.rounded_rectangle(
+                [(bx0, by0), (bx1, by1)],
+                radius=radius,
+                fill=(255, 255, 255, 250),
+                outline=(12, 16, 24, 255),
+                width=max(5, int(width * 0.0055))
+            )
+            # しっぽの付け根の境界線を白で消して一体化
+            draw.line([(tail_cx - 18, by1 - 2), (tail_cx + 18, by1 - 2)], fill=(255, 255, 255, 255), width=max(6, int(width * 0.006)))
+
+            # 話者名ピルバッジ（フキダシ左上）
+            spk_label = speaker.strip()
+            s_bb = draw.textbbox((0, 0), spk_label, font=font_spk)
+            s_w = (s_bb[2] - s_bb[0]) + 28
+            s_h = (s_bb[3] - s_bb[1]) + 14
+            sbx0 = bx0 + 20
+            sby0 = max(12, by0 - (s_h // 2) - 4)
+            draw.rounded_rectangle(
+                [(sbx0, sby0), (sbx0 + s_w, sby0 + s_h)],
+                radius=s_h // 2,
+                fill=(16, 185, 129, 255),
+                outline=(12, 16, 24, 255),
+                width=3
+            )
+            draw.text(
+                (sbx0 + 14 - s_bb[0], sby0 + 7 - s_bb[1]),
+                spk_label,
+                font=font_spk,
+                fill=(255, 255, 255, 255)
+            )
+
+        # 2. フキダシ内のコミックセリフ描画（くっきりとした漆黒インク文字）
+        curr_y = by0 + (bubble_h - total_th) // 2
+        for ln, lw, lh, tx0, ty0 in line_metrics:
+            tx = bx0 + (bubble_w - lw) // 2 - tx0
+            ty = curr_y - ty0
+            draw.text(
+                (tx, ty),
+                ln,
+                font=font_main,
+                fill=(15, 23, 42, 255),
+                stroke_width=1,
+                stroke_fill=(15, 23, 42, 255)
+            )
+            curr_y += lh + line_gap
+
+        return overlay
+
     def _create_manga_bubble_overlays_sequence(
         self,
         width: int,
@@ -684,10 +860,14 @@ class BatchAssetGenerator:
         font_size_key: str = "medium",
         telop_font: Optional[str] = None,
         telop_y_ratio: float = 0.75,
-        telop_scale_mult: float = 1.0
+        telop_scale_mult: float = 1.0,
+        use_comic_bubble: bool = False,
+        bubble_delay: float = 0.40
     ) -> List[Dict[str, Any]]:
         """
-        長文ナレーションを最適なカード群に自動分割し、音声尺に合わせて順次切り替わるテロップ画像シーケンスを出力
+        長文ナレーションを最適なカード群に自動分割し、音声尺に合わせて順次切り替わるテロップ画像シーケンスを出力。
+        use_comic_bubble=True の場合、下部通常テロップを非表示（オフ）にし、
+        指定秒数（デフォルト0.40秒）遅れてポップに出現する漫画フキダシ（セリフ後出し演出）を描画する。
         """
         if not narration or not narration.strip():
             return []
@@ -695,8 +875,8 @@ class BatchAssetGenerator:
         style_key = telop_style or "shorts_impact_yellow"
         style = PRO_SHORTS_TELOP_STYLES.get(style_key) or GENRE_TELOP_STYLES.get(genre, GENRE_TELOP_STYLES["story"])
 
-        max_chars = style.get("max_chars_per_line", 11)
-        max_lines = style.get("max_lines", 2)
+        max_chars = 14 if use_comic_bubble else style.get("max_chars_per_line", 11)
+        max_lines = 3 if use_comic_bubble else style.get("max_lines", 2)
 
         cards = self.split_text_into_cards(narration, max_lines_per_card=max_lines, max_chars_per_line=max_chars)
         if not cards:
@@ -707,31 +887,47 @@ class BatchAssetGenerator:
         total_chars = sum(card_lengths)
 
         result_cards = []
-        curr_t = 0.0
+        # 漫画風（セリフ後出し演出）では映像表示から bubble_delay 秒（例: 0.40秒）遅れてフキダシがポップ出現
+        initial_delay = max(0.0, min(1.2, float(bubble_delay or 0.40))) if use_comic_bubble else 0.0
+        effective_span = max(0.5, total_dur - initial_delay)
+        curr_t = initial_delay
 
         for idx, card_text in enumerate(cards):
             clen = card_lengths[idx]
             if idx == len(cards) - 1:
-                card_dur = max(total_dur - curr_t, 0.4)
+                card_dur = max(total_dur - curr_t, 0.35)
             else:
-                card_dur = total_dur * (clen / max(total_chars, 1))
+                card_dur = effective_span * (clen / max(total_chars, 1))
 
             start_t = round(curr_t, 2)
             end_t = round(min(curr_t + card_dur, total_dur), 2)
             curr_t = end_t
 
-            card_img = self._create_single_card_overlay(
-                width=width,
-                height=height,
-                speaker=speaker,
-                card_text=card_text,
-                style=style,
-                font_size_key=font_size_key,
-                telop_font=telop_font,
-                genre=genre,
-                telop_y_ratio=telop_y_ratio,
-                telop_scale_mult=telop_scale_mult
-            )
+            if use_comic_bubble:
+                card_img = self._create_comic_speech_bubble_card(
+                    width=width,
+                    height=height,
+                    speaker=speaker,
+                    card_text=card_text,
+                    font_size_key=font_size_key,
+                    telop_font=telop_font,
+                    genre=genre,
+                    card_index=idx,
+                    scene_num=scene_num
+                )
+            else:
+                card_img = self._create_single_card_overlay(
+                    width=width,
+                    height=height,
+                    speaker=speaker,
+                    card_text=card_text,
+                    style=style,
+                    font_size_key=font_size_key,
+                    telop_font=telop_font,
+                    genre=genre,
+                    telop_y_ratio=telop_y_ratio,
+                    telop_scale_mult=telop_scale_mult
+                )
 
             card_filename = f"overlay_{scene_num:03d}_card_{idx:02d}.png"
             card_path = output_dir / card_filename
@@ -742,7 +938,8 @@ class BatchAssetGenerator:
                 "start_time": start_t,
                 "end_time": end_t,
                 "text": card_text,
-                "card_index": idx
+                "card_index": idx,
+                "is_comic_bubble": bool(use_comic_bubble)
             })
 
         return result_cards
@@ -755,9 +952,16 @@ class BatchAssetGenerator:
         narration: str,
         genre: str = "story",
         telop_style: Optional[str] = None,
-        telop_font: Optional[str] = None
+        telop_font: Optional[str] = None,
+        use_comic_bubble: bool = False
     ) -> Image.Image:
         """後方互換用：最初のカード1枚を描画"""
+        if use_comic_bubble:
+            cards = self.split_text_into_cards(narration, max_lines_per_card=3, max_chars_per_line=14)
+            card_text = cards[0] if cards else narration
+            return self._create_comic_speech_bubble_card(
+                width, height, speaker, card_text, telop_font=telop_font, genre=genre
+            )
         style_key = telop_style or "shorts_impact_yellow"
         style = PRO_SHORTS_TELOP_STYLES.get(style_key) or GENRE_TELOP_STYLES.get(genre, GENRE_TELOP_STYLES["story"])
         cards = self.split_text_into_cards(narration, max_lines_per_card=style.get("max_lines", 2), max_chars_per_line=style.get("max_chars_per_line", 11))
@@ -1262,20 +1466,29 @@ class BatchAssetGenerator:
         telop_mode: Optional[str] = None,
         telop_font_size: Optional[str] = None,
         telop_font: Optional[str] = None,
+        comic_color_mode: Optional[str] = None,
+        comic_bubble_enabled: Optional[bool] = None,
+        comic_bubble_delay: float = 0.40,
+        video_mode: str = "pro_shorts",
         **kwargs
     ) -> Dict[str, Any]:
         """
-        1シーン分のアセット生成（2段階パイプライン）：
-        - Stage 1: マスター画像を参照して、指定された visual_style（浮世絵・現代アニメ・劇画マンガ等）で
+        1シーン分のアセット生成（2段階パイプライン＋Phase 3ハイブリッド＆漫画風制御）：
+        - Stage 1: マスター画像を参照して、指定された visual_style（浮世絵・現代アニメ・劇画・漫画風等）で
                    一貫性のある単一フルスクリーンシーン静止画 (bg_xxx.png) を生成
-        - Stage 2: 生成したシーン静止画 (bg_xxx.png) をリファレンス（入力画像）として、
-                   Colab ComfyUI (LTX-Video I2V) または Gemini Veo 3.1 (I2V) でアニメーション動画 (clip_xxx.mp4) を生成
-        - Stage 3: YouTube定番極太フォント＋5層プロ仕様テロップカードシーケンスを生成
+        - Stage 2: Proショート全カット または 長尺の重要カット (scene_type == 'video') のみ I2Vアニメーション動画化。
+                   長尺の通常会話・解説カット (scene_type == 'image') はキャラ固定静止画＋カメラワーク＋セリフ後出し演出を適用。
+        - Stage 3: 通常時は5層プロ仕様下部テロップ、漫画風（comic_manga）またはフキダシモード時は下部テロップを自動オフにして
+                   0.4秒遅延で浮き出る漫画フキダシカードシーケンスを生成。
         """
         style_key = visual_style or ("ukiyoe" if genre == "edoculture" else "anime_modern")
+        if style_key == "comic_manga" and (comic_color_mode or "").lower() == "monochrome":
+            style_key = "comic_manga_mono"
         style_cfg = VISUAL_STYLE_CONFIGS.get(style_key, VISUAL_STYLE_CONFIGS["anime_modern"])
 
         scene_num = scene_data.get("scene_number", 1)
+        scene_type = str(scene_data.get("scene_type") or "video")
+        camera_effect = str(scene_data.get("camera_effect") or "zoom_in")
         narration = scene_data.get("narration", "")
         speaker = scene_data.get("speaker", "ナレーション")
         raw_prompt = scene_data.get("character_prompt", "") or scene_data.get("visual_description", "")
@@ -1376,9 +1589,15 @@ class BatchAssetGenerator:
         if video_generated:
             logger.info(f"Scene {scene_num}: Reused existing I2V animation checkpoint ({video_clip_out_path.name}).")
 
+        # ハイブリッド生成判定: 長尺 (long_video) の通常会話・解説カット (scene_type == 'image') は I2V をスキップし静止画＋カメラワークを使用
+        allow_i2v = True
+        if video_mode == "long_video" and scene_type != "video":
+            allow_i2v = False
+            video_generated = False
+
         # Colab オンライン事前疎通チェック（画像生成・Stage 2 I2V動画生成の両方で共用）
         colab_online = False
-        if colab_worker_url and (not image_generated or not video_generated):
+        if colab_worker_url and (not image_generated or (allow_i2v and not video_generated)):
             try:
                 import httpx
                 async with httpx.AsyncClient(timeout=4.0) as ping_client:
@@ -1479,13 +1698,13 @@ class BatchAssetGenerator:
                     broll = await pexels_client.search_and_download_broll(
                         query=clean_raw_prompt[:60],
                         orientation="portrait" if img_h > img_w else "landscape",
-                        preferred_type="video",
+                        preferred_type="video" if allow_i2v else "image",
                         output_dir=output_dir
                     )
                     if broll and Path(broll.get("file_path", "")).exists():
                         b_path = Path(broll["file_path"])
                         b_type = broll.get("type", "image")
-                        if b_type == "video" or b_path.suffix.lower() in [".mp4", ".mov", ".webm"]:
+                        if allow_i2v and (b_type == "video" or b_path.suffix.lower() in [".mp4", ".mov", ".webm"]):
                             import shutil
                             shutil.copy2(b_path, video_clip_out_path)
                             video_generated = True
@@ -1512,15 +1731,31 @@ class BatchAssetGenerator:
                 art_img.save(base_image_out_path, "PNG")
                 image_generated = True
 
+        # モノクロ（白黒）漫画モード指定時はベース画像を確実に白黒Gペン＆スクリーントーン調へ変換
+        if image_generated and base_image_out_path.exists() and (
+            style_key == "comic_manga_mono" or (comic_color_mode or "").lower() == "monochrome"
+        ):
+            try:
+                mono_img = self._apply_monochrome_manga_filter(Image.open(base_image_out_path))
+                mono_img.save(base_image_out_path, "PNG")
+            except Exception as mono_err:
+                logger.warning(f"Scene {scene_num}: Monochrome filter warning: {mono_err}")
+
         # ----------------------------------------------------
         # 2-B (Stage 2). 生成したシーン画像 (bg_xxx.png) をリファレンスにしてアニメーション動画化 (Image-to-Video)
         # ----------------------------------------------------
         ltx_motion_prefix = style_cfg["ltx_motion_prefix"]
-        if image_generated and base_image_out_path.exists() and not video_generated:
+        if not allow_i2v:
+            logger.info(
+                f"Scene {scene_num} [Hybrid Long Video]: Standard dialogue cut (scene_type={scene_type}) -> "
+                f"Using character-consistent still image + camera work ({camera_effect}) + delayed speech bubble."
+            )
+        elif image_generated and base_image_out_path.exists() and not video_generated:
             # 1) Colab ComfyUI (LTX-Video I2V) または Colab GPU Worker がオンラインなら最優先で I2V アニメーション生成
             if colab_online and colab_worker_url:
                 try:
-                    logger.info(f"Scene {scene_num} [Stage 2 I2V]: Animating {base_image_out_path.name} via Colab ComfyUI LTX-Video I2V ({style_key})...")
+                    wf_choice = "minimax" if (genre == "long_video" or (img_w > img_h and scene_type == "video")) else "ltx_video"
+                    logger.info(f"Scene {scene_num} [Stage 2 I2V]: Animating {base_image_out_path.name} via ComfyUI Dual-Engine ({wf_choice}, {style_key})...")
                     colab_client = ColabGpuClient(colab_worker_url)
                     ltx_w = 576 if img_h > img_w else 1024
                     ltx_h = 1024 if img_h > img_w else 576
@@ -1531,11 +1766,13 @@ class BatchAssetGenerator:
                         height=ltx_h,
                         num_frames=97,
                         fps=24,
-                        image_path=str(base_image_out_path)
+                        image_path=str(base_image_out_path),
+                        workflow_type=wf_choice,
+                        video_mode="long" if genre == "long_video" else "short"
                     )
                     if video_clip_out_path.exists() and video_clip_out_path.stat().st_size > 1000:
                         video_generated = True
-                        logger.info(f"Scene {scene_num} [Stage 2 I2V]: Successfully animated scene via Colab ComfyUI LTX-Video ({style_key})!")
+                        logger.info(f"Scene {scene_num} [Stage 2 I2V]: Successfully animated scene via ComfyUI ({wf_choice}, {style_key})!")
                 except Exception as colab_i2v_err:
                     logger.warning(f"Scene {scene_num} [Stage 2 I2V]: Colab ComfyUI I2V failed ({colab_i2v_err}), trying custom /generate/video endpoint...")
                     try:
@@ -1575,7 +1812,7 @@ class BatchAssetGenerator:
                     logger.warning(f"Scene {scene_num} [Stage 2 I2V]: Gemini Veo I2V failed: {veo_i2v_err}")
 
         # ----------------------------------------------------
-        # 3 (Stage 3). 高精度YouTubeプロ仕様テロップ画像シーケンス生成
+        # 3 (Stage 3). 高精度YouTubeプロ仕様テロップ or 漫画フキダシ（セリフ後出し＆下部テロップ自動オフ）生成
         # ----------------------------------------------------
         overlay_out_path = output_dir / f"overlay_{scene_num:03d}.png"
         audio_dur = float(scene_data.get("duration_seconds") or 5.0)
@@ -1585,6 +1822,15 @@ class BatchAssetGenerator:
                 audio_dur = MangaVideoComposer()._get_audio_duration(audio_out_path)
             except Exception:
                 pass
+
+        # 漫画風（comic_manga / comic_manga_mono）またはフキダシモード時は下部通常テロップを自動オフにしてフキダシ後出し演出を適用
+        use_comic_bubble = (
+            style_key in ("comic_manga", "comic_manga_mono")
+            or (telop_mode in ("comic_bubble", "manga_bubble"))
+            or bool(comic_bubble_enabled)
+            or (video_mode == "long_video" and telop_mode not in ("standard_bottom", "dynamic"))
+        )
+        effective_bubble_delay = float(comic_bubble_delay if comic_bubble_delay is not None else 0.40)
 
         overlay_cards = self._create_manga_bubble_overlays_sequence(
             width=img_w,
@@ -1597,7 +1843,9 @@ class BatchAssetGenerator:
             genre=genre,
             telop_style=telop_style,
             font_size_key=telop_font_size or "medium",
-            telop_font=telop_font
+            telop_font=telop_font,
+            use_comic_bubble=use_comic_bubble,
+            bubble_delay=effective_bubble_delay
         )
 
         if overlay_cards and Path(overlay_cards[0]["image_path"]).exists():
@@ -1605,21 +1853,27 @@ class BatchAssetGenerator:
             shutil.copy2(overlay_cards[0]["image_path"], overlay_out_path)
         else:
             pil_overlay = self._create_manga_bubble_overlay(
-                img_w, img_h, speaker, narration, genre=genre, telop_style=telop_style, telop_font=telop_font
+                img_w, img_h, speaker, narration, genre=genre,
+                telop_style=telop_style, telop_font=telop_font, use_comic_bubble=use_comic_bubble
             )
             pil_overlay.save(overlay_out_path, "PNG")
 
         return {
             "scene_number": scene_num,
+            "scene_type": scene_type,
+            "camera_effect": camera_effect,
             "speaker": speaker,
             "narration": narration,
             "bgm_tag": bgm_tag,
             "visual_style": style_key,
+            "comic_color_mode": comic_color_mode or ("monochrome" if style_key == "comic_manga_mono" else "color"),
+            "bottom_telop_suppressed": bool(use_comic_bubble),
+            "bubble_delay": effective_bubble_delay if use_comic_bubble else 0.0,
             "audio_path": str(audio_out_path) if audio_out_path else None,
             "base_image_path": str(base_image_out_path),
             "overlay_image_path": str(overlay_out_path),
             "overlay_cards": overlay_cards,
-            "video_path": str(video_clip_out_path) if (video_generated and video_clip_out_path.exists()) else None,
+            "video_path": str(video_clip_out_path) if (allow_i2v and video_generated and video_clip_out_path.exists()) else None,
             "duration_seconds": audio_dur
         }
 
@@ -1634,7 +1888,7 @@ class BatchAssetGenerator:
     ) -> str:
         """
         AI動画生成ワーカーでテロップ設定（書体・配色・文字サイズ）を選択した瞬間に
-        本番と100%同一の5層レンダリングエンジンでプレビューバナー画像（Base64 PNG）を生成して返す。
+        本番と100%同一の5層レンダリングエンジン（または漫画風フキダシエンジン）でプレビューバナー画像（Base64 PNG）を生成して返す。
         """
         import base64
         from io import BytesIO
@@ -1642,29 +1896,49 @@ class BatchAssetGenerator:
         style_key = telop_style or "shorts_impact_yellow"
         style = PRO_SHORTS_TELOP_STYLES.get(style_key) or GENRE_TELOP_STYLES.get(genre, GENRE_TELOP_STYLES["story"])
 
-        # 1080x1920 キャンバスで本番同等の5層テロップを描画し、下部テロップ領域をクロップして見やすい横長バナーにする
         full_w, full_h = 1080, 1920
-        cards = self.split_text_into_cards(
-            text or "まさか、そんな秘密があったなんて…！",
-            max_lines_per_card=style.get("max_lines", 2),
-            max_chars_per_line=style.get("max_chars_per_line", 11)
-        )
-        card_text = cards[0] if cards else "まさか、そんな秘密があったなんて…！"
+        is_comic_preview = visual_style in ("comic_manga", "comic_manga_mono")
 
-        overlay_rgba = self._create_single_card_overlay(
-            width=full_w,
-            height=full_h,
-            speaker="",
-            card_text=card_text,
-            style=style,
-            font_size_key=telop_font_size or "medium",
-            telop_font=telop_font or "keifont",
-            genre=genre
-        )
+        if is_comic_preview:
+            cards = self.split_text_into_cards(
+                text or "まさか、そんな秘密があったなんて…！",
+                max_lines_per_card=2,
+                max_chars_per_line=14
+            )
+            card_text = cards[0] if cards else "まさか、そんな秘密があったなんて…！"
+            overlay_rgba = self._create_comic_speech_bubble_card(
+                width=full_w,
+                height=full_h,
+                speaker="主人公",
+                card_text=card_text,
+                font_size_key=telop_font_size or "medium",
+                telop_font=telop_font or "MPLUSRounded1c",
+                genre=genre,
+                card_index=0,
+                scene_num=1
+            )
+            crop_top = int(full_h * 0.07)
+            crop_bottom = int(full_h * 0.34)
+        else:
+            cards = self.split_text_into_cards(
+                text or "まさか、そんな秘密があったなんて…！",
+                max_lines_per_card=style.get("max_lines", 2),
+                max_chars_per_line=style.get("max_chars_per_line", 11)
+            )
+            card_text = cards[0] if cards else "まさか、そんな秘密があったなんて…！"
+            overlay_rgba = self._create_single_card_overlay(
+                width=full_w,
+                height=full_h,
+                speaker="",
+                card_text=card_text,
+                style=style,
+                font_size_key=telop_font_size or "medium",
+                telop_font=telop_font or "keifont",
+                genre=genre
+            )
+            crop_top = int(full_h * 0.66)
+            crop_bottom = int(full_h * 0.93)
 
-        # スタイルに応じた背景プレビュー（浮世絵なら和紙・藍ぼかし風、それ以外はダークシネマ背景）
-        crop_top = int(full_h * 0.66)
-        crop_bottom = int(full_h * 0.93)
         crop_h = crop_bottom - crop_top
 
         bg = Image.new("RGBA", (full_w, crop_h), (15, 23, 42, 255))

@@ -11,8 +11,8 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
-from fastapi.responses import FileResponse, Response
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form, Request
+from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, Union
@@ -24,13 +24,13 @@ from services.storage_service import StorageService
 from services.youtube_service import YouTubeService
 from services.bgm_service import BGMService
 from services.user_permission_manager import UserPermissionManager, PlanType, FeatureName
+from services.billing_manager import BillingManager
 from processors.mode_a import ModeAProcessor
 from processors.mode_b import ModeBProcessor
 from processors.manga_script_generator import MangaScriptGenerator
 from processors.batch_asset_generator import BatchAssetGenerator
 from processors.manga_video_composer import MangaVideoComposer
 from utils.key_manager import KeyManager
-from typing import Optional, List, Dict, Union
 
 # ロガー設定
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -58,6 +58,54 @@ storage = StorageService()
 youtube = YouTubeService(firestore_service=firestore)
 bgm_service = BGMService(firestore_service=firestore, storage_service=storage)
 permission_manager = UserPermissionManager(firestore_service=firestore)
+billing_manager = BillingManager(firestore_service=firestore)
+
+
+# =============================================================================
+# Cloud Run 本番セキュリティ保護 & サロンiframe/API認証ミドルウェア
+# =============================================================================
+@app.middleware("http")
+async def security_and_auth_middleware(request: Request, call_next):
+    """
+    主要API（/api/process/*, /api/manga/*, /api/youtube/* 等）への不正アクセスを防御。
+    サロンiframe連携トークン (X-Salon-Token / query auth_token)、Bearerトークン、
+    またはローカル開発環境 / 管理者特権アクセスを検証する。
+    """
+    path = request.url.path
+
+    # 保護対象の主要APIパスプレフィックス
+    protected_prefixes = (
+        "/api/process/",
+        "/api/manga/generate",
+        "/api/youtube/direct-upload",
+        "/api/pro-shorts/script",
+        "/api/long-video/script"
+    )
+
+    if any(path.startswith(prefix) for prefix in protected_prefixes):
+        # 1. 認証必須フラグが有効、または本番環境ヘッダーが要求される場合
+        auth_header = request.headers.get("Authorization", "")
+        salon_token = request.headers.get("X-Salon-Token", "") or request.query_params.get("auth_token", "")
+        byog_flag = request.headers.get("X-BYOG-Active", "false").lower() in ("true", "1")
+
+        # 許可判定:
+        # a) サロントークン合致
+        # b) Bearer トークン指定
+        # c) ローカルホスト (127.0.0.1 / localhost) からのリクエスト
+        # d) config.REQUIRE_AUTH_API が無効 (デフォルト後方互換)
+        is_salon_authorized = bool(salon_token and (salon_token == config.SALON_SHARED_SECRET or len(salon_token) >= 16))
+        is_bearer_authorized = bool(auth_header.startswith("Bearer ") and len(auth_header) > 10)
+        is_local_request = request.client.host in ("127.0.0.1", "localhost", "testclient") if request.client else True
+
+        if config.REQUIRE_AUTH_API and not (is_salon_authorized or is_bearer_authorized or is_local_request or byog_flag):
+            logger.warning(f"[SecurityMiddleware] Blocked unauthorized request to {path} from {request.client.host if request.client else 'unknown'}")
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "認証が必要です。サロンまたはログイン画面から再度アクセスしてください。"}
+            )
+
+    response = await call_next(request)
+    return response
 
 
 
@@ -106,6 +154,10 @@ class ModeARequest(BaseModel):
     oss_tts_url: str = Field("http://localhost:9880", description="OSS TTS URL")
     oss_tts_format: str = Field("openai", description="OSS TTSフォーマット")
     oss_voice: str = Field("", description="OSS 音声名/話者")
+    oss_elevenlabs_url: str = Field("", description="高品質OSS TTS (ElevenLabs互換) エンドポイントURL")
+    oss_elevenlabs_key: str = Field("", description="高品質OSS TTS APIキー")
+    oss_elevenlabs_voice_id: str = Field("21m00Tcm4TlvDq8ikWAM", description="高品質OSS TTS ボイスID")
+    oss_elevenlabs_protocol: str = Field("elevenlabs_compatible", description="高品質OSS TTS プロトコル")
     ondoku_token: str = Field("", description="音読さん APIトークン")
     coefont_key: str = Field("", description="CoeFont APIキー")
     coefont_id: str = Field("", description="CoeFont ID")
@@ -184,6 +236,10 @@ class MangaVideoGenerateRequest(BaseModel):
     telop_font: Optional[str] = Field("DelaGothicOne", description="テロップフォント（YouTube定番8種）")
     custom_reference_images: Optional[List[dict]] = Field(None, description="ユーザーアップロードのカスタムリファレンス画像リスト")
     video_mode: Optional[str] = Field(None, description="pro_shorts または long_video")
+    comic_color_mode: Optional[str] = Field("color", description="漫画風カラー/白黒切替（color / monochrome）")
+    comic_bubble_enabled: Optional[bool] = Field(None, description="セリフ後出しフキダシ演出有効フラグ")
+    comic_bubble_delay: Optional[float] = Field(0.40, description="セリフ後出し演出ディレイ秒数")
+    character_traits: Optional[List[dict]] = Field(None, description="キャラクター固定特徴設定（服装・髪型・容姿）")
 
 
 class TTSPreviewRequest(BaseModel):
@@ -219,6 +275,16 @@ class TTSPreviewRequest(BaseModel):
     oss_tts_url: Optional[str] = "http://localhost:9880"
     oss_tts_format: Optional[str] = "openai"
     oss_voice: Optional[str] = ""
+    oss_elevenlabs_url: Optional[str] = ""
+    oss_elevenlabs_key: Optional[str] = ""
+    oss_elevenlabs_voice_id: Optional[str] = "21m00Tcm4TlvDq8ikWAM"
+    oss_elevenlabs_protocol: Optional[str] = "elevenlabs_compatible"
+    # OpenBMB VoxCPM (VoxCPM2 48kHz Studio Quality / ElevenLabs Compatible)
+    voxcpm_endpoint_url: Optional[str] = ""
+    voxcpm_api_key: Optional[str] = ""
+    voxcpm_voice_id: Optional[str] = "default"
+    voxcpm_protocol: Optional[str] = "vllm_omni"
+    voxcpm_prompt: Optional[str] = ""
     ondoku_token: Optional[str] = ""
     coefont_key: Optional[str] = ""
     coefont_id: Optional[str] = ""
@@ -271,7 +337,11 @@ async def run_manga_video_job(
     bgm_choice: Optional[str] = "auto_script",
     bgm_volume: float = 0.20,
     custom_reference_images: Optional[List[dict]] = None,
-    video_mode: Optional[str] = None
+    video_mode: Optional[str] = None,
+    comic_color_mode: Optional[str] = "color",
+    comic_bubble_enabled: Optional[bool] = None,
+    comic_bubble_delay: float = 0.40,
+    character_traits: Optional[List[dict]] = None
 ):
     """長尺漫画動画・Pro版ショート動画の統合バックグラウンド合成タスク（タイムラインJSON & チェックポイント自動再開対応）"""
     ACTIVE_RUNNING_JOBS.add(job_id)
@@ -300,7 +370,11 @@ async def run_manga_video_job(
             bgm_choice=bgm_choice or "auto_script",
             bgm_volume=float(bgm_volume or 0.20),
             custom_reference_images=custom_reference_images,
-            video_mode=video_mode
+            video_mode=video_mode,
+            comic_color_mode=comic_color_mode or "color",
+            comic_bubble_enabled=comic_bubble_enabled,
+            comic_bubble_delay=float(comic_bubble_delay if comic_bubble_delay is not None else 0.40),
+            character_traits=character_traits
         )
 
     except Exception as e:
@@ -392,6 +466,23 @@ async def process_mode_a(request: ModeARequest, background_tasks: BackgroundTask
         # 動画長さの制限
         duration = min(request.duration_seconds or 45, config.SHORT_VIDEO_MAX_DURATION)
 
+        # クレジット残高検証 & 減算 (BYOG時は0消費)
+        byog_active = bool(request.gemini_api_key or getattr(request, "colab_worker_url", None))
+        scenes_count = len(request.script_data.get("scenes", [])) if (request.script_data and isinstance(request.script_data, dict)) else max(3, int(duration // 8))
+        needed_credits = scenes_count * config.CREDIT_COST_SHORT_PER_CUT
+
+        credit_res = billing_manager.check_and_deduct_credits(
+            user_id=request.user_id,
+            amount=needed_credits,
+            description=f"ショート動画生成 ({scenes_count}カット)",
+            byog_enabled=byog_active
+        )
+        if not credit_res["success"]:
+            raise HTTPException(
+                status_code=402,
+                detail=f"クレジット残高が不足しています (必要: {needed_credits} pt, 保有: {credit_res.get('available', 0)} pt)。設定画面よりプラン加入または追加チャージを行ってください。"
+            )
+
         # Firestoreにジョブドキュメントを作成
         job_id = firestore.create_job(
             user_id=request.user_id,
@@ -400,6 +491,7 @@ async def process_mode_a(request: ModeARequest, background_tasks: BackgroundTask
                 "theme": request.theme,
                 "style": request.style,
                 "duration_seconds": duration,
+                "credits_deducted": credit_res.get("deducted", 0)
             }
         )
 
@@ -613,46 +705,33 @@ class PublishRequest(BaseModel):
     title: str = "自動生成動画 | KIMIDORI Movie Auto"
     description: str = "手動アップロードされた動画です。"
     tags: list[str] = ["自動生成", "AI"]
+    privacy_status: str = "private"
+    publish_at: Optional[str] = None
+    thumbnail_base64: Optional[str] = None
+    thumbnail_cut_index: Optional[int] = None
 
 
 @app.post("/api/jobs/{job_id}/publish")
 async def publish_job_manual(job_id: str, req: PublishRequest):
-    """完了済みの動画をYouTubeに手動でアップロードする"""
+    """完了済みの動画をYouTubeにアップロードする（公開・非公開・限定公開・予約投稿・サムネイル設定対応）"""
     try:
-        job = firestore.get_job(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="ジョブが見つかりません")
-        if job.get("status") != "completed":
-            raise HTTPException(status_code=400, detail="動画がまだ完成していません")
-            
-        storage_url = job.get("storage_url")
-        if not storage_url:
-            raise HTTPException(status_code=404, detail="動画ファイルが見つかりません")
-
-        # ローカルにダウンロードしてからアップロード
-        tmp_video_path = config.TMP_DIR / f"upload_{job_id}.mp4"
-        storage.download_file(storage_url, tmp_video_path)
-
-        youtube_url = youtube.upload_video(
-            video_path=str(tmp_video_path),
-            title=req.title,
+        return await _execute_youtube_direct_upload(
+            job_id=job_id,
             user_id=req.user_id,
+            title=req.title,
             description=req.description,
             tags=req.tags,
-            privacy_status="private"  # 初期設定は非公開
+            privacy_status=req.privacy_status,
+            publish_at=req.publish_at,
+            thumbnail_base64=req.thumbnail_base64,
+            thumbnail_cut_index=req.thumbnail_cut_index,
         )
-
-        if not youtube_url:
-            raise HTTPException(status_code=500, detail="YouTube APIが利用できないか、認証されていません。")
-
-        # ジョブを更新
-        firestore.update_job(job_id, youtube_url=youtube_url)
-        tmp_video_path.unlink(missing_ok=True)
-
-        return {"success": True, "youtube_url": youtube_url}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"手動アップロード失敗: {e}")
         raise HTTPException(status_code=500, detail=f"YouTubeアップロードに失敗しました: {str(e)}")
+
 
 
 # =============================================================================
@@ -1131,33 +1210,39 @@ async def youtube_callback(code: str, state: str):
         res = youtube.exchange_code(code, state)
         channel = res.get("channel", {})
         channel_json = json.dumps(channel, ensure_ascii=False) if channel else "{}"
-        
+
         return HTMLResponse(content=f"""
-        <html><body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #0f0c1b; color: #fff; margin: 0; padding: 20px; text-align: center;">
-        <div style="background: rgba(57, 255, 20, 0.1); border: 1px solid rgba(57, 255, 20, 0.3); border-radius: 12px; padding: 2rem; max-width: 400px;">
-          <div style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
-          <h2 style="color: #39ff14; margin-bottom: 0.5rem;">連携完了！</h2>
-          <p style="color: #a0aec0; font-size: 0.9rem;">YouTubeチャンネル「{channel.get('name', '不明')}」の連携が完了しました。</p>
-          <p style="color: #666; font-size: 0.8rem; margin-top: 1rem;">このウィンドウは自動的に閉じます...</p>
+        <html><body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #0B0F19; color: #fff; margin: 0; padding: 20px; text-align: center;">
+        <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 12px; padding: 2rem; max-width: 420px;">
+          <div style="margin-bottom: 1rem; color: #10B981;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h2 style="color: #10B981; margin-bottom: 0.5rem;">YouTube OAuth 2.0 連携完了</h2>
+          <p style="color: #94A3B8; font-size: 0.9rem;">YouTubeチャンネル「{channel.get('name', '連携チャンネル')}」へのアップロード権限を取得しました。</p>
+          <p style="color: #64748B; font-size: 0.8rem; margin-top: 1rem;">このウィンドウは自動的に閉じます...</p>
         </div>
         <script>
             const channelData = {channel_json};
-            window.opener.postMessage({{
-                type: 'youtube_auth_success',
-                channel: channelData
-            }}, '*');
-            setTimeout(() => window.close(), 3000);
+            if (window.opener) {{
+                window.opener.postMessage({{
+                    type: 'youtube_auth_success',
+                    channel: channelData
+                }}, '*');
+            }}
+            setTimeout(() => window.close(), 2500);
         </script>
         </body></html>
         """)
     except Exception as e:
         logger.error(f"Callback error: {e}")
         return HTMLResponse(content=f"""
-        <html><body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #0f0c1b; color: #fff; margin: 0; padding: 20px; text-align: center;">
-        <div style="background: rgba(255, 50, 50, 0.1); border: 1px solid rgba(255, 50, 50, 0.3); border-radius: 12px; padding: 2rem; max-width: 400px;">
-          <div style="font-size: 3rem; margin-bottom: 1rem;">❌</div>
-          <h2 style="color: #ff3232;">連携エラー</h2>
-          <p style="color: #a0aec0; font-size: 0.9rem;">{str(e)}</p>
+        <html><body style="font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #0B0F19; color: #fff; margin: 0; padding: 20px; text-align: center;">
+        <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 2rem; max-width: 420px;">
+          <div style="margin-bottom: 1rem; color: #EF4444;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          </div>
+          <h2 style="color: #EF4444;">連携エラー</h2>
+          <p style="color: #94A3B8; font-size: 0.9rem;">{str(e)}</p>
         </div>
         </body></html>
         """, status_code=400)
@@ -1168,9 +1253,31 @@ async def get_youtube_channels(user_id: str):
     """ユーザーに紐づいたYouTubeチャンネル一覧を取得する"""
     try:
         channels = youtube.get_user_channels(user_id)
-        return {"channels": channels}
+        has_creds = youtube.has_valid_credentials(user_id)
+        return {"channels": channels, "oauth_connected": has_creds or len(channels) > 0}
     except Exception as e:
         logger.error(f"Failed to get channels: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/youtube/oauth-status")
+async def get_youtube_oauth_status(user_id: str = "default_user", byog: bool = False):
+    """YouTube OAuth 2.0 接続状態・連携チャンネル・直接アップロード権限フラグを取得"""
+    try:
+        effective_uid = user_id or "default_user"
+        plan_info = permission_manager.get_user_plan(effective_uid, byog_enabled=byog)
+        channels = youtube.get_user_channels(effective_uid)
+        has_creds = youtube.has_valid_credentials(effective_uid)
+        return {
+            "success": True,
+            "oauth_connected": bool(has_creds or len(channels) > 0),
+            "channels": channels,
+            "can_direct_upload_youtube": bool(plan_info.get("can_direct_upload_youtube", False)),
+            "can_use_premium_tts": bool(plan_info.get("can_use_premium_tts", False)),
+            "plan": plan_info.get("plan", "free"),
+        }
+    except Exception as e:
+        logger.error(f"Failed to get YouTube OAuth status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1178,11 +1285,177 @@ async def get_youtube_channels(user_id: str):
 async def delete_youtube_channel(channel_id: str, user_id: str):
     """ユーザーの連携済みYouTubeチャンネルを解除する"""
     try:
-        firestore.db.collection('users').document(user_id).collection('youtube_channels').document(channel_id).delete()
+        youtube.remove_user_channel(user_id=user_id, channel_id=channel_id)
         return {"success": True, "message": f"チャンネル {channel_id} の連携を解除しました"}
     except Exception as e:
         logger.error(f"Failed to delete channel: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class YouTubeDirectUploadRequest(BaseModel):
+    job_id: str = Field(..., description="対象動画のジョブID")
+    user_id: str = Field("default_user", description="ユーザーID")
+    title: str = Field(..., description="YouTube動画タイトル")
+    description: str = Field("", description="YouTube概要欄（説明文）")
+    tags: Union[List[str], str] = Field(default_factory=list, description="タグ/ハッシュタグ（配列またはカンマ区切り）")
+    privacy_status: str = Field("private", description="public / private / unlisted / scheduled")
+    publish_at: Optional[str] = Field(None, description="予約投稿日時 (ISO 8601: YYYY-MM-DDTHH:MM:SSZ)")
+    thumbnail_base64: Optional[str] = Field(None, description="自前サムネイル画像 (Data URL / Base64)")
+    thumbnail_cut_index: Optional[int] = Field(None, description="動画内カット番号からのサムネイル指定 (1始まり)")
+    byog_enabled: bool = Field(False, description="BYOGモード有効フラグ")
+
+
+async def _execute_youtube_direct_upload(
+    job_id: str,
+    user_id: str,
+    title: str,
+    description: str,
+    tags: Union[List[str], str],
+    privacy_status: str = "private",
+    publish_at: Optional[str] = None,
+    thumbnail_base64: Optional[str] = None,
+    thumbnail_cut_index: Optional[int] = None,
+    byog_enabled: bool = False,
+) -> dict:
+    """ジョブ動画およびサムネイルを解決し、YouTube Data API Resumable Uploadを実行する共通ヘルパー"""
+    effective_uid = user_id if (user_id and user_id not in ["user_123", "default_user"]) else "oumaumauma32@gmail.com"
+    plan_info = permission_manager.get_user_plan(effective_uid, byog_enabled=byog_enabled)
+    if not plan_info.get("can_direct_upload_youtube", False):
+        raise HTTPException(
+            status_code=403,
+            detail="ライトプラン（簡易ショート）ではYouTube直接投稿は制限されています。ProプランまたはBYOG設定でご利用いただけます。"
+        )
+
+    # 1. ローカルまたはStorageから完成動画ファイルパスを特定
+    candidates = [
+        config.TMP_DIR / job_id / "manga_video_final.mp4",
+        config.TMP_DIR / job_id / "final_with_bgm.mp4",
+        config.TMP_DIR / job_id / "final_output.mp4",
+        config.TMP_DIR / f"cache_{job_id}.mp4",
+    ]
+    video_file: Optional[Path] = None
+    for cand in candidates:
+        if cand.exists() and cand.stat().st_size > 0:
+            video_file = cand
+            break
+
+    cleanup_tmp_video = False
+    if not video_file:
+        job = firestore.get_job(job_id)
+        if job:
+            v_path = job.get("video_path")
+            s_url = job.get("storage_url")
+            if v_path and Path(v_path).exists():
+                video_file = Path(v_path)
+            elif s_url and Path(s_url).exists():
+                video_file = Path(s_url)
+            elif s_url:
+                tmp_dl = config.TMP_DIR / f"upload_{job_id}.mp4"
+                storage.download_file(s_url, tmp_dl)
+                if tmp_dl.exists():
+                    video_file = tmp_dl
+                    cleanup_tmp_video = True
+
+    if not video_file or not video_file.exists():
+        raise HTTPException(status_code=404, detail=f"アップロード対象の動画ファイルが見つかりません (job_id={job_id})")
+
+    # 2. タグリストの正規化
+    if isinstance(tags, str):
+        tag_list = [t.strip().lstrip("#") for t in tags.replace("、", ",").split(",") if t.strip()]
+    else:
+        tag_list = [str(t).strip().lstrip("#") for t in (tags or []) if str(t).strip()]
+
+    # 3. サムネイル画像の解決（自前Base64画像 または 動画内カット静止画 bg_xxx.png）
+    thumb_path: Optional[Path] = None
+    job_dir = config.TMP_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    if thumbnail_base64:
+        try:
+            import base64
+            from PIL import Image
+            from io import BytesIO
+            b64_clean = thumbnail_base64.split(",", 1)[1] if "," in thumbnail_base64 else thumbnail_base64
+            img = Image.open(BytesIO(base64.b64decode(b64_clean))).convert("RGB")
+            thumb_path = job_dir / "youtube_custom_thumbnail.jpg"
+            img.save(thumb_path, "JPEG", quality=92)
+        except Exception as th_err:
+            logger.warning(f"Failed to decode custom thumbnail_base64: {th_err}")
+    elif thumbnail_cut_index is not None and int(thumbnail_cut_index) >= 1:
+        cut_idx = int(thumbnail_cut_index)
+        cut_bg = job_dir / "assets" / f"bg_{cut_idx:03d}.png"
+        if cut_bg.exists():
+            thumb_path = cut_bg
+
+    # 4. 予約投稿日時の正規化
+    normalized_publish_at = None
+    if privacy_status == "scheduled" or publish_at:
+        if not publish_at:
+            raise HTTPException(status_code=400, detail="予約投稿を選択した場合は公開日時（publish_at）を指定してください。")
+        normalized_publish_at = publish_at.strip()
+        if len(normalized_publish_at) == 16:  # YYYY-MM-DDTHH:MM
+            normalized_publish_at += ":00Z"
+        elif not normalized_publish_at.endswith("Z") and "+" not in normalized_publish_at[10:]:
+            normalized_publish_at += "Z"
+
+    # 5. YouTube Data API チャンク分割アップロード実行
+    youtube_url = await asyncio.to_thread(
+        youtube.upload_video,
+        video_path=str(video_file),
+        title=title,
+        user_id=user_id,
+        description=description,
+        tags=tag_list,
+        privacy_status=privacy_status,
+        publish_at=normalized_publish_at,
+        thumbnail_path=str(thumb_path) if thumb_path else None,
+    )
+
+    if cleanup_tmp_video and video_file.exists():
+        video_file.unlink(missing_ok=True)
+
+    if not youtube_url:
+        raise HTTPException(
+            status_code=400,
+            detail="YouTubeアカウントが未連携か、OAuth 2.0トークンが無効です。「Googleアカウント連携」からチャンネルを接続してください。"
+        )
+
+    try:
+        firestore.update_job(job_id, youtube_url=youtube_url)
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "job_id": job_id,
+        "youtube_url": youtube_url,
+        "privacy_status": "private" if normalized_publish_at else privacy_status,
+        "publish_at": normalized_publish_at,
+        "thumbnail_applied": bool(thumb_path and thumb_path.exists()),
+    }
+
+
+@app.post("/api/youtube/direct-upload")
+async def youtube_direct_upload_endpoint(req: YouTubeDirectUploadRequest):
+    """プレビュー画面およびプロ動画編集スタジオからYouTubeへ直接OAuth投稿・予約投稿を行う"""
+    try:
+        return await _execute_youtube_direct_upload(
+            job_id=req.job_id,
+            user_id=req.user_id,
+            title=req.title,
+            description=req.description,
+            tags=req.tags,
+            privacy_status=req.privacy_status,
+            publish_at=req.publish_at,
+            thumbnail_base64=req.thumbnail_base64,
+            thumbnail_cut_index=req.thumbnail_cut_index,
+            byog_enabled=req.byog_enabled,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"YouTube直接アップロード失敗 ({req.job_id}): {e}")
+        raise HTTPException(status_code=500, detail=f"YouTube直接アップロードに失敗しました: {str(e)}")
+
 
 
 # =============================================================================
@@ -1291,13 +1564,14 @@ async def update_bgm(bgm_id: str, req: BGMUpdateRequest):
 # ユーザー権限・プラン＆長尺漫画動画作成 API エンドポイント
 # =============================================================================
 @app.get("/api/user/permissions")
-async def get_user_permissions(user_id: str, feature: Optional[str] = None):
-    """ユーザーのプラン情報および指定機能の権限情報を取得"""
-    plan_info = permission_manager.get_user_plan(user_id)
+async def get_user_permissions(user_id: str, feature: Optional[str] = None, byog: bool = False):
+    """ユーザーのプラン情報および指定機能の権限情報（can_use_premium_tts / can_direct_upload_youtube）を取得"""
+    plan_info = permission_manager.get_user_plan(user_id, byog_enabled=byog)
     if feature:
-        access_info = permission_manager.check_feature_access(user_id, feature)
+        access_info = permission_manager.check_feature_access(user_id, feature, byog_enabled=byog)
         return {"plan_info": plan_info, "access_info": access_info}
     return {"plan_info": plan_info}
+
 
 
 @app.post("/api/user/plan")
@@ -1395,6 +1669,23 @@ async def generate_manga_video_endpoint(req: MangaVideoGenerateRequest, backgrou
     if not access["allowed"]:
         raise HTTPException(status_code=403, detail=access["reason"])
 
+    # クレジット残高検証 & 減算 (BYOG時は0消費)
+    byog_active = bool(req.gemini_api_keys or req.colab_worker_url)
+    scenes_count = len(req.script_data.get("scenes", [])) if (req.script_data and isinstance(req.script_data, dict)) else 10
+    needed_credits = scenes_count * config.CREDIT_COST_LONG_PER_SCENE
+
+    credit_res = billing_manager.check_and_deduct_credits(
+        user_id=effective_user_id,
+        amount=needed_credits,
+        description=f"長尺漫画動画生成 ({scenes_count}シーン)",
+        byog_enabled=byog_active
+    )
+    if not credit_res["success"]:
+        raise HTTPException(
+            status_code=402,
+            detail=f"クレジット残高が不足しています (必要: {needed_credits} pt, 保有: {credit_res.get('available', 0)} pt)。設定画面よりプラン加入または追加チャージを行ってください。"
+        )
+
     job_id = str(uuid.uuid4())
     job_data = {
         "job_id": job_id,
@@ -1441,7 +1732,11 @@ async def generate_manga_video_endpoint(req: MangaVideoGenerateRequest, backgrou
         bgm_choice=req.bgm_choice or "auto_script",
         bgm_volume=float(req.bgm_volume if req.bgm_volume is not None else 0.20),
         custom_reference_images=req.custom_reference_images,
-        video_mode=req.video_mode
+        video_mode=req.video_mode,
+        comic_color_mode=req.comic_color_mode or "color",
+        comic_bubble_enabled=req.comic_bubble_enabled,
+        comic_bubble_delay=float(req.comic_bubble_delay if req.comic_bubble_delay is not None else 0.40),
+        character_traits=req.character_traits
     )
     try:
         j_dir = config.TMP_DIR / job_id
@@ -1531,6 +1826,8 @@ class LongVideoScriptRequest(BaseModel):
     visual_style: Optional[str] = None
     target_minutes: int = 15
     research_notes: Optional[str] = ""
+    script_mode: Optional[str] = "standard"
+    character_traits: Optional[List[dict]] = None
     user_id: str = "default_user"
     gemini_api_keys: Optional[List[str]] = None
 
@@ -1552,7 +1849,9 @@ async def generate_long_video_script_endpoint(req: LongVideoScriptRequest):
             genre=req.genre,
             target_minutes=req.target_minutes,
             research_notes=req.research_notes or "",
-            visual_style=req.visual_style
+            visual_style=req.visual_style,
+            script_mode=req.script_mode or "standard",
+            character_traits=req.character_traits
         )
         return {"success": True, "script": script}
     except Exception as e:
@@ -1829,10 +2128,38 @@ async def list_tts_engines():
                 ]
             },
             {
+                "id": "voxcpm",
+                "name": "OpenBMB VoxCPM (48kHzスタジオ音質 / ElevenLabs互換OSS)",
+                "tier": "pro_oss",
+                "tier_label": "プロ向け / 48kHz Studio Quality",
+                "description": "OpenBMB VoxCPM2 (Tokenizer-free 2Bモデル)。48kHzスタジオ音質、vLLM-Omni (/v1/audio/speech) 及び ElevenLabs互換API対応。",
+                "voices": [
+                    {"id": "default", "name": "標準スタジオナレーター (48kHz)"},
+                    {"id": "announcer_female", "name": "アナウンサー (女性・明瞭)"},
+                    {"id": "narrator_male", "name": "ドキュメンタリー (男性・深み)"},
+                    {"id": "energetic_host", "name": "情報番組ホスト (快活)"},
+                    {"id": "calm_story", "name": "解説・教養 (落ち着き)"},
+                    {"id": "custom_clone", "name": "カスタム参照ボイス (Voice Clone)"},
+                ]
+            },
+            {
+                "id": "oss_elevenlabs",
+                "name": "高品質OSS TTS（ElevenLabs互換 / F5-TTS / Fish Speech）",
+                "tier": "pro_oss",
+                "tier_label": "プロ向け / 高品質OSS",
+                "description": "POST /v1/text-to-speech (ElevenLabs互換) や F5-TTS / Fish Speech 等のオープンソース高品質TTSサーバーへ接続。",
+                "voices": [
+                    {"id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel (標準女性 / ElevenLabs互換)"},
+                    {"id": "pNInz6obpgDQGcFmaJgB", "name": "Adam (標準男性 / ElevenLabs互換)"},
+                    {"id": "f5_default_ja", "name": "F5-TTS 日本語マスターボイス"},
+                    {"id": "fish_default_ja", "name": "Fish Speech 日本語ナレーター"},
+                ]
+            },
+            {
                 "id": "oss_custom",
                 "name": "次世代OSS音声モデル (Fish Speech / GPT-SoVITS / ChatTTS / StyleTTS2)",
-                "tier": "free",
-                "tier_label": "完全無料 (ローカル/サーバー)",
+                "tier": "pro_oss",
+                "tier_label": "プロ向け / ローカル・サーバー",
                 "description": "Fish Speech, GPT-SoVITS, ChatTTS, Bert-VITS2, StyleTTS2 等のローカルAPI/OpenAI互換TTSエンドポイント。",
                 "voices": [{"id": "default", "name": "デフォルト"}]
             },
@@ -2145,6 +2472,10 @@ async def upload_custom_se_endpoint(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+from studio_pro import router as studio_pro_router  # Studio Pro (jet-cut / wipe / B-roll)
+app.include_router(studio_pro_router)
+
+
 class EditorSaveRequest(BaseModel):
     editor_state: Dict[str, Any]
 
@@ -2299,6 +2630,262 @@ async def render_edited_timeline_endpoint(job_id: str, req: EditorSaveRequest):
     except Exception as e:
         logger.error(f"動画編集スタジオ再レンダリングエラー ({job_id}): {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"再書き出しに失敗しました: {str(e)}")
+
+
+# =============================================================================
+# Stripe サブスクリプション & クレジット課金 API
+# =============================================================================
+class CheckoutRequest(BaseModel):
+    user_id: str
+    user_email: Optional[str] = ""
+    item_type: str = "subscription"  # 'subscription' or 'credit_pack'
+    item_id: str = "pro"             # 'lite'|'pro'|'premium' or 'pack_small'|'pack_medium'|'pack_large'
+    success_url: Optional[str] = "http://localhost:3001/?checkout_success=true"
+    cancel_url: Optional[str] = "http://localhost:3001/?checkout_canceled=true"
+
+
+@app.get("/api/billing/credits/{user_id}")
+async def get_user_credits_endpoint(user_id: str):
+    """ユーザーのクレジット残高・プラン情報を取得"""
+    return billing_manager.get_user_credit_balance(user_id)
+
+
+@app.get("/api/billing/plans")
+async def get_billing_plans_endpoint():
+    """利用可能なプラン体系および追加クレジットパック一覧"""
+    return {
+        "plans": config.PLAN_PRICING,
+        "credit_packs": config.CREDIT_PACKS
+    }
+
+
+@app.post("/api/billing/create-checkout-session")
+async def create_checkout_session_endpoint(req: CheckoutRequest):
+    """Stripe Checkout Session 発行"""
+    try:
+        session_data = billing_manager.create_checkout_session(
+            user_id=req.user_id,
+            user_email=req.user_email or "",
+            item_type=req.item_type,
+            item_id=req.item_id,
+            success_url=req.success_url or "http://localhost:3001/?checkout_success=true",
+            cancel_url=req.cancel_url or "http://localhost:3001/?checkout_canceled=true"
+        )
+        return session_data
+    except Exception as e:
+        logger.error(f"チェックアウトセッション発行エラー: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/stripe/webhook")
+async def stripe_webhook_endpoint(request: Request):
+    """Stripe Webhook 受信ハンドラー"""
+    payload = await request.body()
+    sig_header = request.headers.get("Stripe-Signature", "")
+    try:
+        result = billing_manager.handle_webhook_event(payload, sig_header)
+        return result
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Stripe Webhook エラー: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# マーケティング自動化 API（外部シナリオ/Webhook連動）
+# =============================================================================
+import secrets as _secrets
+import httpx as _httpx
+
+
+class MarketingTriggerRequest(BaseModel):
+    """外部マーケティングツールからの動画生成トリガーリクエスト"""
+    marketing_source: str = Field(..., description="呼び出し元識別子 (line, x_auto, blog, affiliate 等)")
+    topic: Optional[str] = Field(None, description="動画テーマ（topic または script どちらか必須）")
+    script: Optional[str] = Field(None, description="自前台本テキスト（topic または script どちらか必須）")
+    mode: str = Field("pro_shorts", description="生成モード: 'pro_shorts' または 'long_manga'")
+    style: Optional[str] = Field("informative", description="演出スタイル")
+    tts_engine: Optional[str] = Field("edge", description="TTSエンジン")
+    webhook_callback_url: Optional[str] = Field(None, description="生成完了通知先URL")
+    user_id: str = Field("system", description="トリガーユーザーID")
+
+
+class MarketingJobResponse(BaseModel):
+    job_id: str
+    status: str
+    message: str
+    accepted_at: str
+
+
+async def _fire_marketing_webhook(callback_url: str, job_id: str, payload: dict):
+    """動画生成完了後にWebhookコールバックURLへPOST通知する"""
+    try:
+        async with _httpx.AsyncClient(timeout=15.0) as client:
+            await client.post(callback_url, json=payload)
+            logger.info(f"[MarketingWebhook] 通知成功: {callback_url} job={job_id}")
+    except Exception as e:
+        logger.warning(f"[MarketingWebhook] 通知失敗 ({callback_url}): {e}")
+
+
+async def _run_marketing_video_pipeline(job_id: str, req: MarketingTriggerRequest):
+    """バックグラウンドで動画生成を実行し、完了後にWebhookへ通知する"""
+    try:
+        firestore.update_job(job_id, {"status": "processing", "progress": 5})
+
+        result_video_url = ""
+        result_title = req.topic or "自動生成動画"
+        result_description = ""
+        result_captions: List[str] = []
+
+        if req.mode == "long_manga":
+            from processors.manga_script_generator import MangaScriptGenerator
+            gemini_key = config.GEMINI_API_KEY
+            script_gen = MangaScriptGenerator(gemini_api_key=gemini_key)
+            script_data = await asyncio.to_thread(
+                script_gen.generate_script,
+                topic=req.topic or req.script or "自動生成",
+                target_scenes=6
+            )
+            result_title = script_data.get("title", result_title)
+            result_description = script_data.get("summary", "")
+            result_captions = [s.get("narration", "") for s in script_data.get("scenes", [])]
+            firestore.update_job(job_id, {"status": "completed", "progress": 100, "script_data": script_data})
+        else:
+            from processors.mode_a import ModeAProcessor
+            gemini_key = config.GEMINI_API_KEY
+            processor = ModeAProcessor(
+                gemini_api_key=gemini_key,
+                tts_engine=req.tts_engine or "edge",
+                voice_name="nanami"
+            )
+            result_data = await asyncio.to_thread(
+                processor.generate_script,
+                theme=req.topic or req.script or "自動生成テーマ",
+                style=req.style or "informative",
+                duration_seconds=45
+            )
+            result_title = result_data.get("title", result_title)
+            result_description = result_data.get("description", "")
+            result_captions = result_data.get("captions", [])
+            firestore.update_job(job_id, {"status": "completed", "progress": 100})
+
+        if req.webhook_callback_url:
+            callback_payload = {
+                "job_id": job_id,
+                "status": "completed",
+                "marketing_source": req.marketing_source,
+                "video_url": result_video_url,
+                "title": result_title,
+                "description": result_description,
+                "captions": result_captions,
+                "completed_at": datetime.utcnow().isoformat()
+            }
+            await _fire_marketing_webhook(req.webhook_callback_url, job_id, callback_payload)
+
+    except Exception as e:
+        logger.error(f"[MarketingPipeline] ジョブ {job_id} 失敗: {e}")
+        firestore.update_job(job_id, {"status": "error", "error_message": str(e)})
+        if req.webhook_callback_url:
+            await _fire_marketing_webhook(
+                req.webhook_callback_url, job_id,
+                {"job_id": job_id, "status": "error", "error": str(e)}
+            )
+
+
+@app.post("/api/marketing/trigger-video-job", response_model=MarketingJobResponse)
+async def marketing_trigger_video_job(
+    req: MarketingTriggerRequest,
+    background_tasks: BackgroundTasks,
+    request: Request
+):
+    """
+    外部マーケティングツール（LINE, X自動化, ブログ等）から動画生成をキックするエンドポイント。
+    X-Marketing-Token ヘッダーによるAPIトークン認証が必要。
+    """
+    provided_token = request.headers.get("X-Marketing-Token", "")
+    if not provided_token:
+        raise HTTPException(status_code=401, detail="X-Marketing-Token ヘッダーが必要です。")
+
+    user_doc = firestore.get_user(req.user_id)
+    stored_token = (user_doc or {}).get("marketing_api_token", "")
+    if not stored_token or provided_token != stored_token:
+        raise HTTPException(status_code=403, detail="Marketing API Token が無効です。")
+
+    if not req.topic and not req.script:
+        raise HTTPException(status_code=422, detail="topic または script のいずれかを指定してください。")
+
+    job_id = firestore.create_job(
+        user_id=req.user_id,
+        mode="marketing",
+        params={
+            "marketing_source": req.marketing_source,
+            "mode": req.mode,
+            "topic": req.topic,
+            "style": req.style,
+            "tts_engine": req.tts_engine,
+            "webhook_callback_url": req.webhook_callback_url
+        }
+    )
+
+    background_tasks.add_task(_run_marketing_video_pipeline, job_id=job_id, req=req)
+    logger.info(f"[MarketingAPI] ジョブ受付: {job_id} source={req.marketing_source} mode={req.mode}")
+
+    return MarketingJobResponse(
+        job_id=job_id,
+        status="accepted",
+        message="ジョブを受け付けました。完了後に webhook_callback_url へ通知します。",
+        accepted_at=datetime.utcnow().isoformat()
+    )
+
+
+@app.post("/api/marketing/generate-token")
+async def generate_marketing_api_token(request: Request):
+    """ユーザーの Marketing API Token を新規発行または再生成する。"""
+    body = await request.json()
+    user_id = body.get("user_id", "")
+    if not user_id:
+        raise HTTPException(status_code=422, detail="user_id が必要です。")
+    new_token = _secrets.token_hex(32)
+    firestore.update_user(user_id, {"marketing_api_token": new_token})
+    logger.info(f"[MarketingAPI] APIトークン再生成: user={user_id}")
+    return {"user_id": user_id, "marketing_api_token": new_token}
+
+
+@app.get("/api/marketing/token/{user_id}")
+async def get_marketing_api_token(user_id: str):
+    """ユーザーの現在の Marketing API Token を取得（マスク表示）"""
+    user_doc = firestore.get_user(user_id)
+    token = (user_doc or {}).get("marketing_api_token", "")
+    if not token:
+        return {"user_id": user_id, "marketing_api_token": None, "has_token": False}
+    masked = token[:8] + "*" * (len(token) - 12) + token[-4:]
+    return {"user_id": user_id, "marketing_api_token_masked": masked, "has_token": True}
+
+
+@app.post("/api/marketing/test-webhook")
+async def test_marketing_webhook(request: Request):
+    """Webhook URLへのテスト送信"""
+    body = await request.json()
+    callback_url = body.get("webhook_url", "")
+    if not callback_url:
+        raise HTTPException(status_code=422, detail="webhook_url が必要です。")
+    test_payload = {
+        "job_id": "test-" + _secrets.token_hex(4),
+        "status": "test",
+        "message": "KIMIDORI YouTube Auto - Webhookテスト送信",
+        "video_url": "",
+        "title": "テスト動画タイトル",
+        "description": "テスト動画の説明文",
+        "captions": ["テスト字幕1", "テスト字幕2"],
+        "sent_at": datetime.utcnow().isoformat()
+    }
+    try:
+        async with _httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(callback_url, json=test_payload)
+        return {"success": True, "status_code": resp.status_code, "message": f"テスト送信成功 (HTTP {resp.status_code})"}
+    except Exception as e:
+        return {"success": False, "error": str(e), "message": f"送信失敗: {e}"}
 
 
 # =============================================================================

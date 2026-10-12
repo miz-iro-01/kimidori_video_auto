@@ -59,6 +59,7 @@ class MangaVideoComposer:
         video_clip_path: Optional[Union[str, Path]] = None,
         overlay_cards: Optional[List[Dict[str, Any]]] = None,
         enable_ken_burns: bool = True,
+        camera_effect: str = "zoom_in",
         trim_start: float = 0.0,
         force_duration: Optional[float] = None,
         se_path: Optional[Union[str, Path]] = None,
@@ -70,9 +71,9 @@ class MangaVideoComposer:
         - video_clip_path (ComfyUI LTX-Video等のAI生成動画、またはPexelsストック動画) がある場合:
           動画クリップをベース映像として採用し、その上に順次字幕・テロップカードを合成。
         - 静止画の場合:
-          Ken Burns効果 (zoompan) により、じわじわと滑らかにズームインする躍動映像へ自動変換。
+          Ken Burns効果 (zoompan: zoom_in / zoom_out / pan_left / pan_right) により、滑らかなカメラワーク映像へ自動変換。
         - overlay_cards がある場合:
-          ナレーションの尺に合わせて複数のテロップカードを between(t, start, end) で順次切り替え。
+          ナレーションの尺に合わせて複数のテロップカードまたは0.4秒遅延フキダシを between(t, start, end) で順次切り替え。
         - se_path がある場合:
           ナレーション音声に効果音 (SE) を指定のディレイ・音量で amix 合成。
         """
@@ -111,12 +112,22 @@ class MangaVideoComposer:
         else:
             # 静止画ベース（Ken Burns ズームパン演出 または 通常リサイズ）
             cmd.extend(["-loop", "1", "-t", str(final_duration), "-i", str(base_image_path)])
-            if enable_ken_burns:
-                # 余白切れ・粗さを防ぐため 1.2倍解像度(1296x2304)へ拡大・トリミング後に zoompan
+            eff = (camera_effect or "zoom_in").lower()
+            if enable_ken_burns and eff != "static":
+                up_w = int(width * 1.2)
+                up_h = int(height * 1.2)
+                if "pan_left" in eff:
+                    zp_expr = f"zoompan=z=1.12:x='max(0,(iw-iw/zoom)*(1-on/{max(30, int(final_duration*fps))}))':y='ih/2-(ih/zoom/2)'"
+                elif "pan_right" in eff or "pan" in eff:
+                    zp_expr = f"zoompan=z=1.12:x='min(iw-iw/zoom,(iw-iw/zoom)*(on/{max(30, int(final_duration*fps))}))':y='ih/2-(ih/zoom/2)'"
+                elif "zoom_out" in eff:
+                    zp_expr = "zoompan=z='if(lte(on,1),1.15,max(1.0,zoom-0.0008))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+                else:
+                    zp_expr = "zoompan=z='min(zoom+0.0008,1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
                 filter_parts.append(
-                    f"[0:v]scale=1296:2304:force_original_aspect_ratio=increase,"
-                    f"crop=1296:2304,"
-                    f"zoompan=z='min(zoom+0.0008,1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+                    f"[0:v]scale={up_w}:{up_h}:force_original_aspect_ratio=increase,"
+                    f"crop={up_w}:{up_h},"
+                    f"{zp_expr}:"
                     f"d=1:s={width}x{height}:fps={fps},settb=AVTB[vbase];"
                 )
             else:
@@ -342,9 +353,11 @@ class MangaVideoComposer:
                 duration=scene.get("duration_seconds", 5),
                 width=width,
                 height=height,
+                switch_delay=float(scene.get("bubble_delay", 0.3) or 0.3),
                 video_clip_path=scene.get("video_path"),
                 overlay_cards=scene.get("overlay_cards"),
                 enable_ken_burns=True,
+                camera_effect=str(scene.get("camera_effect") or "zoom_in"),
                 trim_start=float(scene.get("trim_start", 0.0) or 0.0),
                 force_duration=scene.get("force_duration"),
                 se_path=scene.get("se_path"),

@@ -125,3 +125,88 @@ SUBTITLE_POSITION_Y = 0.85  # 画面下部85%の位置
 TTS_LANGUAGE_CODE = "ja-JP"
 TTS_VOICE_NAME = "ja-JP-Neural2-B"
 TTS_SPEAKING_RATE = 1.0
+
+# 高品質OSS TTS（ElevenLabs互換 / F5-TTS / Fish Speech）設定
+OSS_TTS_ENDPOINT_URL = os.getenv("OSS_TTS_ENDPOINT_URL", "http://localhost:9880")
+OSS_TTS_API_KEY = os.getenv("OSS_TTS_API_KEY", "")
+OSS_TTS_VOICE_ID = os.getenv("OSS_TTS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+OSS_TTS_PROTOCOL = os.getenv("OSS_TTS_PROTOCOL", "elevenlabs_compatible")
+
+# OpenBMB VoxCPM (VoxCPM2 48kHz Studio Quality / ElevenLabs Compatible) 設定
+# GitHub: https://github.com/OpenBMB/VoxCPM.git
+VOXCPM_ENDPOINT_URL = os.getenv("VOXCPM_ENDPOINT_URL", os.getenv("OSS_TTS_ENDPOINT_URL", "http://localhost:8808"))
+VOXCPM_API_KEY = os.getenv("VOXCPM_API_KEY", os.getenv("OSS_TTS_API_KEY", ""))
+VOXCPM_VOICE_ID = os.getenv("VOXCPM_VOICE_ID", "default")
+VOXCPM_PROTOCOL = os.getenv("VOXCPM_PROTOCOL", "vllm_omni")  # 'vllm_omni', 'elevenlabs', 'fastapi'
+VOXCPM_SAMPLE_RATE = int(os.getenv("VOXCPM_SAMPLE_RATE", "48000"))
+VOXCPM_MODEL = os.getenv("VOXCPM_MODEL", "openbmb/VoxCPM2")
+VOXCPM_TIMEOUT_SECONDS = int(os.getenv("VOXCPM_TIMEOUT_SECONDS", "60"))
+
+# =============================================================================
+# Stripe サブスクリプション & クレジット課金設定
+# =============================================================================
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+
+# 料金プラン体系
+# ライト: 1,980円 (300クレジット/月)
+# プロ: 3,980円 (1,000クレジット/月)
+# プレミアム: 7,980円 (3,000クレジット/月)
+PLAN_PRICING = {
+    "lite": {
+        "name": "ライトプラン",
+        "price_jpy": 1980,
+        "monthly_credits": 300,
+        "features": {
+            "can_use_premium_tts": False,
+            "can_direct_upload_youtube": False,
+            "can_replace_bgm": False,
+            "can_use_studio": False,
+            "priority_queue": False
+        }
+    },
+    "pro": {
+        "name": "プロプラン",
+        "price_jpy": 3980,
+        "monthly_credits": 1000,
+        "features": {
+            "can_use_premium_tts": True,
+            "can_direct_upload_youtube": True,
+            "can_replace_bgm": True,
+            "can_use_studio": True,
+            "priority_queue": False
+        }
+    },
+    "premium": {
+        "name": "プレミアムプラン",
+        "price_jpy": 7980,
+        "monthly_credits": 3000,
+        "features": {
+            "can_use_premium_tts": True,
+            "can_direct_upload_youtube": True,
+            "can_replace_bgm": True,
+            "can_use_studio": True,
+            "priority_queue": True
+        }
+    }
+}
+
+# 追加クレジットチャージ体系 (買い切り)
+CREDIT_PACKS = {
+    "pack_small": {"name": "追加クレジット 200", "credits": 200, "price_jpy": 980},
+    "pack_medium": {"name": "追加クレジット 600", "credits": 600, "price_jpy": 2480},
+    "pack_large": {"name": "追加クレジット 1500", "credits": 1500, "price_jpy": 4980}
+}
+
+# クレジット消費ルール
+CREDIT_COST_SHORT_PER_CUT = int(os.getenv("CREDIT_COST_SHORT_PER_CUT", "5"))   # ショート動画: 1カットにつき5クレジット
+CREDIT_COST_LONG_PER_SCENE = int(os.getenv("CREDIT_COST_LONG_PER_SCENE", "12")) # 長尺動画: 1シーンにつき12クレジット
+
+# =============================================================================
+# サロン連携 & Cloud Run セキュリティ設定
+# =============================================================================
+SALON_SHARED_SECRET = os.getenv("SALON_SHARED_SECRET", "kimidori_salon_secure_token_2026")
+REQUIRE_AUTH_API = os.getenv("REQUIRE_AUTH_API", "false").lower() in ("true", "1")
+
+

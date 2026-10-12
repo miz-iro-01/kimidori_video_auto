@@ -30,6 +30,16 @@ class SettingsManager {
       ossTtsUrl: "http://localhost:9880",
       ossTtsFormat: "openai",
       ossVoice: "",
+      ossElevenlabsUrl: "http://localhost:9880",
+      ossElevenlabsKey: "",
+      ossElevenlabsVoiceId: "21m00Tcm4TlvDq8ikWAM",
+      ossElevenlabsProtocol: "elevenlabs_compatible",
+      // OpenBMB VoxCPM (VoxCPM2 48kHz Studio Quality / ElevenLabs Compatible)
+      voxcpmUrl: "http://localhost:8808",
+      voxcpmKey: "",
+      voxcpmVoiceId: "default",
+      voxcpmProtocol: "vllm_omni",
+      voxcpmPrompt: "",
       ondokuToken: "",
       coefontKey: "",
       coefontId: "",
@@ -40,7 +50,20 @@ class SettingsManager {
       falApiKey: "",
       replicateApiToken: "",
       colabWorkerUrl: "https://alexander-cedar-pastor-cornell.trycloudflare.com",
-      googleDriveSync: false
+      googleDriveSync: false,
+      planTier: "pro",
+      canUsePremiumTts: true,
+      canDirectUploadYoutube: true,
+      // BYOG（自前環境接続）設定
+      byogEnabled: false,
+      byogComfyUrl: "",
+      byogGeminiKey: "",
+      // クレジット & サロン認証
+      userCredits: 100,
+      salonAuthToken: "",
+      salonPlan: "",
+      // マーケティング連携
+      marketingWebhookUrl: ""
     };
     this.settings = this.load();
   }
@@ -137,6 +160,10 @@ class SettingsManager {
 
   // Google Colab (ComfyUI / LTX-Video) 接続URL
   getColabUrl() {
+    // BYOGが有効で自前ComfyUI URLが登録されている場合は最優先
+    if (this.isByogActive() && this.get("byogComfyUrl")) {
+      return this.get("byogComfyUrl").trim();
+    }
     const url = (this.get("colabWorkerUrl") || "").trim();
     return url || "https://alexander-cedar-pastor-cornell.trycloudflare.com";
   }
@@ -145,6 +172,62 @@ class SettingsManager {
     const sanitized = (url || "").trim().replace(/\/+$/, "");
     this.set("colabWorkerUrl", sanitized);
     return sanitized;
+  }
+
+  // BYOG（自前GPU/Colab接続・自前APIキー）モード判定
+  isByogActive() {
+    if (this.get("byogEnabled") === true) return true;
+    if (this.get("byogComfyUrl") && this.get("byogComfyUrl").trim().length > 5) return true;
+    if (this.hasGeminiKey()) return true;
+    const ossUrl = (this.get("ossElevenlabsUrl") || "").trim();
+    if (ossUrl && ossUrl !== "http://localhost:9880") return true;
+    const voxcpmUrl = (this.get("voxcpmUrl") || "").trim();
+    if (voxcpmUrl && voxcpmUrl !== "http://localhost:8808") return true;
+    const ytClientId = (this.get("youtubeClientId") || "").trim();
+    if (ytClientId.length > 5) return true;
+    return false;
+  }
+
+  getEffectiveGeminiKey() {
+    if (this.isByogActive() && this.get("byogGeminiKey")) {
+      return this.get("byogGeminiKey").trim();
+    }
+    return this.get("geminiApiKey") || "";
+  }
+
+  getVoxCPMConfig() {
+    return {
+      endpoint_url: this.get("voxcpmUrl") || "http://localhost:8808",
+      api_key: this.get("voxcpmKey") || "",
+      voice_id: this.get("voxcpmVoiceId") || "default",
+      protocol: this.get("voxcpmProtocol") || "vllm_omni",
+      prompt: this.get("voxcpmPrompt") || "",
+      sample_rate: 48000
+    };
+  }
+
+  // 高品質OSS TTS（ElevenLabs互換）利用可否フラグ（簡易ショート/ライトプラン相当では無料TTSのみ）
+  canUsePremiumTts(contextMode = "pro") {
+    if (contextMode === "simple_shorts" || this.get("planTier") === "lite") {
+      return false;
+    }
+    return this.get("canUsePremiumTts") !== false || this.isByogActive();
+  }
+
+  // YouTube直接OAuth投稿・予約投稿の利用可否フラグ（簡易ショート/ライトプラン相当ではMP4ダウンロードのみ）
+  canDirectUploadYoutube(contextMode = "pro") {
+    if (contextMode === "simple_shorts" || this.get("planTier") === "lite") {
+      return false;
+    }
+    return this.get("canDirectUploadYoutube") !== false || this.isByogActive();
+  }
+
+  // 動画編集スタジオ利用可否フラグ（ライトプランはスタジオ利用不可・Pro/プレミアム/BYOGのみ利用可能）
+  canUseStudio() {
+    if (this.get("planTier") === "lite") {
+      return false;
+    }
+    return true;
   }
 
   // UIへの反映イベント
@@ -157,3 +240,4 @@ class SettingsManager {
 }
 
 window.settingsManager = new SettingsManager();
+
