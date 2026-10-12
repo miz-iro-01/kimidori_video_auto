@@ -222,6 +222,12 @@
 - **管理者ユーザー管理パネルの表示制御 (`frontend/index.html`, `frontend/js/app.js`)**:
   - ログイン中ユーザーが master administrator（`oumaumauma32@gmail.com` または `role: 'admin'`）の場合のみ、ヘッダー右上に「管理者設定 (ユーザー管理)」ボタン（`#btnHeaderAdminSettings`）を表示。
   - サイドバーの「管理者ダッシュボード」ナビ項目と完全連動。
+- **Cloud Run 本番デプロイ ＆ サロンプラットフォーム登録情報**:
+  - **本番サービスURL**: `https://kimidori-youtube-auto-xfl36wickq-an.a.run.app`
+  - **Cloud Run サービス名**: `kimidori-youtube-auto` (Region: `asia-northeast1`, Project: `kimiiro-salon`)
+  - **Firestore 登録先**: `custom_tools/cr_1791814765113` および `portal_data/custom_tools`
+  - **サロンプラットフォーム表示**: `https://kimiiro-salon.web.app/tools` 配下の「コンテンツ制作」カテゴリにて公開中
+
 
 
 
