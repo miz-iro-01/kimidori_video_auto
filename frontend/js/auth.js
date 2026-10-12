@@ -1,8 +1,10 @@
 /**
  * KIMIDORI YouTube Auto - Auth & Salon Security Controller
- * - サロンiframe連携 (URLパラメータ auth_token, salon_plan または postMessage)
- * - 単体URL直接アクセス時の認証・サロン誘導
- * - APIリクエスト時の認証ヘッダー付与 (X-Salon-Token, X-BYOG-Active)
+ * (salon-cloudrun-tools 仕様準拠)
+ * - サロンiframe連携 & SSOハンドシェイク (SALON_AUTH_SYNC / URLパラメータ)
+ * - POST /api/auth/sso エンドポイント連携による即時ツール開放
+ * - スタンドアロン直接アクセス時のログイン画面表示
+ * - 親ウィンドウへのドラフト保存 (SAVE_DRAFT) PostMessageブリッジ
  */
 
 (function () {
@@ -11,28 +13,131 @@
       this.initAuthFromUrlAndStorage();
       this.initIframePostMessageListener();
       this.applySecurityGuard();
+      this.initDraftBridge();
     }
 
-    /** URLパラメータおよびlocalStorageから認証トークンとプラン情報を取得・保存 */
+    /**
+     * サロンSSO認証API（POST /api/auth/sso）を呼び出し、セッションを初期化してツールを開放する
+     */
+    async performSalonSso(authPayload) {
+      try {
+        const res = await fetch('/api/auth/sso', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(authPayload)
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        if (data.success) {
+          // localStorage & settingsManager に認証情報を保存
+          localStorage.setItem('kimidori_auth_token', data.auth_token || '');
+          localStorage.setItem('kimidori_user_email', data.user_email || '');
+          localStorage.setItem('kimidori_user_id', data.user_id || '');
+          localStorage.setItem('kimidori_user_role', data.role || 'user');
+          localStorage.setItem('kimidori_salon_plan', data.plan || 'pro');
+          localStorage.setItem('kimidori_is_admin', data.is_admin ? 'true' : 'false');
+          localStorage.setItem('kimidori_from_salon', 'true');
+
+          if (window.settingsManager) {
+            window.settingsManager.set('salonAuthToken', data.auth_token);
+            window.settingsManager.set('salonPlan', data.plan);
+            window.settingsManager.set('planTier', data.plan);
+            window.settingsManager.set('userId', data.user_id);
+          }
+
+          const userObj = {
+            uid: data.user_id,
+            email: data.user_email,
+            role: data.role,
+            plan: data.plan,
+            isAdmin: data.is_admin,
+            from_salon: true
+          };
+
+          // AppController への認証状態反映 & ツール即座開放
+          const applyAuth = () => {
+            if (window.appController) {
+              window.appController.currentUser = userObj;
+              window.appController.isAdmin = data.is_admin;
+              window.appController.updateAuthState(userObj);
+              if (window.appController.refreshUserCredits) {
+                window.appController.refreshUserCredits();
+              }
+            }
+            const loginPage = document.getElementById('loginPage');
+            if (loginPage) loginPage.classList.add('hidden');
+
+            const banner = document.getElementById('salonAuthGuardBanner');
+            if (banner) banner.remove();
+          };
+
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', applyAuth);
+          } else {
+            applyAuth();
+          }
+
+          console.log('[SalonSSO] 認証成功・ツール開放完了:', data.user_email, `(Admin: ${data.is_admin})`);
+          return data;
+        }
+      } catch (err) {
+        console.error('[SalonSSO] ハンドシェイクエラー:', err);
+      }
+      return null;
+    }
+
+    /** URLパラメータおよびlocalStorageから認証トークンとプラン情報を取得・SSO判定 */
     initAuthFromUrlAndStorage() {
       const params = new URLSearchParams(window.location.search);
       const urlToken = params.get('auth_token') || params.get('token');
       const urlPlan = params.get('salon_plan') || params.get('plan');
       const urlEmail = params.get('user_email') || params.get('email');
+      const urlUserId = params.get('user_id') || params.get('uid');
+      const urlRole = params.get('role');
+      const urlIsAdmin = params.get('is_admin') === 'true' || params.get('admin') === 'true';
+      const fromSalon = params.get('from_salon') === 'true' || Boolean(urlEmail || urlToken);
 
-      if (urlToken) {
-        localStorage.setItem('kimidori_auth_token', urlToken);
-        if (window.settingsManager) window.settingsManager.set('salonAuthToken', urlToken);
-      }
-      if (urlPlan) {
-        localStorage.setItem('kimidori_salon_plan', urlPlan);
-        if (window.settingsManager) {
-          window.settingsManager.set('salonPlan', urlPlan);
-          window.settingsManager.set('planTier', urlPlan);
+      // サロンからの遷移パラメータが存在する場合、SSOハンドシェイクを実行
+      if (fromSalon && (urlEmail || urlUserId || urlToken)) {
+        this.performSalonSso({
+          user_email: urlEmail || '',
+          user_id: urlUserId || urlEmail || '',
+          role: urlRole || (urlIsAdmin ? 'admin' : 'user'),
+          is_admin: urlIsAdmin,
+          salon_plan: urlPlan || 'pro',
+          auth_token: urlToken || '',
+          from_salon: true
+        });
+      } else {
+        // 保存済みのサロンSSOセッションがある場合の自動復元
+        const savedToken = localStorage.getItem('kimidori_auth_token');
+        const savedEmail = localStorage.getItem('kimidori_user_email');
+        const savedFromSalon = localStorage.getItem('kimidori_from_salon') === 'true';
+        if (savedFromSalon && savedEmail) {
+          const userObj = {
+            uid: localStorage.getItem('kimidori_user_id') || savedEmail,
+            email: savedEmail,
+            role: localStorage.getItem('kimidori_user_role') || 'user',
+            plan: localStorage.getItem('kimidori_salon_plan') || 'pro',
+            isAdmin: localStorage.getItem('kimidori_is_admin') === 'true',
+            from_salon: true
+          };
+          const restoreAuth = () => {
+            if (window.appController) {
+              window.appController.currentUser = userObj;
+              window.appController.isAdmin = userObj.isAdmin;
+              window.appController.updateAuthState(userObj);
+            }
+            const loginPage = document.getElementById('loginPage');
+            if (loginPage) loginPage.classList.add('hidden');
+          };
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', restoreAuth);
+          } else {
+            restoreAuth();
+          }
         }
-      }
-      if (urlEmail) {
-        localStorage.setItem('kimidori_user_email', urlEmail);
       }
 
       // Stripe決済コールバック処理
@@ -54,33 +159,62 @@
       }
     }
 
-    /** 親ウィンドウ（サロンポータル）からのpostMessage認証データ受信 */
+    /** 親ウィンドウ（サロンポータル）からのpostMessage認証データ受信 & ハンドシェイク */
     initIframePostMessageListener() {
+      // 親ウィンドウへの読み込み完了通知 (サロンホスト側へSSO同期を要求)
+      if (this.isInIframe()) {
+        try {
+          window.parent.postMessage({ type: 'TOOL_READY', tool: 'kimidori-youtube-auto' }, '*');
+        } catch (e) {}
+      }
+
       window.addEventListener('message', (event) => {
         if (!event.data) return;
         const data = event.data;
 
-        // サロンからのログイン・認証同期メッセージ
-        if (data.type === 'SALON_AUTH_SYNC' || data.type === 'salon_user_auth') {
-          if (data.token) {
-            localStorage.setItem('kimidori_auth_token', data.token);
-            if (window.settingsManager) window.settingsManager.set('salonAuthToken', data.token);
-          }
-          if (data.plan) {
-            localStorage.setItem('kimidori_salon_plan', data.plan);
-            if (window.settingsManager) {
-              window.settingsManager.set('salonPlan', data.plan);
-              window.settingsManager.set('planTier', data.plan);
-            }
-          }
-          if (data.email) {
-            localStorage.setItem('kimidori_user_email', data.email);
-          }
-          if (window.appController && window.appController.refreshUserCredits) {
-            window.appController.refreshUserCredits();
-          }
+        // サロンホストからの認証・セッション同期メッセージ
+        if (
+          data.type === 'SALON_AUTH_SYNC' ||
+          data.type === 'INIT_CONTEXT' ||
+          data.type === 'salon_user_auth'
+        ) {
+          const userEmail = data.user_email || data.userEmail || data.email || '';
+          const userId = data.user_id || data.userId || userEmail || '';
+          const role = data.role || 'user';
+          const isAdmin = Boolean(data.is_admin || data.isAdmin || role === 'admin' || userEmail.toLowerCase() === 'oumaumauma32@gmail.com');
+          const plan = data.salon_plan || data.plan || (isAdmin ? 'admin' : 'pro');
+          const token = data.auth_token || data.token || '';
+
+          this.performSalonSso({
+            user_email: userEmail,
+            user_id: userId,
+            role: role,
+            is_admin: isAdmin,
+            salon_plan: plan,
+            auth_token: token,
+            from_salon: true
+          });
         }
       });
+    }
+
+    /** サロンホストへのドラフト保存 (SAVE_DRAFT) PostMessageブリッジ初期化 */
+    initDraftBridge() {
+      window.sendDraftToSalon = (title, content, targetCollection = 'contents') => {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({
+            type: 'SAVE_DRAFT',
+            title: title || '自動生成動画台本',
+            content: content || '',
+            targetCollection: targetCollection
+          }, '*');
+          if (window.appController && window.appController.showToast) {
+            window.appController.showToast('サロンへ下書きを保存しました', 'success');
+          }
+        } else {
+          console.log('[DraftBridge] スタンドアロン実行中: 下書きはローカルに保持されます');
+        }
+      };
     }
 
     /** 認証トークン取得 */
@@ -102,16 +236,18 @@
     }
 
     /**
-     * 単体アクセス時＆未認証時のガード処理
-     * ローカル開発環境（localhost / 127.0.0.1）およびBYOG設定済み時はパス
+     * 単体直アクセス時のセキュリティガード
+     * - 未認証かつ非サロンの場合は、スタンドアロンログイン画面（#loginPage）を表示
+     * - ローカル環境（localhost / 127.0.0.1）またはBYOG設定時または認証済みの場合は利用可能
      */
     applySecurityGuard() {
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       const hasToken = Boolean(this.getAuthToken());
       const inIframe = this.isInIframe();
+      const fromSalon = localStorage.getItem('kimidori_from_salon') === 'true';
 
-      // ローカル環境またはiframe内または認証済みなら安全
-      if (isLocal || hasToken || inIframe) {
+      // ローカル環境、サロンiframe内、認証済み、またはサロンからのセッションならパス
+      if (isLocal || hasToken || inIframe || fromSalon) {
         return;
       }
 
@@ -120,31 +256,12 @@
         return;
       }
 
-      // 単体直アクセスで未認証の場合、画面上部にサロン連携案内バナーを表示
+      // 未認証単体直アクセス時は、確実にスタンドアロンログイン画面を表示
       window.addEventListener('DOMContentLoaded', () => {
-        const topBanner = document.createElement('div');
-        topBanner.id = 'salonAuthGuardBanner';
-        topBanner.style.cssText = `
-          background: linear-gradient(90deg, #1e1b4b 0%, #312e81 100%);
-          border-bottom: 2px solid var(--accent-primary);
-          color: #f8fafc;
-          padding: 0.65rem 1.25rem;
-          font-size: 0.85rem;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          position: sticky;
-          top: 0;
-          z-index: 9999;
-        `;
-        topBanner.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-primary);"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span><strong>サロン会員限定ツール:</strong> サロンポータルからのアクセス、または「設定」にてBYOG（自前環境接続）モードを設定してご利用ください。</span>
-          </div>
-          <button type="button" class="btn btn-outline" onclick="document.querySelector('[data-target=\\'settings\\']')?.click();" style="padding: 0.25rem 0.65rem; font-size: 0.75rem;">設定を開く</button>
-        `;
-        document.body.prepend(topBanner);
+        const loginPage = document.getElementById('loginPage');
+        if (loginPage) {
+          loginPage.classList.remove('hidden');
+        }
       });
     }
   }

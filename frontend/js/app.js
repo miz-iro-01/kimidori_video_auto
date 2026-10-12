@@ -69,6 +69,14 @@ class AppController {
         }
       });
     });
+
+    const btnHeaderAdminSettings = document.getElementById('btnHeaderAdminSettings');
+    if (btnHeaderAdminSettings) {
+      btnHeaderAdminSettings.addEventListener('click', () => {
+        const adminNav = document.querySelector('.nav-item[data-target="admin"]');
+        if (adminNav) adminNav.click();
+      });
+    }
   }
 
   // --- 設定画面の初期化 ---
@@ -2022,8 +2030,26 @@ class AppController {
                       user.role === 'admin' ||
                       user.plan === 'admin' ||
                       user.uid === 'admin_ouma_uid' ||
-                      user.uid === 'admin_mugi_uid';
+                      user.uid === 'admin_mugi_uid' ||
+                      user.isAdmin === true;
       this.isAdmin = isAdmin;
+
+      // ヘッダー右上の管理者設定 (ユーザー管理) ボタンの表示制御
+      const btnHeaderAdminSettings = document.getElementById('btnHeaderAdminSettings');
+      if (btnHeaderAdminSettings) {
+        btnHeaderAdminSettings.style.display = isAdmin ? 'inline-flex' : 'none';
+      }
+
+      // トップバーのユーザー情報 & サロンSSOバッジ
+      const topUserEmailDisplay = document.getElementById('topUserEmailDisplay');
+      if (topUserEmailDisplay) {
+        topUserEmailDisplay.textContent = user.email || '';
+      }
+      const topSalonStatusBadge = document.getElementById('topSalonStatusBadge');
+      if (topSalonStatusBadge) {
+        const fromSalon = Boolean(user.from_salon || localStorage.getItem('kimidori_from_salon') === 'true');
+        topSalonStatusBadge.style.display = fromSalon ? 'inline-block' : 'none';
+      }
 
       if (currentUserDisplay) {
         if (isAdmin) {
@@ -2056,6 +2082,13 @@ class AppController {
       if (loginPage) loginPage.classList.remove('hidden');
       if (currentUserDisplay) currentUserDisplay.textContent = "";
       if (navAdminItem) navAdminItem.style.display = 'none';
+
+      const btnHeaderAdminSettings = document.getElementById('btnHeaderAdminSettings');
+      if (btnHeaderAdminSettings) btnHeaderAdminSettings.style.display = 'none';
+      const topUserEmailDisplay = document.getElementById('topUserEmailDisplay');
+      if (topUserEmailDisplay) topUserEmailDisplay.textContent = "";
+      const topSalonStatusBadge = document.getElementById('topSalonStatusBadge');
+      if (topSalonStatusBadge) topSalonStatusBadge.style.display = 'none';
 
       // 未ログイン時はダッシュボードを表示しておく（UIリセット）
       document.querySelectorAll('.view-section').forEach(sec => {
@@ -5546,6 +5579,11 @@ class AppController {
 
   // --- Phase 4: YouTube OAuth 2.0 連携ポップアップ起動 & 直接投稿・予約投稿モーダル ---
   _getCurrentUserId() {
+    if (this.currentUser && this.currentUser.uid) {
+      return this.currentUser.uid;
+    }
+    const salonUid = localStorage.getItem('kimidori_user_id');
+    if (salonUid) return salonUid;
     try {
       if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
         return firebase.auth().currentUser.uid;

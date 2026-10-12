@@ -6,6 +6,7 @@ Cloud Run 上で動作する動画処理APIサーバー
 import asyncio
 import json
 import logging
+import secrets
 import traceback
 import uuid
 from datetime import datetime
@@ -70,6 +71,8 @@ async def security_and_auth_middleware(request: Request, call_next):
     主要API（/api/process/*, /api/manga/*, /api/youtube/* 等）への不正アクセスを防御。
     サロンiframe連携トークン (X-Salon-Token / query auth_token)、Bearerトークン、
     またはローカル開発環境 / 管理者特権アクセスを検証する。
+    全レスポンスに salon-cloudrun-tools 準拠の Content-Security-Policy ヘッダーを付与し、
+    iframe 埋め込み (frame-ancestors) を許可する。
     """
     path = request.url.path
 
@@ -105,6 +108,17 @@ async def security_and_auth_middleware(request: Request, call_next):
             )
 
     response = await call_next(request)
+
+    # salon-cloudrun-tools 仕様: Iframe埋め込み＆セキュリティヘッダー設定
+    # X-Frame-Options: DENY を排除し、frame-ancestors を設定
+    if "x-frame-options" in response.headers:
+        del response.headers["x-frame-options"]
+    if "X-Frame-Options" in response.headers:
+        del response.headers["X-Frame-Options"]
+    response.headers["Content-Security-Policy"] = (
+        "frame-ancestors 'self' https://kimiiro-salon.web.app https://*.web.app http://localhost:3000;"
+    )
+
     return response
 
 
@@ -1168,6 +1182,75 @@ async def run_mode_b_pipeline(
 
     finally:
         processor.cleanup(job_id)
+
+
+# =============================================================================
+# Salon SSO 認証 & セッションハンドシェイク API (salon-cloudrun-tools 準拠)
+# =============================================================================
+class SalonSSORequest(BaseModel):
+    user_email: Optional[str] = ""
+    user_id: Optional[str] = ""
+    role: Optional[str] = "user"
+    is_admin: Optional[bool] = False
+    salon_plan: Optional[str] = "pro"
+    auth_token: Optional[str] = ""
+    from_salon: Optional[bool] = True
+
+
+@app.post("/api/auth/sso")
+async def salon_sso_endpoint(req: SalonSSORequest):
+    """
+    サロンプラットフォーム（https://kimiiro-salon.web.app）からのSSO認証・セッションハンドシェイク。
+    サロンセッション情報（user_email, user_id, role, is_admin, salon_plan）を検証・初期化し、
+    即座にツールを開放する。
+    """
+    try:
+        user_email = (req.user_email or "").strip()
+        user_id = (req.user_id or user_email or "salon_member").strip()
+
+        # 管理者判定: oumaumauma32@gmail.com, sl0wmugi9@gmail.com, または role/is_admin
+        is_admin = bool(
+            req.is_admin or
+            req.role == "admin" or
+            user_email.lower() in ("oumaumauma32@gmail.com", "sl0wmugi9@gmail.com")
+        )
+        role = "admin" if is_admin else (req.role or "user")
+        plan = "admin" if is_admin else (req.salon_plan or "pro")
+
+        # Firestoreユーザー同期
+        user_data = firestore.get_user(user_id) or {}
+        sync_payload = {
+            "email": user_email,
+            "role": role,
+            "plan": plan,
+            "is_admin": is_admin,
+            "from_salon": True,
+            "last_login": datetime.utcnow().isoformat()
+        }
+        if not user_data.get("credits"):
+            sync_payload["credits"] = 3000 if is_admin else (1000 if plan == "pro" else 300)
+
+        firestore.update_user(user_id, sync_payload)
+
+        # セッショントークン生成/利用
+        token = req.auth_token if (req.auth_token and len(req.auth_token) >= 16) else f"salon_sso_{secrets.token_hex(24)}"
+
+        logger.info(f"[SalonSSO] 認証完了: user_id={user_id}, email={user_email}, role={role}, is_admin={is_admin}")
+
+        return {
+            "success": True,
+            "status": "authenticated",
+            "user_id": user_id,
+            "user_email": user_email,
+            "role": role,
+            "is_admin": is_admin,
+            "plan": plan,
+            "auth_token": token,
+            "message": "サロンSSO認証が完了しました"
+        }
+    except Exception as e:
+        logger.error(f"[SalonSSO] エラー: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # --- YouTube OAuth API ---

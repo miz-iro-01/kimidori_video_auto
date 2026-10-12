@@ -272,3 +272,26 @@ class FirestoreService:
             .stream()
         )
         return [doc.to_dict() for doc in docs]
+
+    def get_user(self, user_id: str) -> Optional[dict]:
+        """ユーザー情報を取得"""
+        try:
+            doc = self.db.collection("users").document(user_id).get()
+            if doc.exists:
+                return doc.to_dict()
+            if "@" in user_id:
+                query_res = list(self.db.collection("users").where("email", "==", user_id).limit(1).stream())
+                if query_res:
+                    return query_res[0].to_dict()
+            return None
+        except Exception as e:
+            logger.warning(f"Firestore get_user エラー ({user_id}): {e}")
+            return None
+
+    def update_user(self, user_id: str, updates: dict) -> None:
+        """ユーザー情報を更新またはマージ作成"""
+        try:
+            self.db.collection("users").document(user_id).set(updates, merge=True)
+        except Exception as e:
+            logger.warning(f"Firestore update_user エラー ({user_id}): {e}")
+

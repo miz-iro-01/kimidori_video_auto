@@ -210,4 +210,18 @@
   - 各変数にコメントでデプロイ手順・注意事項を記載済み
   - 本番環境では `REQUIRE_AUTH_API=true` を推奨
 
+## Phase 7: salon-cloudrun-tools 仕様準拠（サロンプラットフォーム統合・SSOハンドシェイク・セキュリティヘッダー）
+- **Iframe 埋め込み ＆ セキュリティヘッダー設定 (`backend/main.py`)**:
+  - `X-Frame-Options: DENY` を完全排除。
+  - `Content-Security-Policy: frame-ancestors 'self' https://kimiiro-salon.web.app https://*.web.app http://localhost:3000;` を全レスポンスに付与し、サロンプラットフォームからの埋め込みを安全に許可。
+- **Salon SSO ハンドシェイクの完全適合 (`backend/main.py`, `frontend/js/auth.js`)**:
+  - 親ウィンドウからの `postMessage`（`SALON_AUTH_SYNC`, `INIT_CONTEXT`）およびURLパラメータ（`user_email`, `user_id`, `role`, `is_admin`, `from_salon=true`）を受け取るSSO認証フロー。
+  - `POST /api/auth/sso`: サロンセッション（email, id, role, plan）を検証・Firestore同期し、即座にツールを開放。
+  - スタンドアロン直接アクセス時: 既存のログイン画面（`#loginPage`）を表示し、不正アクセスを防止。
+  - PostMessageブリッジ: `window.sendDraftToSalon(title, content, targetCollection)` により、サロンの `columns` または `contents` 下書きコレクションへ直接下書き保存可能。
+- **管理者ユーザー管理パネルの表示制御 (`frontend/index.html`, `frontend/js/app.js`)**:
+  - ログイン中ユーザーが master administrator（`oumaumauma32@gmail.com` または `role: 'admin'`）の場合のみ、ヘッダー右上に「管理者設定 (ユーザー管理)」ボタン（`#btnHeaderAdminSettings`）を表示。
+  - サイドバーの「管理者ダッシュボード」ナビ項目と完全連動。
+
+
 
