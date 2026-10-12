@@ -1421,8 +1421,7 @@ async def _execute_youtube_direct_upload(
     thumbnail_cut_index: Optional[int] = None,
     byog_enabled: bool = False,
 ) -> dict:
-    """ジョブ動画およびサムネイルを解決し、YouTube Data API Resumable Uploadを実行する共通ヘルパー"""
-    effective_uid = user_id if (user_id and user_id not in ["user_123", "default_user"]) else "oumaumauma32@gmail.com"
+    effective_uid = (user_id or "").strip() or "anonymous_user"
     plan_info = permission_manager.get_user_plan(effective_uid, byog_enabled=byog_enabled)
     if not plan_info.get("can_direct_upload_youtube", False):
         raise HTTPException(
@@ -1747,8 +1746,9 @@ async def delete_admin_user(user_id: str):
 @app.post("/api/manga/script")
 async def generate_manga_script_endpoint(req: MangaScriptRequest):
     """長尺漫画動画のシナリオ・コマ割りJSONを生成する"""
-    effective_user_id = req.user_id if (req.user_id and req.user_id not in ["user_123", "default_user"]) else "oumaumauma32@gmail.com"
-    access = permission_manager.check_feature_access(effective_user_id, FeatureName.MANGA_LONG_VIDEO_CREATE)
+    byog_active = bool(req.gemini_api_keys)
+    effective_user_id = (req.user_id or "").strip() or "anonymous_user"
+    access = permission_manager.check_feature_access(effective_user_id, FeatureName.MANGA_LONG_VIDEO_CREATE, byog_enabled=byog_active)
     if not access["allowed"]:
         raise HTTPException(status_code=403, detail=access["reason"])
 
@@ -1768,8 +1768,9 @@ async def generate_manga_script_endpoint(req: MangaScriptRequest):
 @app.post("/api/manga/generate")
 async def generate_manga_video_endpoint(req: MangaVideoGenerateRequest, background_tasks: BackgroundTasks):
     """長尺漫画動画生成ジョブを発行する"""
-    effective_user_id = req.user_id if (req.user_id and req.user_id not in ["user_123", "default_user"]) else "oumaumauma32@gmail.com"
-    access = permission_manager.check_feature_access(effective_user_id, FeatureName.MANGA_LONG_VIDEO_CREATE)
+    byog_active = bool(req.gemini_api_keys or req.colab_worker_url)
+    effective_user_id = (req.user_id or "").strip() or "anonymous_user"
+    access = permission_manager.check_feature_access(effective_user_id, FeatureName.MANGA_LONG_VIDEO_CREATE, byog_enabled=byog_active)
     if not access["allowed"]:
         raise HTTPException(status_code=403, detail=access["reason"])
 
@@ -1904,8 +1905,9 @@ class ProShortsRequest(BaseModel):
 @app.post("/api/pro-shorts/script")
 async def generate_pro_shorts_script_endpoint(req: ProShortsRequest):
     """Pro版ショート動画（60秒・全カット動画演出）の台本を生成する"""
-    effective_user_id = req.user_id if (req.user_id and req.user_id not in ["user_123", "default_user"]) else "oumaumauma32@gmail.com"
-    access = permission_manager.check_feature_access(effective_user_id, FeatureName.PRO_SHORT_VIDEO_CREATE if hasattr(FeatureName, "PRO_SHORT_VIDEO_CREATE") else FeatureName.MANGA_LONG_VIDEO_CREATE)
+    byog_active = bool(req.gemini_api_keys)
+    effective_user_id = (req.user_id or "").strip() or "anonymous_user"
+    access = permission_manager.check_feature_access(effective_user_id, FeatureName.PRO_SHORT_VIDEO_CREATE if hasattr(FeatureName, "PRO_SHORT_VIDEO_CREATE") else FeatureName.MANGA_LONG_VIDEO_CREATE, byog_enabled=byog_active)
     if not access["allowed"]:
         raise HTTPException(status_code=403, detail=access["reason"])
 
@@ -1939,8 +1941,9 @@ class LongVideoScriptRequest(BaseModel):
 @app.post("/api/long-video/script")
 async def generate_long_video_script_endpoint(req: LongVideoScriptRequest):
     """長尺動画（15〜20分・全5章・120〜180カット）の完全仕様台本と人物シートを生成する"""
-    effective_user_id = req.user_id if (req.user_id and req.user_id not in ["user_123", "default_user"]) else "oumaumauma32@gmail.com"
-    access = permission_manager.check_feature_access(effective_user_id, FeatureName.MANGA_LONG_VIDEO_CREATE)
+    byog_active = bool(req.gemini_api_keys)
+    effective_user_id = (req.user_id or "").strip() or "anonymous_user"
+    access = permission_manager.check_feature_access(effective_user_id, FeatureName.MANGA_LONG_VIDEO_CREATE, byog_enabled=byog_active)
     if not access["allowed"]:
         raise HTTPException(status_code=403, detail=access["reason"])
 

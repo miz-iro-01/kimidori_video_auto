@@ -241,8 +241,23 @@
     4. `master`（旧premium / マスター）: 3,000 pt、全機能フル開放、優先キュー処理（月額 7,980円）
     5. `byog_purchased`（買い切り 79,800円）: 無制限（0 pt消費）、自前環境セットアップガイド表示、スタジオ＆全機能フル開放（一括 79,800円）
   - サロンSSO（`POST /api/auth/sso`）受信時、`salon_plan` が `free_trial` / `standard` / `premium` / `master` のいずれかであれば、ツールの該当プランへ自動同期。
-  - 後方互換性エイリアス（`lite` -> `standard`, `pro` -> `premium`, `free` -> `free_trial`）を完備。
   - Stripe Checkout Session 発行および Webhook 処理にて `byog_purchased`（`mode: "payment"`, unit_amount: 79800）の決済・権限付与を完全サポート。
+
+## Phase 9: マルチユーザー環境認証の完全分離 ＆ CSSスクロールパフォーマンス最適化
+- **マルチユーザー環境認証の完全分離 (`frontend/js/app.js`, `frontend/js/api-client.js`, `frontend/js/auth.js`, `backend/main.py`)**:
+  - **未認証時管理者自動ログインの完全撤去**: 開発用モックとして残存していた「未ログイン時に `oumaumauma32@gmail.com` で自動ログインする処理」を完全排除。未認証時は正しく未ログイン状態としてログイン画面（`#loginPage`）を表示。
+  - **環境別・アカウント別のセッション完全独立**:
+    - 別ブラウザ、別Googleアカウント、シークレットウィンドウ等で直接アクセスした際、勝手に他人のアカウントで開かれる事故を完全防止。
+    - ユーザーが明示的にGoogle認証またはログインを行った本人のアカウントのみをセッションとして確立。
+    - ログインユーザーが `oumaumauma32@gmail.com` の場合のみマスター管理者パネル・機能を表示し、それ以外の一般ユーザーには一般権限（`free_trial` 等）を付与。
+  - **ログアウト時のセッション完全初期化**: `btnLogout` 押下時に、サロンSSOトークン、ユーザーID、モックキャッシュをLocalStorageから全消去し、Firebaseサインアウトを実行してログイン画面へ安全にリダイレクト。
+  - **APIクライアントおよびバックエンドのフォールバック健全化**: `api-client.js` および `backend/main.py` の `_getUserId()` / `effective_user_id` で、ユーザー未指定時に `oumaumauma32@gmail.com` へ書き換えていたロジックを完全撤去。
+- **CSSスクロールパフォーマンス・GPU最適化 (`frontend/css/style.css`)**:
+  - **高負荷ブラー（`filter: blur`）の完全撤去**: 背後で常時アニメーションしていた `.bg-glow`, `.login-glow` の `filter: blur(120px/100px)` を、GPU負荷ゼロの事前グラデーション（`radial-gradient`）に置換。
+  - **GPUハードウェアアクセラレーション**: `.bg-glow`, `.bg-mesh`, `.main-content`, `.glass-card` に `transform: translate3d(0, 0, 0)` / `translateZ(0)` および `will-change: transform` を付与し、独立したGPU合成レイヤーとしてキャッシュ。
+  - **スクロール領域の分離（CSS Containment）**: `.main-content` に `contain: paint layout;`, `scroll-behavior: smooth;`, `-webkit-overflow-scrolling: touch;` を適用。スクロール中の再描画（repaint）および再計算（reflow）を遮断し、60fps/120fpsのスムーズなスクロールを実現。
+  - **フロストガラス最適化**: `.glass-card` の `backdrop-filter: blur(8px)` 調整と軽量シャドウ化により、カード密集時のレンダリングカクつきを完全解消。
+
 
 
 

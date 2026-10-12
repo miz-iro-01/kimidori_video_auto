@@ -378,52 +378,34 @@ class ApiClient {
 
   // ===== BGM管理 API =====
 
-  /** ユーザーIDを取得するヘルパー */
+  /** ユーザーIDを取得するヘルパー（ログイン中ユーザーの識別子を動的に返却） */
   _getUserId() {
     // 1. window.appControllerのcurrentUserを確認
     if (window.appController && window.appController.currentUser) {
-      const email = (window.appController.currentUser.email || '').toLowerCase().trim();
-      if (email === 'oumaumauma32@gmail.com' || email === 'sl0wmugi9@gmail.com') {
-        return email;
-      }
-      if (window.appController.currentUser.uid === 'admin_ouma_uid') {
-        return 'oumaumauma32@gmail.com';
-      }
+      const u = window.appController.currentUser;
+      if (u.email) return u.email.trim();
+      if (u.uid) return u.uid;
     }
 
     // 2. Firebase Auth currentUserを確認
     if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
       const user = firebase.auth().currentUser;
-      const email = (user.email || '').toLowerCase().trim();
-      if (email === 'oumaumauma32@gmail.com' || email === 'sl0wmugi9@gmail.com') {
-        return email;
-      }
-      if (user.uid) {
-        return user.email || user.uid;
-      }
+      if (user.email) return user.email.trim();
+      if (user.uid) return user.uid;
     }
 
-    // 3. localStorageのkimidori_mock_userを確認
-    const mockUserStr = localStorage.getItem('kimidori_mock_user');
-    if (mockUserStr) {
-      try {
-        const u = JSON.parse(mockUserStr);
-        const email = (u.email || '').toLowerCase().trim();
-        if (email === 'oumaumauma32@gmail.com' || email === 'sl0wmugi9@gmail.com' || u.role === 'admin' || u.plan === 'admin') {
-          return email || 'oumaumauma32@gmail.com';
-        }
-        return u.uid || u.email;
-      } catch(e) {}
+    // 3. localStorageのサロン認証・セッション情報を確認
+    const salonUid = localStorage.getItem('kimidori_user_id') || localStorage.getItem('kimidori_user_email');
+    if (salonUid) return salonUid.trim();
+
+    // 4. settingsManagerに登録されたID
+    if (window.settingsManager) {
+      const sUid = window.settingsManager.get('userId');
+      if (sUid) return sUid.trim();
     }
 
-    // 4. DOM上のcurrentUserDisplayを確認
-    const userDisplay = document.getElementById('currentUserDisplay');
-    if (userDisplay && userDisplay.textContent && userDisplay.textContent.includes('oumaumauma32@gmail.com')) {
-      return 'oumaumauma32@gmail.com';
-    }
-
-    // 5. 管理者既定フォールバック（管理者専用環境のため、ブロックされるuser_123ではなく管理者アドレスを返却）
-    return "oumaumauma32@gmail.com";
+    // 未ログイン時は空文字を返却（特定アドレスへの固定フォールバックは完全廃止）
+    return "";
   }
 
   /** BGMをアップロードして登録 */

@@ -1888,7 +1888,20 @@ class AppController {
     document.getElementById('btnLogout')?.addEventListener('click', async () => {
       try {
         localStorage.removeItem('kimidori_mock_user');
+        localStorage.removeItem('kimidori_auth_token');
+        localStorage.removeItem('kimidori_user_email');
+        localStorage.removeItem('kimidori_user_id');
+        localStorage.removeItem('kimidori_user_role');
+        localStorage.removeItem('kimidori_salon_plan');
+        localStorage.removeItem('kimidori_is_admin');
+        localStorage.removeItem('kimidori_from_salon');
+        if (window.settingsManager) {
+          window.settingsManager.set('salonAuthToken', '');
+          window.settingsManager.set('userId', '');
+        }
         await firebase.auth().signOut();
+        this.currentUser = null;
+        this.updateAuthState(null);
         this.showToast("ログアウトしました", "success");
       } catch (err) {
         console.error(err);
@@ -1989,28 +2002,35 @@ class AppController {
     // 認証監視
     firebase.auth().onAuthStateChanged(user => {
       if (user) {
+        // Firebaseログイン中のユーザー情報で認証状態を更新
+        this.currentUser = user;
         this.updateAuthState(user);
+        if (this.refreshUserCredits) this.refreshUserCredits();
       } else {
-        // Firebaseがログインしていない場合、ローカルのモックユーザーをチェック
-        const mockUserStr = localStorage.getItem('kimidori_mock_user');
-        if (mockUserStr) {
-          try {
-            const mockUser = JSON.parse(mockUserStr);
-            this.updateAuthState(mockUser);
-            return;
-          } catch (e) {
-            localStorage.removeItem('kimidori_mock_user');
-          }
+        // Firebase未ログイン時: サロンSSOセッションがあるか確認
+        const savedToken = localStorage.getItem('kimidori_auth_token');
+        const savedEmail = (localStorage.getItem('kimidori_user_email') || '').trim();
+        const savedFromSalon = localStorage.getItem('kimidori_from_salon') === 'true';
+
+        if (savedFromSalon && savedEmail && savedToken) {
+          const isMasterAdmin = (savedEmail.toLowerCase() === 'oumaumauma32@gmail.com');
+          const salonUser = {
+            uid: localStorage.getItem('kimidori_user_id') || savedEmail,
+            email: savedEmail,
+            role: isMasterAdmin ? 'admin' : (localStorage.getItem('kimidori_user_role') || 'user'),
+            plan: isMasterAdmin ? 'admin' : (localStorage.getItem('kimidori_salon_plan') || 'premium'),
+            isAdmin: isMasterAdmin,
+            from_salon: true
+          };
+          this.currentUser = salonUser;
+          this.updateAuthState(salonUser);
+          if (this.refreshUserCredits) this.refreshUserCredits();
+          return;
         }
-        // 管理者環境のデフォルトセッションを自動初期化 (最高管理者 oumaumauma32@gmail.com として全機能解放)
-        const defaultAdmin = {
-          uid: 'admin_ouma_uid',
-          email: 'oumaumauma32@gmail.com',
-          role: 'admin',
-          plan: 'admin'
-        };
-        localStorage.setItem('kimidori_mock_user', JSON.stringify(defaultAdmin));
-        this.updateAuthState(defaultAdmin);
+
+        // FirebaseログインもサロンSSOセッションもない場合は、正しく未ログイン状態としログイン画面を表示
+        this.currentUser = null;
+        this.updateAuthState(null);
       }
     });
   }

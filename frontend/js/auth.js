@@ -113,7 +113,7 @@
         const savedToken = localStorage.getItem('kimidori_auth_token');
         const savedEmail = (localStorage.getItem('kimidori_user_email') || '').trim().toLowerCase();
         const savedFromSalon = localStorage.getItem('kimidori_from_salon') === 'true';
-        if (savedFromSalon && savedEmail) {
+        if (savedFromSalon && savedEmail && savedToken) {
           const isSavedMasterAdmin = (savedEmail === 'oumaumauma32@gmail.com');
           const userObj = {
             uid: localStorage.getItem('kimidori_user_id') || savedEmail,

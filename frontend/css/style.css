@@ -54,14 +54,22 @@
     pointer-events: none;
   }
   .bg-glow {
-    position: fixed; z-index: -1; width: 600px; height: 600px;
-    border-radius: 50%; filter: blur(120px); opacity: 0.4;
-    pointer-events: none; animation: float 20s infinite ease-in-out alternate;
+    position: fixed; z-index: -1; width: 650px; height: 650px;
+    border-radius: 50%; opacity: 0.45;
+    pointer-events: none; animation: float 22s infinite ease-in-out alternate;
+    will-change: transform; transform: translate3d(0, 0, 0);
   }
-  .bg-glow-1 { top: -200px; left: -200px; background: var(--accent-primary-glow); }
-  .bg-glow-2 { bottom: -200px; right: -200px; background: var(--accent-secondary-glow); animation-delay: -10s; }
+  .bg-glow-1 {
+    top: -200px; left: -200px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.35) 0%, rgba(16, 185, 129, 0.1) 45%, transparent 70%);
+  }
+  .bg-glow-2 {
+    bottom: -200px; right: -200px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, rgba(139, 92, 246, 0.08) 45%, transparent 70%);
+    animation-delay: -11s;
+  }
   
-  @keyframes float { 0% { transform: translate(0, 0); } 100% { transform: translate(100px, 100px); } }
+  @keyframes float { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(50px, 50px, 0); } }
   
   /* --- Layout --- */
   .app-layout {
@@ -99,7 +107,7 @@
   .status-dot.ready { background: var(--accent-primary); box-shadow: 0 0 10px var(--accent-primary); }
   
   /* --- Main Content --- */
-  .main-content { flex: 1; padding: 3rem 4rem; overflow-y: auto; position: relative; }
+  .main-content { flex: 1; padding: 2.5rem 3.5rem; overflow-y: auto; overflow-x: hidden; position: relative; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; transform: translateZ(0); contain: paint layout; will-change: scroll-position; }
   .view-section { display: none; animation: fadeIn 0.4s ease forwards; }
   .view-section.active { display: block; }
   
@@ -111,9 +119,10 @@
   
   /* --- Glass Cards --- */
   .glass-card {
-    background: var(--bg-surface); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    background: var(--bg-surface); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--border-color); border-radius: var(--radius-lg);
-    padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    padding: 2rem; box-shadow: 0 12px 30px -8px rgba(0,0,0,0.4);
+    transform: translateZ(0);
   }
   .card-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 1.5rem; }
   
@@ -309,20 +318,21 @@
     width: 500px;
     height: 500px;
     border-radius: 50%;
-    filter: blur(100px);
-    opacity: 0.35;
+    opacity: 0.4;
     pointer-events: none;
     animation: float 25s infinite ease-in-out alternate;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
   }
   .login-glow-1 {
     top: -100px;
     left: -100px;
-    background: var(--accent-primary-glow);
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.3) 0%, rgba(16, 185, 129, 0.08) 45%, transparent 70%);
   }
   .login-glow-2 {
     bottom: -100px;
     right: -100px;
-    background: var(--accent-secondary-glow);
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.25) 0%, rgba(139, 92, 246, 0.06) 45%, transparent 70%);
     animation-delay: -12s;
   }
   
