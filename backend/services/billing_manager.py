@@ -38,45 +38,40 @@ class BillingManager:
     def get_user_credit_balance(self, user_id: str) -> Dict[str, Any]:
         """ユーザーのクレジット残高およびプラン情報を取得"""
         if not user_id:
-            return {"credits": 0, "plan": "free", "unlimited": False}
+            return {"credits": 0, "plan": "free_trial", "unlimited": False}
 
-        # 管理者・特権ユーザーは無制限
-        admin_match_ids = {
-            "oumaumauma32@gmail.com",
-            "sl0wmugi9@gmail.com",
-            "admin_ouma_uid",
-            "admin_mugi_uid",
-            "user_123",
-            "default_user",
-            "admin",
-            "administrator"
-        }
-        if user_id in admin_match_ids or user_id.lower() in admin_match_ids:
+        clean_id = (user_id or "").strip().lower()
+
+        # マスター管理者（oumaumauma32@gmail.com のみ）
+        if clean_id in ("oumaumauma32@gmail.com", "admin_ouma_uid"):
             return {
                 "user_id": user_id,
                 "credits": 999999,
                 "plan": "admin",
                 "unlimited": True,
-                "plan_name": "管理者 (無制限)"
+                "plan_name": "マスター管理者 (無制限)"
             }
 
         try:
             doc = self.firestore.db.collection("users").document(user_id).get()
             if doc.exists:
                 data = doc.to_dict()
-                credits = int(data.get("credits", 100))  # 新規登録デフォルト100クレジット
-                plan = data.get("plan", "free")
+                raw_plan = str(data.get("plan", "free_trial")).strip().lower()
+                plan = config.resolve_plan_key(raw_plan)
+                is_unlimited = plan in ("admin", "enterprise", "byog_purchased") or bool(data.get("can_use_shared_colab") or data.get("allowed_colab"))
+                credits = 999999 if is_unlimited else int(data.get("credits", 30))  # 新規デフォルト30 pt
+                plan_name = config.PLAN_PRICING.get(plan, {}).get("name", "無料体験プラン")
                 return {
                     "user_id": user_id,
                     "credits": credits,
                     "plan": plan,
-                    "unlimited": plan in ("admin", "enterprise"),
-                    "plan_name": config.PLAN_PRICING.get(plan, {}).get("name", "フリー会員")
+                    "unlimited": is_unlimited,
+                    "plan_name": plan_name
                 }
         except Exception as e:
             logger.warning(f"Failed to fetch credit balance for {user_id}: {e}")
 
-        return {"user_id": user_id, "credits": 100, "plan": "free", "unlimited": False, "plan_name": "フリー会員"}
+        return {"user_id": user_id, "credits": 30, "plan": "free_trial", "unlimited": False, "plan_name": "無料体験プラン"}
 
     def check_and_deduct_credits(
         self,
@@ -183,8 +178,35 @@ class BillingManager:
         stripe.api_key = config.STRIPE_SECRET_KEY
 
         try:
-            if item_type == "subscription":
-                plan_info = config.PLAN_PRICING.get(item_id)
+            if item_type in ("one_time", "lifetime") or item_id == "byog_purchased":
+                plan_info = config.PLAN_PRICING.get("byog_purchased", {})
+                price_jpy = plan_info.get("price_jpy", 79800)
+
+                session = stripe.checkout.Session.create(
+                    payment_method_types=["card"],
+                    mode="payment",
+                    customer_email=user_email if "@" in user_email else None,
+                    client_reference_id=user_id,
+                    metadata={"user_id": user_id, "plan": "byog_purchased", "type": "byog_purchased"},
+                    line_items=[{
+                        "price_data": {
+                            "currency": "jpy",
+                            "product_data": {
+                                "name": "KIMIDORI YouTube Auto 買い切り無制限プラン",
+                                "description": "買い切り79,800円（クレジット0消費・無制限、自前環境セットアップガイド付属）"
+                            },
+                            "unit_amount": price_jpy
+                        },
+                        "quantity": 1
+                    }],
+                    success_url=success_url,
+                    cancel_url=cancel_url
+                )
+                return {"checkout_url": session.url, "session_id": session.id}
+
+            elif item_type == "subscription":
+                plan_key = config.resolve_plan_key(item_id)
+                plan_info = config.PLAN_PRICING.get(plan_key)
                 if not plan_info:
                     raise ValueError(f"Unknown subscription plan: {item_id}")
 
@@ -193,7 +215,7 @@ class BillingManager:
                     mode="subscription",
                     customer_email=user_email if "@" in user_email else None,
                     client_reference_id=user_id,
-                    metadata={"user_id": user_id, "plan": item_id, "type": "subscription"},
+                    metadata={"user_id": user_id, "plan": plan_key, "type": "subscription"},
                     line_items=[{
                         "price_data": {
                             "currency": "jpy",
@@ -276,19 +298,23 @@ class BillingManager:
             pay_type = metadata.get("type")
 
             if user_id:
-                if pay_type == "credit_pack":
+                if pay_type == "byog_purchased":
+                    self.update_user_byog_purchased(user_id)
+                elif pay_type == "credit_pack":
                     credits = int(metadata.get("credits", 0))
                     if credits > 0:
                         self.add_credits(user_id, credits, reason=f"追加クレジットチャージ ({metadata.get('pack_id')})")
                 elif pay_type == "subscription":
-                    plan = metadata.get("plan", "pro")
+                    raw_plan = metadata.get("plan", "premium")
+                    plan = config.resolve_plan_key(raw_plan)
                     monthly_credits = config.PLAN_PRICING.get(plan, {}).get("monthly_credits", 1000)
                     self.update_user_subscription(user_id, plan, monthly_credits)
 
         elif event_type in ("customer.subscription.created", "customer.subscription.updated"):
             sub_status = data_object.get("status")
             user_id = data_object.get("metadata", {}).get("user_id")
-            plan = data_object.get("metadata", {}).get("plan", "pro")
+            raw_plan = data_object.get("metadata", {}).get("plan", "premium")
+            plan = config.resolve_plan_key(raw_plan)
 
             if user_id and sub_status in ("active", "trialing"):
                 monthly_credits = config.PLAN_PRICING.get(plan, {}).get("monthly_credits", 1000)
@@ -297,10 +323,10 @@ class BillingManager:
         elif event_type == "customer.subscription.deleted":
             user_id = data_object.get("metadata", {}).get("user_id")
             if user_id:
-                logger.info(f"Subscription canceled for user {user_id}. Downgrading to free.")
+                logger.info(f"Subscription canceled for user {user_id}. Downgrading to free_trial.")
                 try:
                     self.firestore.db.collection("users").document(user_id).set({
-                        "plan": "free",
+                        "plan": "free_trial",
                         "subscription_status": "canceled",
                         "updated_at": datetime.now().isoformat()
                     }, merge=True)
@@ -308,6 +334,23 @@ class BillingManager:
                     logger.error(f"Failed to update subscription status: {e}")
 
         return {"handled": True, "event_type": event_type}
+
+    def update_user_byog_purchased(self, user_id: str):
+        """買い切り無制限プラン（79,800円）の権限反映"""
+        try:
+            self.firestore.db.collection("users").document(user_id).set({
+                "plan": "byog_purchased",
+                "credits": 999999,
+                "unlimited": True,
+                "byog_enabled": True,
+                "show_byog_setup_guide": True,
+                "subscription_status": "lifetime",
+                "updated_at": datetime.now().isoformat()
+            }, merge=True)
+            self.add_credits(user_id, 999999, reason="買い切り79,800円プラン（無制限）解放")
+            logger.info(f"Updated user {user_id} to byog_purchased lifetime plan.")
+        except Exception as e:
+            logger.error(f"Failed to update user byog_purchased in Firestore: {e}")
 
     def update_user_subscription(self, user_id: str, plan: str, credits_to_grant: int):
         """サブスクリプション反映および月次クレジット付与"""

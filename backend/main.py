@@ -1192,7 +1192,7 @@ class SalonSSORequest(BaseModel):
     user_id: Optional[str] = ""
     role: Optional[str] = "user"
     is_admin: Optional[bool] = False
-    salon_plan: Optional[str] = "pro"
+    salon_plan: Optional[str] = "premium"
     auth_token: Optional[str] = ""
     from_salon: Optional[bool] = True
 
@@ -1201,21 +1201,39 @@ class SalonSSORequest(BaseModel):
 async def salon_sso_endpoint(req: SalonSSORequest):
     """
     サロンプラットフォーム（https://kimiiro-salon.web.app）からのSSO認証・セッションハンドシェイク。
-    サロンセッション情報（user_email, user_id, role, is_admin, salon_plan）を検証・初期化し、
-    即座にツールを開放する。
+    - サロンAdminフラグによるマスター昇格を完全廃止
+    - マスター管理者は oumaumauma32@gmail.com のみに限定
+    - 事前登録リストに基づく家族・共有Colab利用メンバー判定
+    - サロン側プラン名称（free_trial / standard / premium / master）との完全同期
     """
     try:
-        user_email = (req.user_email or "").strip()
+        user_email = (req.user_email or "").strip().lower()
         user_id = (req.user_id or user_email or "salon_member").strip()
 
-        # 管理者判定: oumaumauma32@gmail.com, sl0wmugi9@gmail.com, または role/is_admin
-        is_admin = bool(
-            req.is_admin or
-            req.role == "admin" or
-            user_email.lower() in ("oumaumauma32@gmail.com", "sl0wmugi9@gmail.com")
-        )
-        role = "admin" if is_admin else (req.role or "user")
-        plan = "admin" if is_admin else (req.salon_plan or "pro")
+        # 1. マスター管理者判定（oumaumauma32@gmail.com のみ厳格適用、サロン側のadminフラグは無視）
+        is_master_admin = (user_email == "oumaumauma32@gmail.com")
+        role = "admin" if is_master_admin else "user"
+
+        # 2. 家族・共有Colab利用メンバー判定
+        is_colab_shared = permission_manager.is_colab_shared_user(user_email, user_id=user_id)
+
+        # 3. プラン自動同期（free_trial / standard / premium / master / byog_purchased）
+        if is_master_admin:
+            plan = "admin"
+        else:
+            raw_plan = (req.salon_plan or "premium").strip().lower()
+            plan = config.resolve_plan_key(raw_plan)
+
+        # 初回クレジットの算出
+        initial_credits_map = {
+            "admin": 999999,
+            "byog_purchased": 999999,
+            "master": 3000,
+            "premium": 1000,
+            "standard": 300,
+            "free_trial": 30
+        }
+        target_credits = initial_credits_map.get(plan, 300)
 
         # Firestoreユーザー同期
         user_data = firestore.get_user(user_id) or {}
@@ -1223,19 +1241,20 @@ async def salon_sso_endpoint(req: SalonSSORequest):
             "email": user_email,
             "role": role,
             "plan": plan,
-            "is_admin": is_admin,
+            "is_admin": is_master_admin,
+            "can_use_shared_colab": is_colab_shared,
             "from_salon": True,
             "last_login": datetime.utcnow().isoformat()
         }
-        if not user_data.get("credits"):
-            sync_payload["credits"] = 3000 if is_admin else (1000 if plan == "pro" else 300)
+        if not user_data.get("credits") or is_master_admin:
+            sync_payload["credits"] = target_credits
 
         firestore.update_user(user_id, sync_payload)
 
         # セッショントークン生成/利用
         token = req.auth_token if (req.auth_token and len(req.auth_token) >= 16) else f"salon_sso_{secrets.token_hex(24)}"
 
-        logger.info(f"[SalonSSO] 認証完了: user_id={user_id}, email={user_email}, role={role}, is_admin={is_admin}")
+        logger.info(f"[SalonSSO] 認証完了: user_id={user_id}, email={user_email}, role={role}, is_master_admin={is_master_admin}, plan={plan}, colab_shared={is_colab_shared}")
 
         return {
             "success": True,
@@ -1243,8 +1262,10 @@ async def salon_sso_endpoint(req: SalonSSORequest):
             "user_id": user_id,
             "user_email": user_email,
             "role": role,
-            "is_admin": is_admin,
+            "is_admin": is_master_admin,
             "plan": plan,
+            "can_use_shared_colab": is_colab_shared,
+            "byog_enabled": bool(is_master_admin or is_colab_shared or plan == "byog_purchased"),
             "auth_token": token,
             "message": "サロンSSO認証が完了しました"
         }

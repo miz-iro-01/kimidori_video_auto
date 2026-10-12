@@ -51,7 +51,7 @@ class SettingsManager {
       replicateApiToken: "",
       colabWorkerUrl: "https://alexander-cedar-pastor-cornell.trycloudflare.com",
       googleDriveSync: false,
-      planTier: "pro",
+      planTier: "premium",
       canUsePremiumTts: true,
       canDirectUploadYoutube: true,
       // BYOG（自前環境接続）設定
@@ -206,28 +206,48 @@ class SettingsManager {
     };
   }
 
-  // 高品質OSS TTS（ElevenLabs互換）利用可否フラグ（簡易ショート/ライトプラン相当では無料TTSのみ）
+  // 高品質VoxCPM / OSS TTS利用可否フラグ（無料体験枠・スタンダードプランでは無料TTSのみ）
   canUsePremiumTts(contextMode = "pro") {
-    if (contextMode === "simple_shorts" || this.get("planTier") === "lite") {
-      return false;
+    const tier = (this.get("planTier") || "free_trial").toLowerCase();
+    if (contextMode === "simple_shorts" || tier === "lite" || tier === "standard" || tier === "free_trial" || tier === "free") {
+      return this.isByogActive();
     }
     return this.get("canUsePremiumTts") !== false || this.isByogActive();
   }
 
-  // YouTube直接OAuth投稿・予約投稿の利用可否フラグ（簡易ショート/ライトプラン相当ではMP4ダウンロードのみ）
+  // YouTube直接OAuth投稿・予約投稿の利用可否フラグ（無料体験枠・スタンダードプランではMP4ダウンロードのみ）
   canDirectUploadYoutube(contextMode = "pro") {
-    if (contextMode === "simple_shorts" || this.get("planTier") === "lite") {
-      return false;
+    const tier = (this.get("planTier") || "free_trial").toLowerCase();
+    if (contextMode === "simple_shorts" || tier === "lite" || tier === "standard" || tier === "free_trial" || tier === "free") {
+      return this.isByogActive();
     }
     return this.get("canDirectUploadYoutube") !== false || this.isByogActive();
   }
 
-  // 動画編集スタジオ利用可否フラグ（ライトプランはスタジオ利用不可・Pro/プレミアム/BYOGのみ利用可能）
+  // 動画編集スタジオ利用可否フラグ（無料体験枠・スタンダードプランはスタジオ利用不可。プレミアム/マスター/買い切りBYOGのみ利用可能）
   canUseStudio() {
-    if (this.get("planTier") === "lite") {
-      return false;
+    const tier = (this.get("planTier") || "").toLowerCase();
+    if (tier === "lite" || tier === "standard" || tier === "free_trial" || tier === "free") {
+      return this.isByogActive();
     }
     return true;
+  }
+
+  // プラン表示名ヘルパー
+  getPlanDisplayName(planKey) {
+    const k = (planKey || this.get("planTier") || "free_trial").toLowerCase();
+    const map = {
+      free_trial: "無料体験枠",
+      free: "無料体験枠",
+      standard: "スタンダードプラン",
+      lite: "スタンダードプラン",
+      premium: "プレミアムプラン",
+      pro: "プレミアムプラン",
+      master: "マスタープラン",
+      byog_purchased: "買い切り無制限 (79,800円)",
+      admin: "マスター管理者 (無制限)"
+    };
+    return map[k] || "スタンダードプラン";
   }
 
   // UIへの反映イベント

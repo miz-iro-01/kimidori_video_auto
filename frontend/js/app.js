@@ -726,16 +726,17 @@ class AppController {
       });
     }
 
-    // Stripe サブスクリプション加入ボタン群
+    // Stripe サブスクリプション / 買い切り加入ボタン群
     document.querySelectorAll('.btn-subscribe-plan').forEach(btn => {
       btn.addEventListener('click', async () => {
         const plan = btn.dataset.plan;
         if (!plan) return;
+        const itemType = btn.dataset.type || (plan === 'byog_purchased' ? 'one_time' : 'subscription');
         btn.disabled = true;
         const origText = btn.textContent;
         btn.textContent = '決済画面へ移動中...';
         try {
-          const sessionData = await window.apiClient.createCheckoutSession('subscription', plan);
+          const sessionData = await window.apiClient.createCheckoutSession(itemType, plan);
           if (sessionData && sessionData.checkout_url) {
             window.location.href = sessionData.checkout_url;
           } else {
@@ -1823,26 +1824,26 @@ class AppController {
       const email = document.getElementById('loginEmail').value.trim();
       const password = document.getElementById('loginPassword').value;
       
-      // 管理者アカウント認証（Firebase Auth ＋ フォールバック対応）
-      const isAdminEmail = (email === 'oumaumauma32@gmail.com' || email === 'sl0wmugi9@gmail.com');
+      // マスター管理者アカウント認証（Firebase Auth ＋ フォールバック対応）
+      const isAdminEmail = (email === 'oumaumauma32@gmail.com');
       
       try {
         if (isAdminEmail) {
           try {
             await firebase.auth().signInWithEmailAndPassword(email, password);
-            this.showToast("管理者としてログインしました", "success");
+            this.showToast("マスター管理者としてログインしました", "success");
             return;
           } catch (fbErr) {
-            console.warn("Firebase Auth failed, logging in as verified admin:", fbErr);
+            console.warn("Firebase Auth failed, logging in as verified master admin:", fbErr);
             const mockUser = {
-              uid: email === 'oumaumauma32@gmail.com' ? 'admin_ouma_uid' : 'admin_mugi_uid',
-              email: email,
+              uid: 'admin_ouma_uid',
+              email: 'oumaumauma32@gmail.com',
               role: 'admin',
               plan: 'admin',
               isMock: true
             };
             localStorage.setItem('kimidori_mock_user', JSON.stringify(mockUser));
-            this.showToast("管理者としてログインしました", "success");
+            this.showToast("マスター管理者としてログインしました", "success");
             this.updateAuthState(mockUser);
             return;
           }
@@ -2024,14 +2025,9 @@ class AppController {
       console.log("ログイン中ユーザー:", user.email);
       if (loginPage) loginPage.classList.add('hidden');
 
-      // 管理者判定: oumaumauma32@gmail.com または sl0wmugi9@gmail.com または role/planがadmin
-      const isAdmin = user.email === 'oumaumauma32@gmail.com' ||
-                      user.email === 'sl0wmugi9@gmail.com' ||
-                      user.role === 'admin' ||
-                      user.plan === 'admin' ||
-                      user.uid === 'admin_ouma_uid' ||
-                      user.uid === 'admin_mugi_uid' ||
-                      user.isAdmin === true;
+      // マスター管理者判定: oumaumauma32@gmail.com のみに限定（サロン側adminフラグ等による昇格は完全無効化）
+      const userEmail = (user.email || '').trim().toLowerCase();
+      const isAdmin = (userEmail === 'oumaumauma32@gmail.com' || user.uid === 'admin_ouma_uid');
       this.isAdmin = isAdmin;
 
       // ヘッダー右上の管理者設定 (ユーザー管理) ボタンの表示制御
@@ -4139,7 +4135,7 @@ class AppController {
 
   async openInEditorStudio(mode) {
     if (window.settingsManager && !window.settingsManager.canUseStudio()) {
-      return this.showToast('動画編集スタジオはProプラン以上（またはBYOGモード）限定の機能です。プランのアップグレードをご検討ください。', 'warning');
+      return this.showToast('動画編集スタジオはプレミアムプラン以上（またはBYOGモード）限定の機能です。プランのアップグレードをご検討ください。', 'warning');
     }
     const jobId = mode === 'long_video' ? this.currentLongVideoJobId : this.currentProShortsJobId;
     if (!jobId) {

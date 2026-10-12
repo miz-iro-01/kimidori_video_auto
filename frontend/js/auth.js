@@ -92,10 +92,9 @@
       const params = new URLSearchParams(window.location.search);
       const urlToken = params.get('auth_token') || params.get('token');
       const urlPlan = params.get('salon_plan') || params.get('plan');
-      const urlEmail = params.get('user_email') || params.get('email');
+      const urlEmail = (params.get('user_email') || params.get('email') || '').trim().toLowerCase();
       const urlUserId = params.get('user_id') || params.get('uid');
-      const urlRole = params.get('role');
-      const urlIsAdmin = params.get('is_admin') === 'true' || params.get('admin') === 'true';
+      const isMasterAdmin = (urlEmail === 'oumaumauma32@gmail.com');
       const fromSalon = params.get('from_salon') === 'true' || Boolean(urlEmail || urlToken);
 
       // サロンからの遷移パラメータが存在する場合、SSOハンドシェイクを実行
@@ -103,24 +102,25 @@
         this.performSalonSso({
           user_email: urlEmail || '',
           user_id: urlUserId || urlEmail || '',
-          role: urlRole || (urlIsAdmin ? 'admin' : 'user'),
-          is_admin: urlIsAdmin,
-          salon_plan: urlPlan || 'pro',
+          role: isMasterAdmin ? 'admin' : 'user',
+          is_admin: isMasterAdmin,
+          salon_plan: urlPlan || (isMasterAdmin ? 'admin' : 'premium'),
           auth_token: urlToken || '',
           from_salon: true
         });
       } else {
         // 保存済みのサロンSSOセッションがある場合の自動復元
         const savedToken = localStorage.getItem('kimidori_auth_token');
-        const savedEmail = localStorage.getItem('kimidori_user_email');
+        const savedEmail = (localStorage.getItem('kimidori_user_email') || '').trim().toLowerCase();
         const savedFromSalon = localStorage.getItem('kimidori_from_salon') === 'true';
         if (savedFromSalon && savedEmail) {
+          const isSavedMasterAdmin = (savedEmail === 'oumaumauma32@gmail.com');
           const userObj = {
             uid: localStorage.getItem('kimidori_user_id') || savedEmail,
             email: savedEmail,
-            role: localStorage.getItem('kimidori_user_role') || 'user',
-            plan: localStorage.getItem('kimidori_salon_plan') || 'pro',
-            isAdmin: localStorage.getItem('kimidori_is_admin') === 'true',
+            role: isSavedMasterAdmin ? 'admin' : 'user',
+            plan: isSavedMasterAdmin ? 'admin' : (localStorage.getItem('kimidori_salon_plan') || 'premium'),
+            isAdmin: isSavedMasterAdmin,
             from_salon: true
           };
           const restoreAuth = () => {
@@ -178,11 +178,12 @@
           data.type === 'INIT_CONTEXT' ||
           data.type === 'salon_user_auth'
         ) {
-          const userEmail = data.user_email || data.userEmail || data.email || '';
+          const userEmail = (data.user_email || data.userEmail || data.email || '').trim().toLowerCase();
           const userId = data.user_id || data.userId || userEmail || '';
-          const role = data.role || 'user';
-          const isAdmin = Boolean(data.is_admin || data.isAdmin || role === 'admin' || userEmail.toLowerCase() === 'oumaumauma32@gmail.com');
-          const plan = data.salon_plan || data.plan || (isAdmin ? 'admin' : 'pro');
+          const isMasterAdmin = (userEmail === 'oumaumauma32@gmail.com');
+          const role = isMasterAdmin ? 'admin' : 'user';
+          const isAdmin = isMasterAdmin;
+          const plan = data.salon_plan || data.plan || (isMasterAdmin ? 'admin' : 'premium');
           const token = data.auth_token || data.token || '';
 
           this.performSalonSso({

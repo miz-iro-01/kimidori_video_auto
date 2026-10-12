@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -1979,42 +1979,60 @@
               </div>
             </div>
 
-            <!-- プラン比較 & 申込みボタングループ -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-top: 0.5rem;">
+            <!-- プラン比較 & 申込みボタングループ (新統一体系 + 買い切り79,800円) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-top: 0.5rem;">
+              <!-- スタンダード (旧ライト) -->
               <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.85rem; background: rgba(0,0,0,0.2);">
-                <div style="font-weight: 700; font-size: 0.95rem; color: #ffffff;">ライト</div>
+                <div style="font-weight: 700; font-size: 0.95rem; color: #ffffff;">スタンダード</div>
                 <div style="font-size: 1.25rem; font-weight: 700; color: var(--accent-secondary); margin: 0.2rem 0;">月額 1,980円</div>
                 <ul style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.6; padding-left: 1rem; margin: 0.5rem 0;">
                   <li>300 pt / 月</li>
-                  <li>無料TTSのみ</li>
+                  <li>無料TTS（VOICEVOX / Edge）</li>
                   <li>MP4ダウンロードのみ</li>
-                  <li>スタジオ利用不可</li>
+                  <li>動画編集スタジオ利用不可</li>
                 </ul>
-                <button type="button" class="btn btn-outline btn-subscribe-plan" data-plan="lite" style="width: 100%; font-size: 0.8rem; padding: 0.4rem;">ライトに加入</button>
+                <button type="button" class="btn btn-outline btn-subscribe-plan" data-plan="standard" style="width: 100%; font-size: 0.8rem; padding: 0.4rem;">スタンダードに加入</button>
               </div>
 
+              <!-- プレミアム (旧プロ) -->
               <div style="border: 2px solid var(--accent-primary); border-radius: 8px; padding: 0.85rem; background: rgba(57, 255, 20, 0.04); position: relative;">
                 <span style="position: absolute; top: -10px; right: 10px; background: var(--accent-primary); color: #000; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px;">人気</span>
-                <div style="font-weight: 700; font-size: 0.95rem; color: #ffffff;">プロ</div>
+                <div style="font-weight: 700; font-size: 0.95rem; color: #ffffff;">プレミアム</div>
                 <div style="font-size: 1.25rem; font-weight: 700; color: var(--accent-primary); margin: 0.2rem 0;">月額 3,980円</div>
                 <ul style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.6; padding-left: 1rem; margin: 0.5rem 0;">
                   <li>1,000 pt / 月</li>
-                  <li>高品質VoxCPM TTS</li>
-                  <li>YouTube直接OAuth投稿</li>
-                  <li>エディタ＆BGM完全自由</li>
+                  <li>動画編集スタジオ利用可能</li>
+                  <li>高品質VoxCPM TTS開放</li>
+                  <li>YouTube直接OAuth投稿開放</li>
                 </ul>
-                <button type="button" class="btn btn-primary btn-subscribe-plan" data-plan="pro" style="width: 100%; font-size: 0.8rem; padding: 0.4rem;">プロに加入</button>
+                <button type="button" class="btn btn-primary btn-subscribe-plan" data-plan="premium" style="width: 100%; font-size: 0.8rem; padding: 0.4rem;">プレミアムに加入</button>
               </div>
 
+              <!-- マスター (旧プレミアム) -->
               <div style="border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.85rem; background: rgba(0,0,0,0.2);">
-                <div style="font-weight: 700; font-size: 0.95rem; color: #ffffff;">プレミアム</div>
+                <div style="font-weight: 700; font-size: 0.95rem; color: #ffffff;">マスター</div>
                 <div style="font-size: 1.25rem; font-weight: 700; color: #38bdf8; margin: 0.2rem 0;">月額 7,980円</div>
                 <ul style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.6; padding-left: 1rem; margin: 0.5rem 0;">
                   <li>3,000 pt / 月</li>
                   <li>全機能フル開放</li>
-                  <li>生成優先キュー</li>
+                  <li>生成優先キュー処理</li>
+                  <li>スタジオ＆高品質TTS完備</li>
                 </ul>
-                <button type="button" class="btn btn-outline btn-subscribe-plan" data-plan="premium" style="width: 100%; font-size: 0.8rem; padding: 0.4rem;">プレミアム加入</button>
+                <button type="button" class="btn btn-outline btn-subscribe-plan" data-plan="master" style="width: 100%; font-size: 0.8rem; padding: 0.4rem;">マスターに加入</button>
+              </div>
+
+              <!-- 買い切り無制限 (BYOG) -->
+              <div style="border: 2px solid #a855f7; border-radius: 8px; padding: 0.85rem; background: rgba(168, 85, 247, 0.05); position: relative;">
+                <span style="position: absolute; top: -10px; right: 10px; background: #a855f7; color: #fff; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px;">買い切り</span>
+                <div style="font-weight: 700; font-size: 0.95rem; color: #ffffff;">買い切り無制限</div>
+                <div style="font-size: 1.25rem; font-weight: 700; color: #c084fc; margin: 0.2rem 0;">79,800円 (一括)</div>
+                <ul style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.6; padding-left: 1rem; margin: 0.5rem 0;">
+                  <li>無制限（クレジット0消費）</li>
+                  <li>自前環境セットアップガイド付属</li>
+                  <li>スタジオ＆全機能フル開放</li>
+                  <li>月額費用ゼロで永久利用</li>
+                </ul>
+                <button type="button" class="btn btn-outline btn-subscribe-plan" data-plan="byog_purchased" data-type="one_time" style="width: 100%; font-size: 0.8rem; padding: 0.4rem; border-color: #a855f7; color: #c084fc;">79,800円で買い切り購入</button>
               </div>
             </div>
 

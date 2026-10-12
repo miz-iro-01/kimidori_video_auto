@@ -14,13 +14,21 @@ logger = logging.getLogger(__name__)
 
 import uuid
 
-ADMIN_EMAILS = {"oumaumauma32@gmail.com", "sl0wmugi9@gmail.com"}
+ADMIN_EMAILS = {"oumaumauma32@gmail.com"}
+MASTER_ADMIN_EMAILS = {"oumaumauma32@gmail.com"}
 
 
 class PlanType(str, Enum):
-    FREE = "free"
-    PRO = "pro"
+    FREE_TRIAL = "free_trial"
+    STANDARD = "standard"
+    PREMIUM = "premium"
+    MASTER = "master"
+    BYOG_PURCHASED = "byog_purchased"
     ADMIN = "admin"
+    # 後方互換性エイリアス
+    FREE = "free_trial"
+    LITE = "standard"
+    PRO = "premium"
 
 
 class FeatureName(str, Enum):
@@ -34,13 +42,13 @@ class FeatureName(str, Enum):
     HIGH_QUALITY_VOICE = "high_quality_voice"
 
 
-# 基本（無料会員・ライトプラン）で利用可能な音声エンジン・モデル一覧
+# 基本（無料体験枠・スタンダードプラン）で利用可能な音声エンジン・モデル一覧
 BASIC_VOICE_MODELS = ["nanami", "keita", "edge_default", "edge", "voicevox", "gtts", "sharevox", "coeiroink", "aivis"]
 
-# 有料会員・Pro版・BYOGモードが利用可能な拡張音声エンジン・モデル一覧
+# 有料会員（プレミアム/マスター/買い切りBYOG）が利用可能な拡張音声エンジン・モデル一覧
 PRO_VOICE_MODELS = [
     "nanami", "keita", "edge_default", "edge", "voicevox", "gtts",
-    "oss_elevenlabs", "oss_custom",
+    "oss_elevenlabs", "oss_custom", "voxcpm",
     "google_standard", "google_wavenet", "google",
     "elevenlabs_pro", "elevenlabs", "aivis_premium",
     "openai", "azure", "amazon_polly", "ondoku", "coefont"
@@ -49,51 +57,95 @@ PRO_VOICE_MODELS = [
 
 class UserPermissionManager:
     """
-    ユーザーの会員区分（無料/有料サブスク/管理者/BYOG）および各種機能の利用権限を管理するクラス
+    ユーザーの会員区分（free_trial/standard/premium/master/byog_purchased/管理者）および各種機能の利用権限を管理するクラス
     """
 
     def __init__(self, firestore_service: Optional[FirestoreService] = None):
         self.firestore = firestore_service or FirestoreService()
 
+    def is_colab_shared_user(self, email: str, user_id: str = "") -> bool:
+        """
+        「家族・共有Colab利用メンバー」判定:
+        事前登録リスト（Firestoreの allowed_colab_users コレクション、ドキュメント、または users テーブルの can_use_shared_colab / allowed_colab 属性）
+        に登録されたメールアドレスと一致する場合のみ、Trueを返却する。
+        """
+        if not email and not user_id:
+            return False
+
+        target_email = (email or "").strip().lower()
+        target_uid = (user_id or "").strip()
+
+        # マスター管理者は当然利用可能
+        if target_email in MASTER_ADMIN_EMAILS:
+            return True
+
+        try:
+            # 1. Firestore 'allowed_colab_users' コレクション照会 (ID=email または emailフィールド一致)
+            if target_email:
+                doc = self.firestore.db.collection("allowed_colab_users").document(target_email).get()
+                if doc.exists:
+                    return True
+                # クエリ照会
+                matches = list(self.firestore.db.collection("allowed_colab_users").where("email", "==", target_email).limit(1).stream())
+                if matches:
+                    return True
+
+            # 2. Firestore 'system_settings/allowed_colab_users' リスト照会
+            sys_doc = self.firestore.db.collection("system_settings").document("allowed_colab_users").get()
+            if sys_doc.exists:
+                allowed_list = sys_doc.to_dict().get("emails", [])
+                if any(target_email == str(e).strip().lower() for e in allowed_list):
+                    return True
+
+            # 3. users コレクション内の個別フラグ判定
+            lookup_id = target_uid or target_email
+            user_doc = self.firestore.db.collection("users").document(lookup_id).get()
+            if user_doc.exists:
+                u_data = user_doc.to_dict()
+                if u_data.get("can_use_shared_colab") or u_data.get("allowed_colab") or u_data.get("colab_shared"):
+                    return True
+
+        except Exception as e:
+            logger.warning(f"Error checking is_colab_shared_user for {target_email}: {e}")
+
+        return False
+
     def get_user_plan(self, user_id: str, byog_enabled: bool = False) -> Dict[str, Any]:
         """
-        ユーザーのプラン情報をFirestoreから取得する（管理者アカウントは常時最上位権限を保証）
-        can_use_premium_tts / can_direct_upload_youtube フラグを連動返却する。
+        ユーザーのプラン情報をFirestoreから取得する。
+        - マスター管理者（oumaumauma32@gmail.com）のみ最上位管理者権限を付与
+        - サロンAdminフラグによるマスター昇格は完全廃止
+        - 事前登録Colab共有ユーザーにはBYOG無制限モードを適用
         """
         if not user_id:
             return {
-                "plan": PlanType.FREE,
+                "plan": PlanType.FREE_TRIAL.value,
                 "role": "user",
                 "is_pro": bool(byog_enabled),
                 "is_admin": False,
                 "byog_enabled": bool(byog_enabled),
                 "can_use_premium_tts": bool(byog_enabled),
                 "can_direct_upload_youtube": bool(byog_enabled),
+                "can_use_studio": bool(byog_enabled),
                 "expire_date": None
             }
 
-        # 1. 予約済み管理者メールアドレス・UID・デフォルトユーザーの即時フル権限判定
-        admin_match_ids = {
-            "oumaumauma32@gmail.com",
-            "sl0wmugi9@gmail.com",
-            "admin_ouma_uid",
-            "admin_mugi_uid",
-            "user_123",
-            "default_user",
-            "admin",
-            "administrator"
-        }
-        if user_id in ADMIN_EMAILS or user_id in admin_match_ids or user_id.lower() in admin_match_ids:
+        clean_id = str(user_id).strip().lower()
+
+        # 1. マスター管理者（oumaumauma32@gmail.com のみ厳格判定）
+        if clean_id in MASTER_ADMIN_EMAILS or clean_id == "admin_ouma_uid":
             return {
-                "plan": PlanType.ADMIN,
+                "plan": PlanType.ADMIN.value,
                 "role": "admin",
                 "is_pro": True,
                 "is_admin": True,
                 "byog_enabled": True,
+                "can_use_shared_colab": True,
                 "can_use_premium_tts": True,
                 "can_direct_upload_youtube": True,
+                "can_use_studio": True,
                 "expire_date": None,
-                "email": user_id if "@" in user_id else "oumaumauma32@gmail.com"
+                "email": "oumaumauma32@gmail.com"
             }
 
         try:
@@ -106,61 +158,98 @@ class UserPermissionManager:
 
             if doc.exists:
                 data = doc.to_dict()
-                email = data.get("email", "")
-                plan = data.get("plan", PlanType.FREE)
-                role = data.get("role", "user")
+                email = str(data.get("email", "")).strip().lower()
+                raw_plan = str(data.get("plan", PlanType.FREE_TRIAL.value)).strip().lower()
+                role = "user"  # 一般ユーザーに固定（マスター管理者以外はadmin昇格不可）
                 expire_str = data.get("subscription_expire_date")
 
-                # 管理者メールまたはロール判定
-                is_admin = (email in ADMIN_EMAILS or role == "admin" or plan == PlanType.ADMIN)
-                if is_admin:
+                # マスター管理者チェック
+                if email in MASTER_ADMIN_EMAILS:
                     return {
-                        "plan": PlanType.ADMIN,
+                        "plan": PlanType.ADMIN.value,
                         "role": "admin",
                         "is_pro": True,
                         "is_admin": True,
                         "byog_enabled": True,
+                        "can_use_shared_colab": True,
                         "can_use_premium_tts": True,
                         "can_direct_upload_youtube": True,
+                        "can_use_studio": True,
                         "expire_date": None,
                         "email": email
                     }
 
-                # 有効期限のチェック
-                is_pro = (plan == PlanType.PRO) or bool(byog_enabled)
-                if plan == PlanType.PRO and expire_str:
+                # 家族・共有Colab利用メンバー判定
+                is_shared_colab = self.is_colab_shared_user(email, user_id=user_id)
+
+                # プランキーの統一マッピング
+                plan_map = {
+                    "free": PlanType.FREE_TRIAL.value,
+                    "free_trial": PlanType.FREE_TRIAL.value,
+                    "lite": PlanType.STANDARD.value,
+                    "standard": PlanType.STANDARD.value,
+                    "pro": PlanType.PREMIUM.value,
+                    "premium": PlanType.PREMIUM.value,
+                    "master": PlanType.MASTER.value,
+                    "byog_purchased": PlanType.BYOG_PURCHASED.value
+                }
+                unified_plan = plan_map.get(raw_plan, PlanType.FREE_TRIAL.value)
+
+                # 有効期限チェック
+                if unified_plan in (PlanType.PREMIUM.value, PlanType.MASTER.value) and expire_str:
                     try:
                         exp_dt = datetime.fromisoformat(expire_str)
                         if datetime.now() > exp_dt:
-                            logger.info(f"User {user_id} PRO subscription expired on {expire_str}")
-                            is_pro = bool(byog_enabled)
-                            plan = PlanType.FREE
+                            logger.info(f"User {user_id} subscription expired on {expire_str}")
+                            unified_plan = PlanType.FREE_TRIAL.value
                     except Exception:
                         pass
 
+                # 機能利用権限の算出
+                # - premium, master, byog_purchased: Pro相当機能（スタジオ・高品質TTS・YT直接投稿）解放
+                # - standard: スタジオ不可、無料TTSのみ、MP4保存のみ
+                # - free_trial: 簡易ショートのみ、スタジオ不可、BGM固定
+                # - is_shared_colab または byog_enabled 有効時: BYOG/Colab無制限モード適用
+                has_pro_features = (
+                    unified_plan in (PlanType.PREMIUM.value, PlanType.MASTER.value, PlanType.BYOG_PURCHASED.value)
+                    or bool(byog_enabled)
+                    or is_shared_colab
+                )
+                can_use_studio = (
+                    unified_plan in (PlanType.PREMIUM.value, PlanType.MASTER.value, PlanType.BYOG_PURCHASED.value)
+                    or bool(byog_enabled)
+                    or is_shared_colab
+                )
+
                 return {
-                    "plan": plan,
-                    "role": role,
-                    "is_pro": is_pro,
+                    "plan": unified_plan,
+                    "role": "user",
+                    "is_pro": has_pro_features,
                     "is_admin": False,
-                    "byog_enabled": bool(byog_enabled),
-                    "can_use_premium_tts": is_pro,
-                    "can_direct_upload_youtube": is_pro,
+                    "byog_enabled": bool(byog_enabled or is_shared_colab or unified_plan == PlanType.BYOG_PURCHASED.value),
+                    "can_use_shared_colab": is_shared_colab,
+                    "can_use_premium_tts": has_pro_features,
+                    "can_direct_upload_youtube": has_pro_features,
+                    "can_use_studio": can_use_studio,
                     "expire_date": expire_str,
                     "email": email
                 }
         except Exception as e:
             logger.warning(f"Failed to fetch user plan for {user_id}: {e}")
 
-        # デフォルトは無料会員（BYOG有効時は解放）
+        # デフォルトは無料体験枠（BYOG有効またはColab共有メンバー時は解放）
+        is_shared_colab = self.is_colab_shared_user("", user_id=user_id)
+        effective_byog = bool(byog_enabled or is_shared_colab)
         return {
-            "plan": PlanType.FREE,
+            "plan": PlanType.FREE_TRIAL.value,
             "role": "user",
-            "is_pro": bool(byog_enabled),
+            "is_pro": effective_byog,
             "is_admin": False,
-            "byog_enabled": bool(byog_enabled),
-            "can_use_premium_tts": bool(byog_enabled),
-            "can_direct_upload_youtube": bool(byog_enabled),
+            "byog_enabled": effective_byog,
+            "can_use_shared_colab": is_shared_colab,
+            "can_use_premium_tts": effective_byog,
+            "can_direct_upload_youtube": effective_byog,
+            "can_use_studio": effective_byog,
             "expire_date": None
         }
 
@@ -232,7 +321,7 @@ class UserPermissionManager:
                 "reason": "Proプラン / BYOGモード: 全機能利用可能（高品質OSS TTS・YouTube直接OAuth投稿解放）"
             }
 
-        # --- 無料会員 / ライトプラン相当の機能別判定 ---
+        # --- 無料体験枠 / スタンダードプラン相当の機能別判定 ---
         if feat_str == FeatureName.SHORT_VIDEO_CREATE.value:
             return {
                 "allowed": True,
@@ -241,7 +330,7 @@ class UserPermissionManager:
                 "can_use_premium_tts": False,
                 "can_direct_upload_youtube": False,
                 "allowed_voice_models": BASIC_VOICE_MODELS,
-                "reason": "ライトプラン（簡易ショート）: 無料TTS（VOICEVOX / Edge-TTS）およびMP4ダウンロードのみ利用可能"
+                "reason": "スタンダード/無料体験枠: 無料TTS（VOICEVOX / Edge-TTS）およびMP4ダウンロードのみ利用可能"
             }
 
         elif feat_str == FeatureName.LONG_VIDEO_CREATE.value:
@@ -252,7 +341,7 @@ class UserPermissionManager:
                 "can_use_premium_tts": False,
                 "can_direct_upload_youtube": False,
                 "allowed_voice_models": BASIC_VOICE_MODELS,
-                "reason": "無料会員: 長尺動画作成利用可能（無料TTS・MP4ダウンロードのみ）"
+                "reason": "無料体験枠: 長尺動画作成利用可能（無料TTS・MP4ダウンロードのみ）"
             }
 
         elif feat_str in [
@@ -269,7 +358,7 @@ class UserPermissionManager:
                 "can_use_premium_tts": can_use_premium_tts,
                 "can_direct_upload_youtube": can_direct_upload_youtube,
                 "allowed_voice_models": BASIC_VOICE_MODELS,
-                "reason": f"ライトプランでは '{feat_str}' 機能を利用できません。ProプランまたはBYOG設定が必要です。"
+                "reason": f"スタンダード/無料体験枠では '{feat_str}' 機能を利用できません。プレミアムプランまたはBYOG設定が必要です。"
             }
 
         elif feat_str == FeatureName.HIGH_QUALITY_VOICE.value:
@@ -280,7 +369,7 @@ class UserPermissionManager:
                 "can_use_premium_tts": False,
                 "can_direct_upload_youtube": False,
                 "allowed_voice_models": BASIC_VOICE_MODELS,
-                "reason": "ライトプランは無料TTS（VOICEVOX / Edge-TTS）のみ利用可能です。高品質OSS TTSはPro版/BYOG限定です。"
+                "reason": "無料体験枠およびスタンダードプランは無料TTS（VOICEVOX / Edge-TTS）のみ利用可能です。高品質VoxCPM TTSはプレミアム/マスター/BYOG限定です。"
             }
 
         return {
@@ -324,7 +413,7 @@ class UserPermissionManager:
         return {}
 
     def list_users(self) -> List[Dict[str, Any]]:
-        """全ユーザーのリストを取得（管理画面用）。Firestoreに存在しないデフォルト管理者も自動補完"""
+        """全ユーザーのリストを取得（管理画面用）。マスター管理者は oumaumauma32@gmail.com のみ厳格設定"""
         users = []
         seen_emails = set()
 
@@ -333,13 +422,13 @@ class UserPermissionManager:
             for doc in docs:
                 data = doc.to_dict()
                 u_id = doc.id
-                email = data.get("email", u_id if "@" in u_id else "")
-                plan = data.get("plan", PlanType.FREE)
-                role = data.get("role", "admin" if email in ADMIN_EMAILS else "user")
+                email = str(data.get("email", u_id if "@" in u_id else "")).strip().lower()
+                plan = data.get("plan", PlanType.FREE_TRIAL.value)
+                role = "admin" if email in MASTER_ADMIN_EMAILS else "user"
 
-                # 管理者アカウントの強制上書き
-                if email in ADMIN_EMAILS or u_id in ["admin_ouma_uid", "admin_mugi_uid"]:
-                    plan = PlanType.ADMIN
+                # マスター管理者アカウントの強制上書き
+                if email in MASTER_ADMIN_EMAILS or u_id == "admin_ouma_uid":
+                    plan = PlanType.ADMIN.value
                     role = "admin"
 
                 user_obj = {
@@ -359,29 +448,23 @@ class UserPermissionManager:
         except Exception as e:
             logger.warning(f"Error listing users from Firestore: {e}")
 
-        # 管理者アカウント（oumaumauma32@gmail.com 等）がDBにまだ存在しない場合は自動補完して保存
-        default_admins = [
-            {"user_id": "admin_ouma_uid", "email": "oumaumauma32@gmail.com", "notes": "システム最高管理者 (オーナー)"},
-            {"user_id": "admin_mugi_uid", "email": "sl0wmugi9@gmail.com", "notes": "共同開発・システム管理者"}
-        ]
-        for adm in default_admins:
-            if adm["email"] not in seen_emails:
-                adm_data = {
-                    "user_id": adm["user_id"],
-                    "email": adm["email"],
-                    "plan": PlanType.ADMIN,
-                    "role": "admin",
-                    "status": "active",
-                    "notes": adm["notes"],
-                    "created_at": datetime.now().isoformat(),
-                    "updated_at": datetime.now().isoformat()
-                }
-                users.insert(0, adm_data)
-                seen_emails.add(adm["email"])
-                try:
-                    self.firestore.db.collection("users").document(adm["user_id"]).set(adm_data, merge=True)
-                except Exception:
-                    pass
+        # マスター管理者（oumaumauma32@gmail.com）がDBにまだ存在しない場合は自動補完
+        if "oumaumauma32@gmail.com" not in seen_emails:
+            adm_data = {
+                "user_id": "admin_ouma_uid",
+                "email": "oumaumauma32@gmail.com",
+                "plan": PlanType.ADMIN.value,
+                "role": "admin",
+                "status": "active",
+                "notes": "システム最高管理者 (オーナー)",
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat()
+            }
+            users.insert(0, adm_data)
+            try:
+                self.firestore.db.collection("users").document("admin_ouma_uid").set(adm_data, merge=True)
+            except Exception:
+                pass
 
         return users
 

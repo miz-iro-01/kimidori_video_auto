@@ -228,6 +228,23 @@
   - **Firestore 登録先**: `custom_tools/cr_1791814765113` および `portal_data/custom_tools`
   - **サロンプラットフォーム表示**: `https://kimiiro-salon.web.app/tools` 配下の「コンテンツ制作」カテゴリにて公開中
 
+## Phase 8: プラン体系統一（free_trial対応）＆ 管理者ホワイトリスト厳格化 ＆ 買い切り79,800円反映
+- **管理者判定の厳格化（サロンAdminフラグ昇格の完全廃止） (`backend/main.py`, `backend/services/user_permission_manager.py`, `frontend/js/auth.js`, `frontend/js/app.js`)**:
+  - サロンSSO連携時、サロン側の `role: 'admin'` や `is_admin: true` を理由にマスター管理者（ユーザー管理やColab無制限）へ昇格させる処理を【完全に廃止】。
+  - マスター管理者は `oumaumauma32@gmail.com` のみに厳格限定。
+  - 「家族・共有Colab利用メンバー」は、ツール側の事前登録リスト（Firestoreの `allowed_colab_users` コレクション、ドキュメント、または `users` テーブルの `can_use_shared_colab` / `allowed_colab` 属性）に登録されたメールアドレスと一致する場合のみ、BYOG/Colab無制限モードを適用。
+- **プラン名称・識別子の完全統一 ＆ 買い切り79,800円反映 (`backend/config.py`, `backend/services/billing_manager.py`, `frontend/js/settings-manager.js`, `frontend/index.html`, `frontend/js/app.js`)**:
+  - 統一プラン体系:
+    1. `free_trial`（無料体験枠）: 簡易ショートのみ、動画編集スタジオ利用不可、BGM固定、YouTube直接投稿不可（0円 / 30 pt）
+    2. `standard`（旧lite / スタンダード）: 300 pt、動画編集スタジオ利用不可、MP4保存のみ、無料TTS（月額 1,980円）
+    3. `premium`（旧pro / プレミアム）: 1,000 pt、動画編集スタジオ利用可能、高品質VoxCPM TTS開放、YouTube直接投稿開放（月額 3,980円）
+    4. `master`（旧premium / マスター）: 3,000 pt、全機能フル開放、優先キュー処理（月額 7,980円）
+    5. `byog_purchased`（買い切り 79,800円）: 無制限（0 pt消費）、自前環境セットアップガイド表示、スタジオ＆全機能フル開放（一括 79,800円）
+  - サロンSSO（`POST /api/auth/sso`）受信時、`salon_plan` が `free_trial` / `standard` / `premium` / `master` のいずれかであれば、ツールの該当プランへ自動同期。
+  - 後方互換性エイリアス（`lite` -> `standard`, `pro` -> `premium`, `free` -> `free_trial`）を完備。
+  - Stripe Checkout Session 発行および Webhook 処理にて `byog_purchased`（`mode: "payment"`, unit_amount: 79800）の決済・権限付与を完全サポート。
+
+
 
 
 

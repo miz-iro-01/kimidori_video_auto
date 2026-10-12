@@ -149,13 +149,31 @@ STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 
-# 料金プラン体系
-# ライト: 1,980円 (300クレジット/月)
-# プロ: 3,980円 (1,000クレジット/月)
-# プレミアム: 7,980円 (3,000クレジット/月)
+# マスター管理者（単一絶対権限）
+MASTER_ADMIN_EMAILS = {"oumaumauma32@gmail.com"}
+
+# 料金プラン体系 (統一仕様)
+# 1. free_trial: 無料体験枠 (簡易ショートのみ、動画編集スタジオ不可、BGM固定、YouTube直接投稿不可)
+# 2. standard: 1,980円 (300 pt/月、動画編集スタジオ不可、MP4保存のみ、無料TTS)
+# 3. premium: 3,980円 (1,000 pt/月、動画編集スタジオ可、高品質VoxCPM TTS開放、YouTube直接投稿開放)
+# 4. master: 7,980円 (3,000 pt/月、全機能フル開放、優先キュー処理)
+# 5. byog_purchased: 買い切り 79,800円 (無制限・0pt消費、自前環境セットアップガイド表示)
 PLAN_PRICING = {
-    "lite": {
-        "name": "ライトプラン",
+    "free_trial": {
+        "name": "無料体験プラン",
+        "price_jpy": 0,
+        "monthly_credits": 30,
+        "features": {
+            "can_use_premium_tts": False,
+            "can_direct_upload_youtube": False,
+            "can_replace_bgm": False,
+            "can_use_studio": False,
+            "priority_queue": False,
+            "is_simple_shorts_only": True
+        }
+    },
+    "standard": {
+        "name": "スタンダードプラン",
         "price_jpy": 1980,
         "monthly_credits": 300,
         "features": {
@@ -166,8 +184,8 @@ PLAN_PRICING = {
             "priority_queue": False
         }
     },
-    "pro": {
-        "name": "プロプラン",
+    "premium": {
+        "name": "プレミアムプラン",
         "price_jpy": 3980,
         "monthly_credits": 1000,
         "features": {
@@ -178,8 +196,8 @@ PLAN_PRICING = {
             "priority_queue": False
         }
     },
-    "premium": {
-        "name": "プレミアムプラン",
+    "master": {
+        "name": "マスタープラン",
         "price_jpy": 7980,
         "monthly_credits": 3000,
         "features": {
@@ -189,8 +207,37 @@ PLAN_PRICING = {
             "can_use_studio": True,
             "priority_queue": True
         }
+    },
+    "byog_purchased": {
+        "name": "買い切り無制限プラン",
+        "price_jpy": 79800,
+        "monthly_credits": 999999,
+        "is_one_time": True,
+        "features": {
+            "can_use_premium_tts": True,
+            "can_direct_upload_youtube": True,
+            "can_replace_bgm": True,
+            "can_use_studio": True,
+            "priority_queue": True,
+            "unlimited": True,
+            "show_byog_setup_guide": True
+        }
     }
 }
+
+# 旧プランキーからの安全な後方互換性エイリアス
+PLAN_ALIASES = {
+    "free": "free_trial",
+    "lite": "standard",
+    "pro": "premium",
+}
+
+def resolve_plan_key(raw_plan: str) -> str:
+    """旧プラン名や変種名を新体系キーに正規化"""
+    p = (raw_plan or "").strip().lower()
+    if p in PLAN_PRICING:
+        return p
+    return PLAN_ALIASES.get(p, "free_trial")
 
 # 追加クレジットチャージ体系 (買い切り)
 CREDIT_PACKS = {
