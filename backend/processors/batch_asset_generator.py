@@ -1565,7 +1565,7 @@ class BatchAssetGenerator:
                 audio_out_path = None
 
         # ----------------------------------------------------
-        # 2-A (Stage 1). ベース画像アセット生成（Nano Banana 2 最優先 ➔ FLUX ➔ Colab ➔ Pexels）
+        # 2-A (Stage 1). ベース画像アセット生成（Nano Banana 2 最優先 -> FLUX -> Colab -> Pexels）
         # ----------------------------------------------------
         img_w, img_h = image_size
         img_ratio = "9:16" if img_h > img_w else "16:9"

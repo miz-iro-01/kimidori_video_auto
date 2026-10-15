@@ -125,111 +125,11 @@ class AppController {
       });
     });
 
-    // Colab Worker URLの管理
+    // Colab Worker URLの管理（初期同期のみ。ボタンイベントはinitSettings側で一元管理）
     const colabUrlInput = document.getElementById('adminColabWorkerUrl');
-    const btnSaveColab = document.getElementById('btnAdminSaveColab');
-    const btnTestColab = document.getElementById('btnAdminTestColab');
-    const colabStatusBadge = document.getElementById('adminColabStatusBadge');
-    const colabStatusMsg = document.getElementById('adminColabStatusMsg');
-
     if (colabUrlInput) {
-      const savedColab = (window.settingsManager && window.settingsManager.get('colabWorkerUrl')) || '';
+      const savedColab = (window.settingsManager && (window.settingsManager.getColabUrl ? window.settingsManager.getColabUrl() : window.settingsManager.get('colabWorkerUrl'))) || '';
       colabUrlInput.value = savedColab;
-    }
-
-    if (btnSaveColab && colabUrlInput) {
-      btnSaveColab.addEventListener('click', async () => {
-        const url = colabUrlInput.value.trim();
-        if (window.settingsManager) {
-          window.settingsManager.set('colabWorkerUrl', url);
-          window.settingsManager.set('byogComfyUrl', url);
-        }
-
-        // バックエンドへ同期
-        try {
-          if (window.apiClient) {
-            await fetch(`${window.apiClient.baseUrl}/api/colab/sync-url`, {
-              method: 'POST',
-              headers: window.apiClient._getAuthHeaders(),
-              body: JSON.stringify({ colab_url: url })
-            });
-          }
-        } catch (e) {
-          console.warn('[Colab] URL同期通知スキップ:', e);
-        }
-
-        if (colabStatusBadge) {
-          colabStatusBadge.textContent = '保存済み';
-          colabStatusBadge.style.background = 'rgba(16, 185, 129, 0.15)';
-          colabStatusBadge.style.color = 'var(--accent-primary)';
-        }
-        if (colabStatusMsg) {
-          colabStatusMsg.textContent = `ステータス: URL保存完了 (${url || '未設定'})`;
-          colabStatusMsg.style.color = 'var(--accent-primary)';
-        }
-        this.showToast('Colab Worker URLを保存しました', 'success');
-      });
-    }
-
-    if (btnTestColab && colabUrlInput) {
-      btnTestColab.addEventListener('click', async () => {
-        const url = colabUrlInput.value.trim();
-        if (!url) {
-          this.showToast('Colab Worker URLを入力してください', 'warning');
-          return;
-        }
-
-        if (colabStatusBadge) {
-          colabStatusBadge.textContent = '確認中...';
-          colabStatusBadge.style.background = 'rgba(245, 158, 11, 0.15)';
-          colabStatusBadge.style.color = '#f59e0b';
-        }
-        if (colabStatusMsg) {
-          colabStatusMsg.textContent = 'Colabサーバーとの疎通を確認中...';
-          colabStatusMsg.style.color = '#f59e0b';
-        }
-
-        try {
-          let isOk = false;
-          let detail = '';
-          if (window.apiClient) {
-            const res = await fetch(`${window.apiClient.baseUrl}/api/colab/health?url=${encodeURIComponent(url)}`, {
-              headers: window.apiClient._getAuthHeaders()
-            });
-            if (res.ok) {
-              const data = await res.json();
-              isOk = Boolean(data.success || data.connected || data.status === 'ok');
-              detail = data.message || (isOk ? 'ComfyUI / Colab 接続正常' : '応答異常');
-            }
-          }
-
-          if (isOk) {
-            if (colabStatusBadge) {
-              colabStatusBadge.textContent = '接続正常 (Online)';
-              colabStatusBadge.style.background = 'rgba(16, 185, 129, 0.15)';
-              colabStatusBadge.style.color = 'var(--accent-primary)';
-            }
-            if (colabStatusMsg) {
-              colabStatusMsg.textContent = `ステータス: 接続正常 (${detail})`;
-              colabStatusMsg.style.color = 'var(--accent-primary)';
-            }
-            this.showToast('Colabサーバーとの接続を確認しました', 'success');
-          } else {
-            throw new Error(detail || '接続タイムアウトまたはオフライン');
-          }
-        } catch (err) {
-          if (colabStatusBadge) {
-            colabStatusBadge.textContent = '接続失敗';
-            colabStatusBadge.style.background = 'rgba(239, 68, 68, 0.15)';
-            colabStatusBadge.style.color = 'var(--danger)';
-          }
-          if (colabStatusMsg) {
-            colabStatusMsg.textContent = `ステータス: 接続エラー (${err.message || '接続できませんでした'})`;
-            colabStatusMsg.style.color = 'var(--danger)';
-          }
-          this.showToast('Colab接続エラー: ' + (err.message || '接続できませんでした'), 'error');
-        }
-      });
     }
   }
 
@@ -550,7 +450,7 @@ class AppController {
     };
 
     // 保存処理
-    const handleSaveColabUrl = async (url) => {
+    const handleSaveColabUrl = async (url, notify = true) => {
       const u = (url || '').trim();
       if (window.settingsManager.setColabUrl) {
         window.settingsManager.setColabUrl(u);
@@ -561,15 +461,17 @@ class AppController {
       if (window.apiClient && window.apiClient.saveColabConfig) {
         await window.apiClient.saveColabConfig(u).catch(() => {});
       }
-      this.showToast('AI Core接続設定を保存しました', 'success');
+      if (notify) {
+        this.showToast('AI Core接続設定を保存しました', 'success');
+      }
       updateColabStatusUI('saved', '保存済み (未確認)', `<span style="color: var(--accent-primary);">URL保存完了: ${u || '未設定'}</span>`);
     };
 
     if (btnSaveColab && colabUrlInput) {
-      btnSaveColab.addEventListener('click', () => handleSaveColabUrl(colabUrlInput.value));
+      btnSaveColab.addEventListener('click', () => handleSaveColabUrl(colabUrlInput.value, true));
     }
     if (btnAdminSaveColab && adminColabInput) {
-      btnAdminSaveColab.addEventListener('click', () => handleSaveColabUrl(adminColabInput.value));
+      btnAdminSaveColab.addEventListener('click', () => handleSaveColabUrl(adminColabInput.value, true));
     }
 
     // 接続テスト処理（スピナーアニメーション対応）
@@ -577,7 +479,8 @@ class AppController {
       const u = (url || '').trim();
       if (!u) return this.showToast('AI Core接続先を入力してください', 'error');
 
-      handleSaveColabUrl(u);
+      // テスト時は自動保存するが通知トーストは出さない
+      await handleSaveColabUrl(u, false);
 
       const origHtml = triggerBtn ? triggerBtn.innerHTML : null;
       if (triggerBtn) {
@@ -591,8 +494,6 @@ class AppController {
         const res = await window.apiClient.checkColabHealth(u);
         if (res.connected) {
           const serviceName = 'AI Core';
-          const dev = res.device || 'GPU';
-          const vram = res.vram_gb ? `${res.vram_gb}GB` : '15GB';
           const successHtml = `<span style="color: var(--accent-primary);">接続成功: AI Core: Online</span>`;
           updateColabStatusUI('online', 'オンライン', successHtml);
           this.showToast(`${serviceName} への接続に成功しました`, 'success');
@@ -600,12 +501,12 @@ class AppController {
           const errMsg = this._sanitizeUserMessage(res.error || 'AI Coreから応答がありません');
           const failHtml = `<span style="color: #ff6b6b;">接続失敗: ${errMsg}</span>`;
           updateColabStatusUI('offline', 'Offline', failHtml);
-          this.showToast(`接続失敗: ${errMsg}`, 'error', 6000);
+          this.showToast(`接続失敗: ${errMsg}`, 'error', 3000);
         }
       } catch (e) {
         const errHtml = `<span style="color: #ff6b6b;">接続エラー: ${this._sanitizeUserMessage(e.message)}</span>`;
         updateColabStatusUI('offline', 'エラー', errHtml);
-        this.showToast('接続テストエラー: ' + e.message, 'error');
+        this.showToast('接続テストエラー: ' + e.message, 'error', 3000);
       } finally {
         if (triggerBtn && origHtml) {
           triggerBtn.disabled = false;
@@ -2743,18 +2644,28 @@ class AppController {
   }
 
 
-  // --- トースト通知 ---
-  showToast(message, type = "info", duration = 4000) {
+  // --- トースト通知 (単一表示・スマート自動消去) ---
+  showToast(message, type = "info", duration = 2500) {
     message = this._sanitizeUserMessage(message);
     const wrapper = document.getElementById('toastWrapper');
     if (!wrapper) return;
+
+    // 既存のトーストがあれば即座にクリア（画面上に多重スタックさせない）
+    wrapper.innerHTML = '';
+
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
     wrapper.appendChild(toast);
-    setTimeout(() => {
-      toast.style.animation = "toastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) reverse forwards";
-      setTimeout(() => toast.remove(), 300);
+
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      toast.style.transition = "opacity 0.2s ease, transform 0.2s ease";
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(8px) scale(0.96)";
+      setTimeout(() => {
+        if (toast.parentNode === wrapper) toast.remove();
+      }, 200);
     }, duration);
   }
 

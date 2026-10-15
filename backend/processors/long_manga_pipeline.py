@@ -374,7 +374,7 @@ async def run_long_manga_pipeline(
         else:
             char_master_map = {}
 
-        # Step 2: 各シーンのアセット生成（Stage1: 画像生成 ➔ Stage2: ハイブリッドI2V/カメラワーク ➔ Stage3: テロップ/フキダシ）(20%〜65%)
+        # Step 2: 各シーンのアセット生成（Stage1: 画像生成 -> Stage2: ハイブリッドI2V/カメラワーク -> Stage3: テロップ/フキダシ）(20%〜65%)
         scene_assets = []
 
         log_and_update(20, 2, "シーン画像＆ハイブリッド演出生成中", f"全 {total_scenes} カットの生成を開始します...")

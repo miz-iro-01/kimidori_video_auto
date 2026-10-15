@@ -2053,6 +2053,16 @@ async def research_outliers_endpoint(req: OutlierResearchRequest):
     try:
         from processors.outlier_research_engine import OutlierResearchEngine
         valid_keys = [k.strip() for k in (req.gemini_api_keys or []) if k and len(k.strip()) > 10]
+        if not valid_keys and req.user_id and firestore:
+            try:
+                user_doc = firestore.get_user(req.user_id)
+                if user_doc and user_doc.get("gemini_api_key") and len(user_doc["gemini_api_key"].strip()) > 10:
+                    valid_keys.append(user_doc["gemini_api_key"].strip())
+                settings_doc = firestore.get_user_settings(req.user_id)
+                if settings_doc and settings_doc.get("geminiApiKey") and len(settings_doc["geminiApiKey"].strip()) > 10:
+                    valid_keys.append(settings_doc["geminiApiKey"].strip())
+            except Exception as fe:
+                logger.warning(f"FirestoreからのGeminiキー自動取得スキップ: {fe}")
         if not valid_keys and config.GEMINI_API_KEY and len(config.GEMINI_API_KEY.strip()) > 10:
             valid_keys = [config.GEMINI_API_KEY.strip()]
         km = KeyManager(valid_keys if valid_keys else ["AIzaSy_fallback_key_placeholder"])
@@ -2069,6 +2079,7 @@ class BookAdaptRequest(BaseModel):
     concept: str
     audience: Optional[str] = "日本のビジネスパーソン（30代〜50代の中堅社員・管理職）"
     gemini_api_keys: Optional[List[str]] = None
+    user_id: Optional[str] = "default_user"
 
 
 @app.post("/api/research/adapt-book")
@@ -2077,6 +2088,13 @@ async def adapt_book_endpoint(req: BookAdaptRequest):
     try:
         from processors.outlier_research_engine import OutlierResearchEngine
         valid_keys = [k.strip() for k in (req.gemini_api_keys or []) if k and len(k.strip()) > 10]
+        if not valid_keys and req.user_id and firestore:
+            try:
+                user_doc = firestore.get_user(req.user_id)
+                if user_doc and user_doc.get("gemini_api_key") and len(user_doc["gemini_api_key"].strip()) > 10:
+                    valid_keys.append(user_doc["gemini_api_key"].strip())
+            except Exception as fe:
+                logger.warning(f"FirestoreからのGeminiキー自動取得スキップ: {fe}")
         if not valid_keys and config.GEMINI_API_KEY and len(config.GEMINI_API_KEY.strip()) > 10:
             valid_keys = [config.GEMINI_API_KEY.strip()]
         km = KeyManager(valid_keys if valid_keys else ["AIzaSy_fallback_key_placeholder"])
