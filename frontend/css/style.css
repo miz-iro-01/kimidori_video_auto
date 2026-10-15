@@ -36,13 +36,17 @@
   
   * { box-sizing: border-box; margin: 0; padding: 0; }
   
+  html,
   body {
+    height: 100vh;
+    max-height: 100vh;
+    margin: 0;
+    padding: 0;
     font-family: var(--font-sans);
     background-color: var(--bg-base);
     color: var(--text-primary);
     line-height: 1.6;
-    min-height: 100vh;
-    overflow-x: hidden;
+    overflow: hidden; /* ウィンドウ全体の縦横スクロールを完全無効化 */
   }
   
   /* --- Background Effects --- */
@@ -71,18 +75,34 @@
   
   @keyframes float { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(50px, 50px, 0); } }
   
-  /* --- Layout --- */
+  /* --- Layout (SaaS固定2ペイン構成) --- */
   .app-layout {
-    display: flex; min-height: 100vh;
+    display: flex;
+    flex-direction: row; /* サイドバーとメインコンテンツの横並びを絶対保証 */
+    width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
   }
   
-  /* --- Sidebar --- */
+  /* --- Sidebar (左側固定常駐) --- */
   .sidebar {
-    width: 280px; flex-shrink: 0;
-    background: rgba(10, 10, 15, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    width: 280px;
+    min-width: 280px;
+    max-width: 280px;
+    flex-shrink: 0; /* メインコンテンツに押しつぶされない */
+    height: 100vh;
+    max-height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: rgba(10, 10, 15, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border-right: 1px solid var(--border-color);
-    display: flex; flex-direction: column;
-    position: sticky; top: 0; height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 100;
   }
   .sidebar-header { padding: 2rem 1.5rem; }
   .logo { display: flex; align-items: center; gap: 1rem; }
@@ -106,16 +126,24 @@
   .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 10px var(--warning); }
   .status-dot.ready { background: var(--accent-primary); box-shadow: 0 0 10px var(--accent-primary); }
   
-  /* --- Main Content --- */
+  /* --- Main Content (右側独立スクロール領域) --- */
   .main-content { 
-    flex: 1; 
+    flex: 1;
+    min-width: 0; /* Flexboxオーバーフロー防止 */
+    height: 100vh;
+    max-height: 100vh;
     padding: 0.75rem 2rem 2.5rem; 
     overflow-y: auto; 
     overflow-x: hidden; 
     position: relative; 
     -webkit-overflow-scrolling: touch; 
   }
-  .view-section { display: none; animation: fadeIn 0.25s ease forwards; }
+  .view-section { 
+    display: none; 
+    width: 100%;
+    max-width: 100%;
+    animation: fadeIn 0.25s ease forwards; 
+  }
   .view-section.active { display: block; }
   
   @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
