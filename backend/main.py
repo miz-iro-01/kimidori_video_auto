@@ -2051,6 +2051,7 @@ class OutlierResearchRequest(BaseModel):
 async def research_outliers_endpoint(req: OutlierResearchRequest):
     """登録者数比高再生のOutlier（外れ値）動画を検出し、真の隠れ需要と多角的な切り口を抽出"""
     try:
+        from processors.outlier_research_engine import OutlierResearchEngine
         valid_keys = [k.strip() for k in (req.gemini_api_keys or []) if k and len(k.strip()) > 10]
         if not valid_keys and config.GEMINI_API_KEY and len(config.GEMINI_API_KEY.strip()) > 10:
             valid_keys = [config.GEMINI_API_KEY.strip()]
