@@ -38,15 +38,29 @@ GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "threads-auto-poster-9f
 # Gemini API 設定
 # =============================================================================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-# クォータ枯渇・エラー時に順番に試す最新フォールバックモデルリスト（現行モデル優先）
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+# ユーザーの無料枠・現行クォータで即時稼働する最新Gemini 3.x系を最優先（旧2.5は優先枠フォールバック）
 GEMINI_FALLBACK_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
     "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
     "gemini-2.5-pro",
-    "gemini-1.5-pro",
 ]
+
+# 無料枠利用可能な最新Geminiモデル群の定義一覧（2026年最新基準）
+GEMINI_FREE_MODELS = [
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.8-live",
+    "gemini-3.8-flash-tts",
+    "gemini-3.5-flash-lite-tts",
+    "text-embedding-005",
+    "gemini-embedding-001",
+]
+GEMINI_TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-3.5-flash-lite-tts"]
+GEMINI_EMBEDDING_MODELS = ["text-embedding-005", "gemini-embedding-001"]
 
 # =============================================================================
 # YouTube API 設定

@@ -196,8 +196,8 @@ class OutlierResearchEngine:
         return analyzed_results[:limit]
 
     async def _resolve_supported_models(self, session: Any, key: str) -> List[str]:
-        """APIキーが利用可能なGeminiモデル一覧を動的に取得・ソート"""
-        default_prio = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"]
+        """APIキーが利用可能なGeminiモデル一覧を動的に取得・ソート（3.x最優先）"""
+        default_prio = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
             async with session.get(url, timeout=8) as resp:

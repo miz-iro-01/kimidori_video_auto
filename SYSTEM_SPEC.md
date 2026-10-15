@@ -7,10 +7,11 @@
   - **フロントエンド層**: Next.js 14 (TypeScript / App Router, Port 3001) + Vanilla JS SPA (`frontend/index.html`, `frontend/js/app.js`, `frontend/js/api-client.js`)
   - **バックエンド層**: Python FastAPI (`backend/main.py`, Port 8080) + FFmpeg マルチレイヤー動画合成エンジン
   - **AI・メディア生成基盤**:
-    - テキスト・台本・Outlier分析: Google Gemini API (`gemini-2.5-flash`, `gemini-2.5-pro`)
+    - テキスト・台本・Outlier分析 (無料枠標準): Google Gemini API (`gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, 既存優先枠フォールバック: `gemini-2.5-flash`, `gemini-2.5-pro`。※旧1.5系モデルは完全廃止・提供終了)
+    - 無料枠対応Geminiモデル群 (2026年最新基準): `gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.8-live`, `gemini-3.8-flash-tts`, `gemini-3.5-flash-lite-tts`, `text-embedding-005`, `gemini-embedding-001`
     - 一貫性キャラクター＆シーン画像生成 (Stage 1): 有料 Gemini API Nano Banana (`gemini-3.1-flash-image`, `gemini-nano-banana-2.1`, `gemini-3-pro-image`) / FLUX.1 / Google Colab GPU / Pexels
     - リファレンス Image-to-Video アニメーション動画生成 (Stage 2): Google Colab ComfyUI (`LTX-Video I2V`) / 有料 Gemini API Veo 3.1 (`veo-3.1-fast-generate-preview`, `veo-3.1-generate-preview`)
-    - 音声合成 (TTS): Edge TTS, VOICEVOX, Google Cloud TTS, ElevenLabs, OpenAI TTS, Azure Speech, Amazon Polly, SHAREVOX, COEIROINK, AivisSpeech, 音読さん, CoeFont
+    - 音声合成 (TTS): Gemini TTS (`gemini-3.8-flash-tts`, `gemini-3.5-flash-lite-tts`), Edge TTS, VOICEVOX, Google Cloud TTS, ElevenLabs, OpenAI TTS, Azure Speech, Amazon Polly, SHAREVOX, COEIROINK, AivisSpeech, 音読さん, CoeFont
   - **データ・ストレージ基盤**: Firebase Firestore / Local JSON Fallback (`backend/services/firestore_service.py`), Google Cloud Storage, YouTube Data API v3 (OAuth2)
 
 ---

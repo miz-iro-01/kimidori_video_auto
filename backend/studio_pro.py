@@ -434,19 +434,20 @@ class PexelsSearchRequest(BaseModel):
 async def _translate_query(query: str, gemini_key: str) -> str:
     if not gemini_key or all(ord(c) < 128 for c in query):
         return query
-    try:
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-        body = {"contents": [{"parts": [{"text":
-                "Translate this Japanese keyword into 1 to 3 concrete English stock-footage search words. "
-                f"Return only the words.\n{query}"}]}]}
-        async with httpx.AsyncClient(timeout=20) as client:
-            r = await client.post(url, params={"key": gemini_key}, json=body)
-            r.raise_for_status()
-            txt = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-            return re.sub(r"[^A-Za-z0-9 ]", "", txt)[:60] or query
-    except Exception as e:
-        logger.warning(f"keyword translate failed: {e}")
-        return query
+    for model in ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            body = {"contents": [{"parts": [{"text":
+                    "Translate this Japanese keyword into 1 to 3 concrete English stock-footage search words. "
+                    f"Return only the words.\n{query}"}]}]}
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.post(url, params={"key": gemini_key}, json=body)
+                if r.status_code == 200:
+                    txt = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    return re.sub(r"[^A-Za-z0-9 ]", "", txt)[:60] or query
+        except Exception:
+            continue
+    return query
 
 
 @router.post("/api/studio/pexels-search")
@@ -571,28 +572,30 @@ async def generate_character_ref_endpoint(req: CharacterRefGenerateRequest):
     appearance_prompt_en = f"single character {name} ({role}), {jp_traits}, {style_cfg['scene_desc']}"
 
     if eff_key and any(ord(c) >= 128 for c in jp_traits):
-        try:
-            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-            body = {
-                "contents": [{
-                    "parts": [{
-                        "text": (
-                            "Convert the following Japanese character traits (name, role, clothing, hairstyle, appearance) "
-                            "into a concise, comma-separated English visual character sheet prompt for consistent image generation. "
-                            "Return ONLY the English description phrase.\n"
-                            f"Name: {name}, Role: {role}, Traits: {jp_traits}"
-                        )
+        for model in ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                body = {
+                    "contents": [{
+                        "parts": [{
+                            "text": (
+                                "Convert the following Japanese character traits (name, role, clothing, hairstyle, appearance) "
+                                "into a concise, comma-separated English visual character sheet prompt for consistent image generation. "
+                                "Return ONLY the English description phrase.\n"
+                                f"Name: {name}, Role: {role}, Traits: {jp_traits}"
+                            )
+                        }]
                     }]
-                }]
-            }
-            async with httpx.AsyncClient(timeout=15) as client:
-                r = await client.post(url, params={"key": eff_key}, json=body)
-                if r.status_code == 200:
-                    en_txt = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                    if en_txt:
-                        appearance_prompt_en = f"single character {name}, {en_txt}, {style_cfg['scene_desc']}"
-        except Exception as tr_err:
-            logger.warning(f"Character trait translation skipped: {tr_err}")
+                }
+                async with httpx.AsyncClient(timeout=15) as client:
+                    r = await client.post(url, params={"key": eff_key}, json=body)
+                    if r.status_code == 200:
+                        en_txt = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                        if en_txt:
+                            appearance_prompt_en = f"single character {name}, {en_txt}, {style_cfg['scene_desc']}"
+                            break
+            except Exception as tr_err:
+                logger.warning(f"Character trait translation error ({model}): {tr_err}")
 
     gen = BatchAssetGenerator()
     pil_img = None

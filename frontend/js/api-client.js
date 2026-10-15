@@ -77,10 +77,11 @@ class ApiClient {
    */
   async getActiveGeminiModels(apiKey) {
     const defaultModels = [
+      "gemini-3.8-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite",
       "gemini-2.5-flash",
-      "gemini-2.5-pro",
-      "gemini-3.5-flash",
-      "gemini-3.8-flash"
+      "gemini-2.5-pro"
     ];
     if (!apiKey) return defaultModels;
 
@@ -90,12 +91,20 @@ class ApiClient {
       });
       if (res.ok) {
         const data = await res.json();
+        const nonText = ["tts", "image", "embedding", "veo", "imagen", "aqa", "audio", "robotics"];
         const supported = (data.models || [])
           .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes("generateContent"))
-          .map(m => (m.name || "").replace("models/", ""));
+          .map(m => (m.name || "").replace("models/", ""))
+          .filter(name => !nonText.some(nt => name.toLowerCase().includes(nt)));
 
         if (supported.length > 0) {
-          const priority = ["gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.5-pro"];
+          const priority = [
+            "gemini-3.8-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-2.5-flash",
+            "gemini-2.5-pro"
+          ];
           const matched = priority.filter(p => supported.includes(p));
           const flashOthers = supported.filter(s => s.toLowerCase().includes("flash") && !matched.includes(s));
           const allOthers = supported.filter(s => !matched.includes(s) && !flashOthers.includes(s));

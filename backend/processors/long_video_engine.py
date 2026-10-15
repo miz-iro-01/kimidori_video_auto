@@ -167,11 +167,11 @@ class LongVideoEngine:
 }}
 """
         models_to_try = [
+            "gemini-3.8-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
             "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
             "gemini-2.5-pro",
-            "gemini-1.5-pro",
         ]
         import aiohttp
 
@@ -190,7 +190,7 @@ class LongVideoEngine:
                                 and not any(bad in m["name"].lower() for bad in _non_text)
                             ]
                             if supported:
-                                prioritized = [m for m in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"] if m in supported]
+                                prioritized = [m for m in ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"] if m in supported]
                                 other_flashes = [m for m in supported if "flash" in m.lower() and m not in prioritized]
                                 other_supported = [m for m in supported if m not in prioritized and m not in other_flashes]
                                 active_models = prioritized + other_flashes + other_supported

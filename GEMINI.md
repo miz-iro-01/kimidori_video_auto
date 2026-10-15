@@ -62,7 +62,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - **重負荷タスクの委譲必須化**:
   大量コード生成、ファイル解析、複雑なリファクタリング、バッチ処理においては、MCP連携の `antigravity-sdk-worker` (`run_heavy_sdk_task`) を使用して実行すること。
 - **最新現行モデルの保証**:
-  SDKワーカーは常に現行の有効モデル（`gemini-2.5-flash`, `gemini-2.5-pro` 等）で実行し、廃止モデルへの依存を完全排除すること。
+  SDKワーカーは常に現行の有効モデル（`gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-2.5-flash` 等）で実行し、廃止モデルへの依存を完全排除すること。
 - **事前検証・本番疎通テストの義務**:
   コード編集後は必ず構文チェック（Python: `python -m py_compile` 等）を実行し、デプロイ完了後は実機エンドポイントへの疎通テスト（HTTP 200の確認）を実施して完了とすること。
 

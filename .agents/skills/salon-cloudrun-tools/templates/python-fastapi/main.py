@@ -69,7 +69,7 @@ async def generate_content(req: GenerateRequest):
 
     if GEMINI_KEY:
         try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("gemini-3.8-flash")
             response = model.generate_content(full_prompt)
             output_text = response.text
         except Exception as e:

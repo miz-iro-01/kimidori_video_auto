@@ -53,7 +53,7 @@ app.post('/api/generate', async (req, res) => {
       const { GoogleGenAI } = require('@google/genai');
       const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
       const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-3.8-flash',
         contents: `${instruction}\n\nテーマ: ${theme}`
       });
       return res.json({ status: 'success', output: response.text });
