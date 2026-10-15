@@ -1687,6 +1687,77 @@ async def update_user_plan_endpoint(req: UserPlanUpdateRequest):
 # -----------------------------------------------------------------------------
 # 管理者専用: ユーザー管理 API (一覧・手動追加・プラン変更・削除)
 # -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# LP Settings API
+# -----------------------------------------------------------------------------
+class LPSettings(BaseModel):
+    hero_title: str = Field("AIで、YouTube動画制作を完全自動化。", description="メインキャッチコピー")
+    hero_subtitle: str = Field("リサーチ・構成・台本作成・高品質ナレーション・AI画像生成・動画編集からYouTube自動投稿まで、これひとつで完結。", description="サブコピー")
+    badge_text: str = Field("次世代型 オールインワン AI動画生成エンジン", description="ヒーローバッジ")
+    feature1_title: str = Field("簡易ショート動画", description="特徴1タイトル")
+    feature1_desc: str = Field("初心者でも最短3分でトレンド動画を全自動リサーチ・生成・投稿。", description="特徴1説明")
+    feature2_title: str = Field("Pro版ショート動画", description="特徴2タイトル")
+    feature2_desc: str = Field("48kHzスタジオ音質ナレーションと映画級AIイラストを融合した高品質動画。", description="特徴2説明")
+    feature3_title: str = Field("長尺漫画・解説動画", description="特徴3タイトル")
+    feature3_desc: str = Field("15〜20分の本格的な解説・物語・漫画風動画を自動で構成・レンダリング。", description="特徴3説明")
+    feature4_title: str = Field("YouTube直接自動投稿", description="特徴4タイトル")
+    feature4_desc: str = Field("Google OAuth連携で作成動画を直接アップロード＆予約投稿。", description="特徴4説明")
+    cta_button_text: str = Field("今すぐ無料で始める", description="CTAボタン文言")
+
+DEFAULT_LP_SETTINGS = LPSettings().dict()
+
+@app.get("/api/system/lp-settings")
+async def get_lp_settings():
+    """LP文言設定を取得"""
+    try:
+        if firestore and hasattr(firestore, "db") and firestore.db:
+            doc = firestore.db.collection("system_settings").document("lp_config").get()
+            if doc.exists:
+                data = doc.to_dict()
+                merged = {**DEFAULT_LP_SETTINGS, **data}
+                return {"success": True, "settings": merged}
+    except Exception as e:
+        logger.warning(f"Failed to fetch LP settings from Firestore: {e}")
+    
+    lp_file = config.DATA_DIR / "lp_settings.json"
+    if lp_file.exists():
+        try:
+            saved = json.loads(lp_file.read_text(encoding="utf-8"))
+            return {"success": True, "settings": {**DEFAULT_LP_SETTINGS, **saved}}
+        except Exception:
+            pass
+            
+    return {"success": True, "settings": DEFAULT_LP_SETTINGS}
+
+
+class SaveLPSettingsRequest(BaseModel):
+    user_email: str
+    settings: Dict[str, Any]
+
+@app.post("/api/system/lp-settings")
+async def save_lp_settings(req: SaveLPSettingsRequest):
+    """LP設定を更新（マスター管理者 oumaumauma32@gmail.com のみ）"""
+    if req.user_email != "oumaumauma32@gmail.com":
+        raise HTTPException(status_code=403, detail="管理者権限が必要です。")
+    
+    try:
+        if firestore and hasattr(firestore, "db") and firestore.db:
+            firestore.db.collection("system_settings").document("lp_config").set(req.settings, merge=True)
+            logger.info(f"[Admin] Updated LP settings in Firestore by {req.user_email}")
+    except Exception as e:
+        logger.error(f"Failed to save LP settings to Firestore: {e}")
+
+    try:
+        config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        lp_file = config.DATA_DIR / "lp_settings.json"
+        lp_file.write_text(json.dumps(req.settings, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.error(f"Failed to save LP settings to local file: {e}")
+
+    return {"success": True, "message": "LP設定を正常に保存しました。"}
+
+
 @app.get("/api/admin/users")
 async def get_admin_users():
     """管理用: 登録ユーザー一覧を取得"""
@@ -1980,8 +2051,10 @@ class OutlierResearchRequest(BaseModel):
 async def research_outliers_endpoint(req: OutlierResearchRequest):
     """登録者数比高再生のOutlier（外れ値）動画を検出し、真の隠れ需要と多角的な切り口を抽出"""
     try:
-        from processors.outlier_research_engine import OutlierResearchEngine
-        km = KeyManager(req.gemini_api_keys or [config.GEMINI_API_KEY])
+        valid_keys = [k.strip() for k in (req.gemini_api_keys or []) if k and len(k.strip()) > 10]
+        if not valid_keys and config.GEMINI_API_KEY and len(config.GEMINI_API_KEY.strip()) > 10:
+            valid_keys = [config.GEMINI_API_KEY.strip()]
+        km = KeyManager(valid_keys if valid_keys else ["AIzaSy_fallback_key_placeholder"])
         engine = OutlierResearchEngine(key_manager=km, firestore_service=firestore)
         outliers = engine.search_outlier_topics(req.keyword, limit=6, user_id=req.user_id)
         analysis = await engine.analyze_and_extract_hidden_angles(req.keyword, outliers, req.genre)
@@ -2002,7 +2075,10 @@ async def adapt_book_endpoint(req: BookAdaptRequest):
     """海外ビジネス洋書・理論コンセプトを日本の職場カルチャーに翻案"""
     try:
         from processors.outlier_research_engine import OutlierResearchEngine
-        km = KeyManager(req.gemini_api_keys or [config.GEMINI_API_KEY])
+        valid_keys = [k.strip() for k in (req.gemini_api_keys or []) if k and len(k.strip()) > 10]
+        if not valid_keys and config.GEMINI_API_KEY and len(config.GEMINI_API_KEY.strip()) > 10:
+            valid_keys = [config.GEMINI_API_KEY.strip()]
+        km = KeyManager(valid_keys if valid_keys else ["AIzaSy_fallback_key_placeholder"])
         engine = OutlierResearchEngine(key_manager=km)
         adapted = await engine.adapt_western_business_book(req.concept, req.audience)
         return {"success": True, "adaptation": adapted}

@@ -42,9 +42,10 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 # クォータ枯渇・エラー時に順番に試す最新フォールバックモデルリスト（現行モデル優先）
 GEMINI_FALLBACK_MODELS = [
     "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
     "gemini-2.5-pro",
-    "gemini-3.5-flash",
-    "gemini-3.8-flash",
+    "gemini-1.5-pro",
 ]
 
 # =============================================================================

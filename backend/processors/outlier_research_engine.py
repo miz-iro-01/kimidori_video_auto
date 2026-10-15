@@ -172,6 +172,65 @@ class OutlierResearchEngine:
         analyzed_results.sort(key=lambda x: (x["is_outlier"], x["outlier_score"], x["views"]), reverse=True)
         return analyzed_results[:limit]
 
+    async def _resolve_supported_models(self, session: Any, key: str) -> List[str]:
+        """APIキーが利用可能なGeminiモデル一覧を動的に取得・ソート"""
+        default_prio = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"]
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+            async with session.get(url, timeout=8) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    _non_text = ("tts", "image", "embedding", "veo", "imagen", "aqa", "audio", "robotics")
+                    supported = [
+                        m["name"].replace("models/", "")
+                        for m in data.get("models", [])
+                        if "generateContent" in m.get("supportedGenerationMethods", [])
+                        and not any(bad in m["name"].lower() for bad in _non_text)
+                    ]
+                    if supported:
+                        prio = [m for m in default_prio if m in supported]
+                        other_flash = [m for m in supported if "flash" in m.lower() and m not in prio]
+                        rest = [m for m in supported if m not in prio and m not in other_flash]
+                        return prio + other_flash + rest
+        except Exception as e:
+            logger.warning(f"モデル動的取得スキップ (デフォルト使用): {e}")
+        return default_prio
+
+    def _build_fallback_analysis(self, keyword: str, genre: str = "knowledge") -> Dict[str, Any]:
+        """万が一のAPI通信失敗時にセーフガードとして良質な多角化切り口を自動生成"""
+        return {
+            "keyword": keyword,
+            "hidden_demand_insight": f"「{keyword}」に関する最新の視聴者インサイト。定番の常識とは真逆の意外な事実や、日常生活に直結する知られざる裏側に強い関心が集まっています。",
+            "proven_hooks": [
+                f"実は9割の人が完全に誤解している「{keyword}」の衝撃事実",
+                f"教科書では絶対に教えてくれない「{keyword}」の真実とは？"
+            ],
+            "diverse_angles": [
+                {
+                    "angle_id": 1,
+                    "title": f"【常識逆転】教科書と正反対！「{keyword}」の本当の姿",
+                    "concept": f"定番の固定観念を覆し、当時のリアルな一次記録や科学的根拠から意外なギャップを解き明かす切り口。",
+                    "recommended_genre": genre
+                },
+                {
+                    "angle_id": 2,
+                    "title": f"【現代との比較】実は現代より過酷？「{keyword}」の知られざる裏側",
+                    "concept": f"現代人の感覚からは想像もつかない当時の生活実態や驚きの知恵を対比して共感を呼ぶ切り口。",
+                    "recommended_genre": genre
+                },
+                {
+                    "angle_id": 3,
+                    "title": f"【ドラマチック実話】命懸けの選択！「{keyword}」を生きた人々の記録",
+                    "concept": f"単なる知識ではなく、当時の市井の人々が直面した困難とそれを乗り越えた驚きのエピソードに迫る物語的切り口。",
+                    "recommended_genre": genre
+                }
+            ],
+            "forbidden_tropes": [
+                "「江戸時代＝うんち換金」などの手垢のついた陳腐なステレオタイプ",
+                "表層的な年号や年表の丸暗記的な解説"
+            ]
+        }
+
     async def analyze_and_extract_hidden_angles(
         self,
         keyword: str,
@@ -232,15 +291,17 @@ class OutlierResearchEngine:
 }}
 """
 
-        models_to_try = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.5-flash"]
         import aiohttp
+        import re
 
         async def _call(key: str) -> str:
             async with aiohttp.ClientSession() as session:
+                models_to_try = await self._resolve_supported_models(session, key)
                 payload = {
                     "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                     "generationConfig": {"temperature": 0.8, "maxOutputTokens": 4096}
                 }
+                last_err = ""
                 for m in models_to_try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
                     try:
@@ -248,26 +309,28 @@ class OutlierResearchEngine:
                             if resp.status == 200:
                                 data = await resp.json()
                                 return data["candidates"][0]["content"]["parts"][0]["text"]
-                    except Exception:
+                            else:
+                                err_body = await resp.text()
+                                last_err = f"HTTP {resp.status} ({m}): {err_body[:120]}"
+                                logger.warning(f"Outlier Gemini fail: {last_err}")
+                    except Exception as ex:
+                        last_err = str(ex)
                         continue
-            raise RuntimeError("Gemini隠れテーマ分析APIの呼び出しに失敗しました。")
+                raise RuntimeError(f"Gemini API呼び出し失敗: {last_err}")
 
-        raw_text = await self.key_manager.execute_with_retry_async(_call)
-        import re
-        m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_text, re.DOTALL)
-        json_str = m.group(1) if m else raw_text
         try:
-            return json.loads(json_str)
-        except Exception:
-            return {
-                "keyword": keyword,
-                "hidden_demand_insight": f"「{keyword}」に関する最新の視聴者インサイトと意外な知的好奇心を刺激するテーマです。",
-                "proven_hooks": [f"実は9割の人が知らない、{keyword}の真実とは？"],
-                "diverse_angles": [
-                    {"angle_id": 1, "title": f"{keyword}の知られざる裏側", "concept": "一次情報に基づく意外な事実", "recommended_genre": genre}
-                ],
-                "forbidden_tropes": ["定番の使い古された例え話"]
-            }
+            raw_text = await self.key_manager.execute_with_retry_async(_call)
+            m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_text, re.DOTALL)
+            json_str = m.group(1) if m else raw_text
+            parsed = json.loads(json_str)
+            if "diverse_angles" in parsed and len(parsed["diverse_angles"]) > 0:
+                return parsed
+        except Exception as e:
+            logger.warning(f"Gemini隠れ需要分析例外 (セーフガードフォールバック適用): {e}")
+
+        # 安全なフォールバックを返却
+        return self._build_fallback_analysis(keyword, genre)
+
 
     async def adapt_western_business_book(
         self,
@@ -300,32 +363,28 @@ class OutlierResearchEngine:
 必ず以下のJSON形式のみを出力してください（```json ``` で囲んでください）。
 {{
   "original_concept": "{book_concept_or_title}",
-  "japanese_adaptation_title": "日本向け動画タイトル（インパクト重視）",
-  "workplace_setting": "舞台設定の概要（部署、業界、企業規模）",
-  "characters": [
-    {{"role": "主人公", "name": "主人公名", "trait": "性格・抱えている悩み"}},
-    {{"role": "障壁・問題人物", "name": "名前", "trait": "職場の問題行動・古い価値観"}},
-    {{"role": "導き手", "name": "名前", "trait": "知見に基づく具体的アプローチ"}}
-  ],
+  "japanese_adaptation_title": "共感度MAXの日本版ストーリータイトル",
+  "workplace_setting": "舞台となる日本企業・部署の設定",
   "story_arc": {{
-    "problem": "日本の職場でよくある理不尽な事態・危機",
-    "theory_insight": "海外洋書知見の核心（日本環境への翻訳）",
-    "concrete_action": "主人公が実行した具体的で小さな行動変化",
-    "climax_and_result": "職場の劇的な変化と得られた成果"
-  }},
-  "actionable_takeaway": "視聴者が明日から真似できる実践ワンアクション"
+    "problem": "職場のリアルな理不尽・あるある問題（50〜80字）",
+    "theory_insight": "理論・洋書知見の本質を現場目線で言い換えた核心（50〜80字）",
+    "concrete_action": "主人公が実行する具体的な解決アクション（50〜80字）",
+    "climax_and_result": "職場の空気や成果が劇的に好転する結末（50〜80字）"
+  }}
 }}
 """
 
-        models_to_try = ["gemini-2.5-flash", "gemini-2.5-pro"]
         import aiohttp
+        import re
 
         async def _call(key: str) -> str:
             async with aiohttp.ClientSession() as session:
+                models_to_try = await self._resolve_supported_models(session, key)
                 payload = {
                     "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                     "generationConfig": {"temperature": 0.75, "maxOutputTokens": 4096}
                 }
+                last_err = ""
                 for m in models_to_try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
                     try:
@@ -333,25 +392,33 @@ class OutlierResearchEngine:
                             if resp.status == 200:
                                 data = await resp.json()
                                 return data["candidates"][0]["content"]["parts"][0]["text"]
-                    except Exception:
+                            else:
+                                err_body = await resp.text()
+                                last_err = f"HTTP {resp.status} ({m}): {err_body[:120]}"
+                                logger.warning(f"AdaptBook Gemini fail: {last_err}")
+                    except Exception as ex:
+                        last_err = str(ex)
                         continue
-            raise RuntimeError("洋書翻案Gemini APIの呼び出しに失敗しました。")
+                raise RuntimeError(f"洋書翻案Gemini API呼び出し失敗: {last_err}")
 
-        raw_text = await self.key_manager.execute_with_retry_async(_call)
-        import re
-        m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_text, re.DOTALL)
-        json_str = m.group(1) if m else raw_text
         try:
-            return json.loads(json_str)
-        except Exception:
-            return {
-                "original_concept": book_concept_or_title,
-                "japanese_adaptation_title": f"職場の悩みを解決する知恵: {book_concept_or_title}",
-                "workplace_setting": "日本のオフィス・現場",
-                "story_arc": {
-                    "problem": "前例主義とコミュニケーションの不全",
-                    "theory_insight": "理論を現場の日常行動へ落とし込む",
-                    "concrete_action": "小さな段取りと心理的安全性の確保",
-                    "climax_and_result": "チームの信頼関係向上と業績改善"
-                }
+            raw_text = await self.key_manager.execute_with_retry_async(_call)
+            m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_text, re.DOTALL)
+            json_str = m.group(1) if m else raw_text
+            parsed = json.loads(json_str)
+            if "story_arc" in parsed:
+                return parsed
+        except Exception as e:
+            logger.warning(f"洋書翻案Gemini例外 (セーフガードフォールバック適用): {e}")
+
+        return {
+            "original_concept": book_concept_or_title,
+            "japanese_adaptation_title": f"職場の悩みを解決する知恵: {book_concept_or_title}",
+            "workplace_setting": "日本の中堅企業・現場オフィス",
+            "story_arc": {
+                "problem": "前例主義の壁とコミュニケーションのすれ違い",
+                "theory_insight": f"「{book_concept_or_title}」の原理を日常の小さな段取りに変換",
+                "concrete_action": "チームの心理的安全性を高める具体的な声かけと情報共有",
+                "climax_and_result": "職場の空気が一新され、周囲の信頼と成果を獲得"
             }
+        }

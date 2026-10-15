@@ -159,8 +159,9 @@ class KeyManager:
                         f"APIキー ({api_key[:6]}...) でエラーが発生しました (試行 {attempt + 1}/{retries_limit}): {e}. 次のキーに切り替えます。"
                     )
 
+        err_detail = f"詳細: {last_exception}" if last_exception else ""
         raise KeyManagerAllKeysFailedError(
-            f"すべてのAPIキー試行 ({retries_limit} 回) に失敗しました。",
+            f"すべてのAPIキー試行 ({retries_limit} 回) に失敗しました。{err_detail}",
             last_exception=last_exception
         )
 
@@ -204,7 +205,8 @@ class KeyManager:
                         f"APIキー ({api_key[:6]}...) でエラーが発生しました (試行 {attempt + 1}/{retries_limit}): {e}. 次のキーに切り替えます。"
                     )
 
+        err_detail = f"詳細: {last_exception}" if last_exception else ""
         raise KeyManagerAllKeysFailedError(
-            f"すべてのAPIキー試行 ({retries_limit} 回) に失敗しました。",
+            f"すべてのAPIキー試行 ({retries_limit} 回) に失敗しました。{err_detail}",
             last_exception=last_exception
         )

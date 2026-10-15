@@ -15,7 +15,10 @@ class AppController {
     this.editorJobId = null;
     this.editorSourceMode = null;
     this.editorActiveCutIndex = 0;
-    this.initViews();
+        this.initViews();
+    this.initAdminTabs();
+    this.initLpSettings();
+    this.initDashboardStockTabs();
     this.initForms();
     this.initEditForm();
     this.initMangaForm();
@@ -53,7 +56,13 @@ class AppController {
         }
 
         // Pro版ショート動画または長尺動画タブを開いた際は、保存済み5本ストックを最新化
-        if (target === 'pro-shorts') {
+                  // ダッシュボードを開いた際は保存済みストックを最新化
+          if (target === 'dashboard') {
+            this.loadSavedVideoStock('pro_shorts', false);
+            this.loadSavedVideoStock('long_video', false);
+          }
+
+          if (target === 'pro-shorts') {
           this.loadSavedVideoStock('pro_shorts', false);
         } else if (target === 'long-video') {
           this.loadSavedVideoStock('long_video', false);

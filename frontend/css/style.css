@@ -107,7 +107,7 @@
   .status-dot.ready { background: var(--accent-primary); box-shadow: 0 0 10px var(--accent-primary); }
   
   /* --- Main Content --- */
-  .main-content { flex: 1; padding: 2.5rem 3.5rem; overflow-y: auto; overflow-x: hidden; position: relative; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; transform: translateZ(0); contain: paint layout; will-change: scroll-position; }
+  .main-content { flex: 1; padding: 1.25rem 2.25rem 2.5rem; overflow-y: auto; overflow-x: hidden; position: relative; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; transform: translateZ(0); contain: paint layout; will-change: scroll-position; }
   .view-section { display: none; animation: fadeIn 0.4s ease forwards; }
   .view-section.active { display: block; }
   
@@ -968,3 +968,48 @@ body {
 .studio-list-row input[type=text] { flex: 1 1 140px; min-width: 0; }
 .studio-list-row input[type=number] { width: 62px; }
 .studio-list-row img { width: 44px; height: 30px; object-fit: cover; border-radius: 4px; }
+
+
+/* --- Admin Tabs --- */
+.admin-tab-nav {
+  display: flex; gap: 0.5rem; border-bottom: 2px solid rgba(255,255,255,0.08); margin-bottom: 1.5rem; flex-wrap: wrap;
+}
+.admin-tab-btn {
+  padding: 0.6rem 1.1rem; font-size: 0.88rem; font-weight: 600; background: none; border: none;
+  border-bottom: 2px solid transparent; color: var(--text-secondary); cursor: pointer;
+  display: flex; align-items: center; gap: 6px; transition: all 0.2s ease;
+}
+.admin-tab-btn:hover {
+  color: #ffffff; background: rgba(255,255,255,0.03); border-radius: 4px 4px 0 0;
+}
+.admin-tab-btn.active {
+  color: var(--accent-primary); border-bottom-color: var(--accent-primary);
+}
+.admin-tab-pane {
+  display: none; animation: fadeIn 0.3s ease forwards;
+}
+.admin-tab-pane.active {
+  display: block;
+}
+
+/* --- LP / Landing Hub Styles --- */
+.lp-wrapper {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  z-index: 1000; overflow-y: auto; overflow-x: hidden;
+  background: var(--bg-dark);
+}
+.lp-container {
+  max-width: 1200px; margin: 0 auto;
+}
+@media (max-width: 768px) {
+  .lp-hero {
+    grid-template-columns: 1fr !important;
+    padding: 1.5rem 0 !important;
+  }
+  .main-content {
+    padding: 1rem 1rem 2rem !important;
+  }
+  .section-title {
+    font-size: 1.5rem !important;
+  }
+}
