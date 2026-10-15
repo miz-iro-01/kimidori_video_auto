@@ -5,9 +5,9 @@
 
 class ApiClient {
   constructor() {
-    this.baseUrl = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-      ? `http://${window.location.hostname}:8080` 
-      : "https://kimidori-movie-auto-ey3qvn3ruq-an.a.run.app"; // 本番環境の最新Cloud Run URL
+    this.baseUrl = (typeof window !== 'undefined' && window.location.origin) 
+      ? window.location.origin 
+      : "https://kimidori-youtube-auto-xfl36wickq-an.a.run.app";
   }
 
   /** サロン認証・BYOGヘッダーの自動付与 */
@@ -1114,10 +1114,10 @@ ${ukiyoeInstruction}
 
   /** Outlier（外れ値・真の隠れ需要）リサーチの実行 */
   async researchOutliers(keyword, genre = "knowledge") {
-    const keys = window.settingsManager.getGeminiKeys();
+    const keys = window.settingsManager ? window.settingsManager.getGeminiKeys() : [];
     const res = await fetch(`${this.baseUrl}/api/research/outliers`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this._getAuthHeaders(),
       body: JSON.stringify({
         keyword: keyword,
         genre: genre,
@@ -1134,10 +1134,10 @@ ${ukiyoeInstruction}
 
   /** 海外ビジネス洋書・行動経済学知見の日本職場カルチャー翻案 */
   async adaptWesternBook(concept, audience = "日本のビジネスパーソン") {
-    const keys = window.settingsManager.getGeminiKeys();
+    const keys = window.settingsManager ? window.settingsManager.getGeminiKeys() : [];
     const res = await fetch(`${this.baseUrl}/api/research/adapt-book`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: this._getAuthHeaders(),
       body: JSON.stringify({
         concept: concept,
         audience: audience,

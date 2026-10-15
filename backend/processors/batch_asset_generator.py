@@ -1058,7 +1058,6 @@ class BatchAssetGenerator:
             "gemini-3-pro-image-preview",
             "gemini-2.5-flash-image",
             "gemini-2.5-flash-image-preview",
-            "gemini-2.0-flash-exp-image-generation",
             "imagen-3.0-generate-002",
             "imagen-3.0-generate-001",
         ]

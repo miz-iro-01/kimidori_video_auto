@@ -88,6 +88,320 @@ class AppController {
     }
   }
 
+  // --- 管理者ダッシュボード タブ切り替え & Colab接続 ---
+  initAdminTabs() {
+    const tabBtns = document.querySelectorAll('.admin-tab-btn');
+    const panes = {
+      colab: document.getElementById('adminTabColab'),
+      users: document.getElementById('adminTabUsers'),
+      system: document.getElementById('adminTabSystem'),
+      lp: document.getElementById('adminTabLp')
+    };
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.adminTab;
+        tabBtns.forEach(b => {
+          b.classList.remove('active');
+          b.style.borderBottomColor = 'transparent';
+          b.style.color = 'var(--text-secondary)';
+        });
+        btn.classList.add('active');
+        btn.style.borderBottomColor = 'var(--accent-primary)';
+        btn.style.color = 'var(--accent-primary)';
+
+        Object.keys(panes).forEach(k => {
+          if (panes[k]) {
+            panes[k].style.display = (k === target) ? 'block' : 'none';
+            if (k === target) panes[k].classList.add('active');
+            else panes[k].classList.remove('active');
+          }
+        });
+
+        // ユーザー管理タブを開いた場合は一覧を最新化
+        if (target === 'users' && this.loadAdminUsers) {
+          this.loadAdminUsers();
+        }
+      });
+    });
+
+    // Colab Worker URLの管理
+    const colabUrlInput = document.getElementById('adminColabWorkerUrl');
+    const btnSaveColab = document.getElementById('btnAdminSaveColab');
+    const btnTestColab = document.getElementById('btnAdminTestColab');
+    const colabStatusBadge = document.getElementById('adminColabStatusBadge');
+    const colabStatusMsg = document.getElementById('adminColabStatusMsg');
+
+    if (colabUrlInput) {
+      const savedColab = (window.settingsManager && window.settingsManager.get('colabWorkerUrl')) || '';
+      colabUrlInput.value = savedColab;
+    }
+
+    if (btnSaveColab && colabUrlInput) {
+      btnSaveColab.addEventListener('click', async () => {
+        const url = colabUrlInput.value.trim();
+        if (window.settingsManager) {
+          window.settingsManager.set('colabWorkerUrl', url);
+          window.settingsManager.set('byogComfyUrl', url);
+        }
+
+        // バックエンドへ同期
+        try {
+          if (window.apiClient) {
+            await fetch(`${window.apiClient.baseUrl}/api/colab/sync-url`, {
+              method: 'POST',
+              headers: window.apiClient._getAuthHeaders(),
+              body: JSON.stringify({ colab_url: url })
+            });
+          }
+        } catch (e) {
+          console.warn('[Colab] URL同期通知スキップ:', e);
+        }
+
+        if (colabStatusBadge) {
+          colabStatusBadge.textContent = '保存済み';
+          colabStatusBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+          colabStatusBadge.style.color = 'var(--accent-primary)';
+        }
+        if (colabStatusMsg) {
+          colabStatusMsg.textContent = `ステータス: URL保存完了 (${url || '未設定'})`;
+          colabStatusMsg.style.color = 'var(--accent-primary)';
+        }
+        this.showToast('Colab Worker URLを保存しました', 'success');
+      });
+    }
+
+    if (btnTestColab && colabUrlInput) {
+      btnTestColab.addEventListener('click', async () => {
+        const url = colabUrlInput.value.trim();
+        if (!url) {
+          this.showToast('Colab Worker URLを入力してください', 'warning');
+          return;
+        }
+
+        if (colabStatusBadge) {
+          colabStatusBadge.textContent = '確認中...';
+          colabStatusBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+          colabStatusBadge.style.color = '#f59e0b';
+        }
+        if (colabStatusMsg) {
+          colabStatusMsg.textContent = 'Colabサーバーとの疎通を確認中...';
+          colabStatusMsg.style.color = '#f59e0b';
+        }
+
+        try {
+          let isOk = false;
+          let detail = '';
+          if (window.apiClient) {
+            const res = await fetch(`${window.apiClient.baseUrl}/api/colab/health?url=${encodeURIComponent(url)}`, {
+              headers: window.apiClient._getAuthHeaders()
+            });
+            if (res.ok) {
+              const data = await res.json();
+              isOk = Boolean(data.success || data.connected || data.status === 'ok');
+              detail = data.message || (isOk ? 'ComfyUI / Colab 接続正常' : '応答異常');
+            }
+          }
+
+          if (isOk) {
+            if (colabStatusBadge) {
+              colabStatusBadge.textContent = '接続正常 (Online)';
+              colabStatusBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+              colabStatusBadge.style.color = 'var(--accent-primary)';
+            }
+            if (colabStatusMsg) {
+              colabStatusMsg.textContent = `ステータス: 接続正常 (${detail})`;
+              colabStatusMsg.style.color = 'var(--accent-primary)';
+            }
+            this.showToast('Colabサーバーとの接続を確認しました', 'success');
+          } else {
+            throw new Error(detail || '接続タイムアウトまたはオフライン');
+          }
+        } catch (err) {
+          if (colabStatusBadge) {
+            colabStatusBadge.textContent = '接続失敗';
+            colabStatusBadge.style.background = 'rgba(239, 68, 68, 0.15)';
+            colabStatusBadge.style.color = 'var(--danger)';
+          }
+          if (colabStatusMsg) {
+            colabStatusMsg.textContent = `ステータス: 接続エラー (${err.message || '接続できませんでした'})`;
+            colabStatusMsg.style.color = 'var(--danger)';
+          }
+          this.showToast('Colab接続エラー: ' + (err.message || '接続できませんでした'), 'error');
+        }
+      });
+    }
+  }
+
+  // --- LP（ランディングページ）文言編集 & リアルタイム反映 ---
+  initLpSettings() {
+    const defaultLp = {
+      hero_badge: '次世代型 オールインワン AI動画生成エンジン',
+      hero_title: 'AIで、YouTube動画制作を\n完全自動化。',
+      hero_subtitle: 'リサーチ・構成・台本作成・高品質ナレーション・AI画像生成・動画編集からYouTube自動投稿まで、これひとつで完結。',
+      feature1_title: '簡易ショート動画',
+      feature1_desc: '初心者でも最短3分でトレンド動画を全自動リサーチ・生成・投稿。',
+      feature2_title: 'Pro版ショート動画',
+      feature2_desc: '48kHzスタジオ音質ナレーションと映画級AIイラストを融合した高品質動画。',
+      feature3_title: '長尺漫画・解説動画',
+      feature3_desc: '15〜20分の本格的な解説・物語・漫画風動画を自動で構成・レンダリング。',
+      feature4_title: 'YouTube直接自動投稿',
+      feature4_desc: 'Google OAuth連携で作成動画を直接アップロード＆予約投稿。',
+      cta_text: '今すぐ無料で始める'
+    };
+
+    let lpData = { ...defaultLp };
+    try {
+      const saved = localStorage.getItem('kimidori_lp_settings');
+      if (saved) lpData = { ...defaultLp, ...JSON.parse(saved) };
+    } catch (e) {}
+
+    // LP側の要素へ反映するヘルパー
+    const applyToLpElements = (data) => {
+      const badgeEl = document.getElementById('lpHeroBadge');
+      if (badgeEl) badgeEl.textContent = data.hero_badge || defaultLp.hero_badge;
+
+      const titleEl = document.getElementById('lpHeroTitle');
+      if (titleEl) {
+        const rawTitle = data.hero_title || defaultLp.hero_title;
+        const lines = rawTitle.split('\n');
+        if (lines.length > 1) {
+          titleEl.innerHTML = `${this._escapeHtml(lines[0])}<br><span style="background: linear-gradient(135deg, var(--accent-primary), #38bdf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${this._escapeHtml(lines.slice(1).join(' '))}</span>`;
+        } else {
+          titleEl.textContent = rawTitle;
+        }
+      }
+
+      const subtitleEl = document.getElementById('lpHeroSubtitle');
+      if (subtitleEl) subtitleEl.textContent = data.hero_subtitle || defaultLp.hero_subtitle;
+    };
+
+    // 管理画面フォームへ値を反映するヘルパー
+    const applyToAdminForm = (data) => {
+      const elBadge = document.getElementById('lpEditBadgeText');
+      if (elBadge) elBadge.value = data.hero_badge || '';
+      const elTitle = document.getElementById('lpEditHeroTitle');
+      if (elTitle) elTitle.value = data.hero_title || '';
+      const elSub = document.getElementById('lpEditHeroSubtitle');
+      if (elSub) elSub.value = data.hero_subtitle || '';
+      const elF1T = document.getElementById('lpEditF1Title');
+      if (elF1T) elF1T.value = data.feature1_title || '';
+      const elF1D = document.getElementById('lpEditF1Desc');
+      if (elF1D) elF1D.value = data.feature1_desc || '';
+      const elF2T = document.getElementById('lpEditF2Title');
+      if (elF2T) elF2T.value = data.feature2_title || '';
+      const elF2D = document.getElementById('lpEditF2Desc');
+      if (elF2D) elF2D.value = data.feature2_desc || '';
+      const elF3T = document.getElementById('lpEditF3Title');
+      if (elF3T) elF3T.value = data.feature3_title || '';
+      const elF3D = document.getElementById('lpEditF3Desc');
+      if (elF3D) elF3D.value = data.feature3_desc || '';
+      const elF4T = document.getElementById('lpEditF4Title');
+      if (elF4T) elF4T.value = data.feature4_title || '';
+      const elF4D = document.getElementById('lpEditF4Desc');
+      if (elF4D) elF4D.value = data.feature4_desc || '';
+      const elCta = document.getElementById('lpEditCtaText');
+      if (elCta) elCta.value = data.cta_text || '';
+    };
+
+    applyToLpElements(lpData);
+    applyToAdminForm(lpData);
+
+    // 管理画面のLP保存ボタン
+    const btnSaveLp = document.getElementById('btnSaveLpSettings');
+    if (btnSaveLp) {
+      btnSaveLp.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const updated = {
+          hero_badge: document.getElementById('lpEditBadgeText')?.value.trim() || defaultLp.hero_badge,
+          hero_title: document.getElementById('lpEditHeroTitle')?.value.trim() || defaultLp.hero_title,
+          hero_subtitle: document.getElementById('lpEditHeroSubtitle')?.value.trim() || defaultLp.hero_subtitle,
+          feature1_title: document.getElementById('lpEditF1Title')?.value.trim() || defaultLp.feature1_title,
+          feature1_desc: document.getElementById('lpEditF1Desc')?.value.trim() || defaultLp.feature1_desc,
+          feature2_title: document.getElementById('lpEditF2Title')?.value.trim() || defaultLp.feature2_title,
+          feature2_desc: document.getElementById('lpEditF2Desc')?.value.trim() || defaultLp.feature2_desc,
+          feature3_title: document.getElementById('lpEditF3Title')?.value.trim() || defaultLp.feature3_title,
+          feature3_desc: document.getElementById('lpEditF3Desc')?.value.trim() || defaultLp.feature3_desc,
+          feature4_title: document.getElementById('lpEditF4Title')?.value.trim() || defaultLp.feature4_title,
+          feature4_desc: document.getElementById('lpEditF4Desc')?.value.trim() || defaultLp.feature4_desc,
+          cta_text: document.getElementById('lpEditCtaText')?.value.trim() || defaultLp.cta_text
+        };
+
+        localStorage.setItem('kimidori_lp_settings', JSON.stringify(updated));
+        applyToLpElements(updated);
+
+        // バックエンドへ同期
+        try {
+          if (window.apiClient) {
+            await fetch(`${window.apiClient.baseUrl}/api/admin/lp-settings`, {
+              method: 'PUT',
+              headers: window.apiClient._getAuthHeaders(),
+              body: JSON.stringify({
+                user_email: (this.currentUser && this.currentUser.email) || 'oumaumauma32@gmail.com',
+                ...updated
+              })
+            });
+          }
+        } catch (err) {
+          console.warn('[LP] クラウド同期スキップ:', err);
+        }
+
+        this.showToast('LP設定を保存し、文言を更新しました', 'success');
+      });
+    }
+  }
+
+  // --- ダッシュボード内の保存済み動画ストック タブ制御 ---
+  initDashboardStockTabs() {
+    const tabShorts = document.getElementById('tabStockProShorts');
+    const tabLong = document.getElementById('tabStockLongVideo');
+    const boxShorts = document.getElementById('dashboardProShortsStockContainer');
+    const boxLong = document.getElementById('dashboardLongVideoStockContainer');
+    const btnRefresh = document.getElementById('btnRefreshDashboardStock');
+
+    if (tabShorts && tabLong && boxShorts && boxLong) {
+      tabShorts.addEventListener('click', () => {
+        tabShorts.classList.add('active');
+        tabShorts.style.background = 'rgba(57,255,20,0.1)';
+        tabShorts.style.borderColor = 'var(--accent-primary)';
+        tabShorts.style.color = 'var(--accent-primary)';
+
+        tabLong.classList.remove('active');
+        tabLong.style.background = 'transparent';
+        tabLong.style.borderColor = 'rgba(255,255,255,0.15)';
+        tabLong.style.color = 'var(--text-secondary)';
+
+        boxShorts.style.display = 'block';
+        boxLong.style.display = 'none';
+        this.loadSavedVideoStock('pro_shorts', false);
+      });
+
+      tabLong.addEventListener('click', () => {
+        tabLong.classList.add('active');
+        tabLong.style.background = 'rgba(56, 189, 248, 0.1)';
+        tabLong.style.borderColor = '#38bdf8';
+        tabLong.style.color = '#38bdf8';
+
+        tabShorts.classList.remove('active');
+        tabShorts.style.background = 'transparent';
+        tabShorts.style.borderColor = 'rgba(255,255,255,0.15)';
+        tabShorts.style.color = 'var(--text-secondary)';
+
+        boxLong.style.display = 'block';
+        boxShorts.style.display = 'none';
+        this.loadSavedVideoStock('long_video', false);
+      });
+    }
+
+    if (btnRefresh) {
+      btnRefresh.addEventListener('click', () => {
+        this.loadSavedVideoStock('pro_shorts', false);
+        this.loadSavedVideoStock('long_video', false);
+        this.showToast('保存済み動画ストックを更新しました', 'info');
+      });
+    }
+  }
+
   // --- 設定画面の初期化 ---
   initSettings() {
     // Gemini Key
@@ -1881,10 +2195,11 @@ class AppController {
       }
     });
 
-    // Google ログイン処理
+    // Google ログイン処理 (毎回アカウント選択画面を明示)
     document.getElementById('btnGoogleLogin')?.addEventListener('click', async () => {
       try {
         const provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
         await firebase.auth().signInWithPopup(provider);
         this.showToast("Googleでログインしました！", "success");
       } catch (err) {
@@ -2046,13 +2361,23 @@ class AppController {
 
   // 統一的な認証状態反映ロジック
   updateAuthState(user) {
+    const appLayout = document.getElementById('appLayout');
     const loginPage = document.getElementById('loginPage');
     const currentUserDisplay = document.getElementById('currentUserDisplay');
     const navAdminItem = document.getElementById('navAdminItem');
+    const cardByogSettings = document.getElementById('cardByogSettings');
 
     if (user) {
       console.log("ログイン中ユーザー:", user.email);
-      if (loginPage) loginPage.classList.add('hidden');
+      // 認証時はアプリ画面を明示表示、LPを完全非表示
+      if (appLayout) {
+        appLayout.style.display = 'flex';
+        appLayout.classList.remove('hidden');
+      }
+      if (loginPage) {
+        loginPage.classList.add('hidden');
+        loginPage.style.display = 'none';
+      }
 
       // マスター管理者判定: oumaumauma32@gmail.com のみに限定（サロン側adminフラグ等による昇格は完全無効化）
       const userEmail = (user.email || '').trim().toLowerCase();
@@ -2084,6 +2409,13 @@ class AppController {
         }
       }
 
+      // BYOG設定パネルは「買い切り（byog_purchased）」または管理者のみに表示
+      if (cardByogSettings) {
+        const userPlan = (user.plan || localStorage.getItem('kimidori_salon_plan') || '').toLowerCase();
+        const isByogPurchased = (userPlan === 'byog_purchased' || isAdmin);
+        cardByogSettings.style.display = isByogPurchased ? 'block' : 'none';
+      }
+
       if (isAdmin) {
         if (navAdminItem) navAdminItem.style.display = 'flex';
         // 管理者はPro限定ロック通知を非表示にして全機能を解放
@@ -2099,12 +2431,22 @@ class AppController {
         // もし現在管理者ページにいた場合はダッシュボードへ強制遷移
         const activeNav = document.querySelector('.nav-item.active');
         if (activeNav && activeNav.dataset.target === 'admin') {
-          document.querySelector('.nav-item[data-target="dashboard"]').click();
+          const dashBtn = document.querySelector('.nav-item[data-target="dashboard"]');
+          if (dashBtn) dashBtn.click();
         }
       }
     } else {
       this.isAdmin = false;
-      if (loginPage) loginPage.classList.remove('hidden');
+      // 未認証時はアプリ画面を完全非表示、LPを全画面表示
+      if (appLayout) {
+        appLayout.style.display = 'none';
+        appLayout.classList.add('hidden');
+      }
+      if (loginPage) {
+        loginPage.classList.remove('hidden');
+        loginPage.style.display = 'block';
+      }
+
       if (currentUserDisplay) currentUserDisplay.textContent = "";
       if (navAdminItem) navAdminItem.style.display = 'none';
 
@@ -2114,12 +2456,18 @@ class AppController {
       if (topUserEmailDisplay) topUserEmailDisplay.textContent = "";
       const topSalonStatusBadge = document.getElementById('topSalonStatusBadge');
       if (topSalonStatusBadge) topSalonStatusBadge.style.display = 'none';
+      if (cardByogSettings) cardByogSettings.style.display = 'none';
 
-      // 未ログイン時はダッシュボードを表示しておく（UIリセット）
+      // 内部ビュー状態のリセット
       document.querySelectorAll('.view-section').forEach(sec => {
         sec.classList.remove('active');
+        sec.style.display = 'none';
       });
-      document.getElementById('view-dashboard')?.classList.add('active');
+      const dashSec = document.getElementById('view-dashboard');
+      if (dashSec) {
+        dashSec.classList.add('active');
+        dashSec.style.display = 'block';
+      }
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
       document.querySelector('.nav-item[data-target="dashboard"]')?.classList.add('active');
     }
@@ -3098,7 +3446,7 @@ class AppController {
         const tags = [...new Set(cuts.map(c => c.bgm_tag).filter(Boolean))];
         const autoOpt = selectEl.querySelector('option[value="auto_script"]');
         if (autoOpt && tags.length > 0) {
-          autoOpt.textContent = `台本の自動BGM設定を使用（設定済タグ: ${tags.slice(0, 4).join(' ➔ ')}）`;
+          autoOpt.textContent = `台本の自動BGM設定を使用（設定済タグ: ${tags.slice(0, 4).join(' -> ')}）`;
         }
       };
     };

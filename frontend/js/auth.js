@@ -65,8 +65,16 @@
                 window.appController.refreshUserCredits();
               }
             }
+            const appLayout = document.getElementById('appLayout');
             const loginPage = document.getElementById('loginPage');
-            if (loginPage) loginPage.classList.add('hidden');
+            if (appLayout) {
+              appLayout.style.display = 'flex';
+              appLayout.classList.remove('hidden');
+            }
+            if (loginPage) {
+              loginPage.classList.add('hidden');
+              loginPage.style.display = 'none';
+            }
 
             const banner = document.getElementById('salonAuthGuardBanner');
             if (banner) banner.remove();
@@ -129,8 +137,16 @@
               window.appController.isAdmin = userObj.isAdmin;
               window.appController.updateAuthState(userObj);
             }
+            const appLayout = document.getElementById('appLayout');
             const loginPage = document.getElementById('loginPage');
-            if (loginPage) loginPage.classList.add('hidden');
+            if (appLayout) {
+              appLayout.style.display = 'flex';
+              appLayout.classList.remove('hidden');
+            }
+            if (loginPage) {
+              loginPage.classList.add('hidden');
+              loginPage.style.display = 'none';
+            }
           };
           if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', restoreAuth);
@@ -257,11 +273,17 @@
         return;
       }
 
-      // 未認証単体直アクセス時は、確実にスタンドアロンログイン画面を表示
+      // 未認証単体直アクセス時は、確実にアプリ本体を非表示にし、LP兼ログイン画面を表示
       window.addEventListener('DOMContentLoaded', () => {
+        const appLayout = document.getElementById('appLayout');
         const loginPage = document.getElementById('loginPage');
+        if (appLayout) {
+          appLayout.style.display = 'none';
+          appLayout.classList.add('hidden');
+        }
         if (loginPage) {
           loginPage.classList.remove('hidden');
+          loginPage.style.display = 'block';
         }
       });
     }

@@ -21,7 +21,7 @@
   <div class="bg-glow bg-glow-1"></div>
   <div class="bg-glow bg-glow-2"></div>
 
-  <div class="app-layout">
+  <div class="app-layout" id="appLayout" style="display: none;">
     
     <!-- サイドバー -->
     <aside class="sidebar">
@@ -63,11 +63,11 @@
           </span>
           <span class="nav-label">自動編集</span>
         </button>
-                <button class="nav-item" data-target="plan">
+        <button class="nav-item" data-target="plan">
           <span class="nav-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
           </span>
-          <span class="nav-label">プラン・料金</span>
+          <span class="nav-label">プラン ＆ クレジット残高</span>
         </button>
         <button class="nav-item" data-target="settings">
           <span class="nav-icon">
@@ -100,7 +100,7 @@
     <main class="main-content">
       
       <!-- グローバルトップバー (管理者設定 & SSOステータス) -->
-      <header class="global-top-bar" id="globalTopBar" style="display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 1.25rem; margin-bottom: 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.06); background: rgba(15, 23, 42, 0.4); border-radius: 8px;">
+      <header class="global-top-bar" id="globalTopBar" style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 1rem; margin-bottom: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.06); background: rgba(15, 23, 42, 0.4); border-radius: 8px;">
         <div style="display: flex; align-items: center; gap: 8px;">
           <span class="badge" id="topSalonStatusBadge" style="display: none; background: rgba(57, 255, 20, 0.12); color: var(--accent-primary); padding: 0.2rem 0.55rem; font-size: 0.72rem; font-weight: 600; border-radius: 4px;">サロンSSO連携中</span>
         </div>
@@ -556,7 +556,7 @@
           </div>
         </div>
 
-        <!-- 5. 台本確認 ＆ AI動画生成ワーカー（TTS試聴・テロップ即時プレビュー・BGM選曲変更） ➔ 6. ショート動画作成 -->
+        <!-- 5. 台本確認 ＆ AI動画生成ワーカー（TTS試聴・テロップ即時プレビュー・BGM選曲変更） -> 6. ショート動画作成 -->
         <div id="proShortsScriptArea" class="glass-card main-form-card" style="display: none; margin-top: 1.5rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem;">
             <h3 style="margin: 0;">60秒カット割り・演出データ (JSON)</h3>
@@ -763,7 +763,7 @@
               <div style="display: flex; align-items: center; gap: 6px;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #00d2ff;"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
                 <span style="font-size: 0.8rem; color: var(--text-secondary);">2段階I2Vアニメーション生成:</span>
-                <span style="font-size: 0.8rem; color: var(--text-primary); font-weight: 500;">Stage1: Nano Banana シーン画像生成（選択したスタイル・絵柄を厳格適用） ➔ Stage2: 画像をリファレンスしてアニメーション動画化</span>
+                <span style="font-size: 0.8rem; color: var(--text-primary); font-weight: 500;">Stage1: Nano Banana シーン画像生成（選択したスタイル・絵柄を厳格適用） -> Stage2: 画像をリファレンスしてアニメーション動画化</span>
               </div>
             </div>
           </div>
