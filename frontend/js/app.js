@@ -2951,6 +2951,20 @@ class AppController {
         { id: "ja-JP-AoiNeural", name: "Aoi (女性・Azure Neural)" },
         { id: "ja-JP-DaichiNeural", name: "Daichi (男性・Azure Neural)" }
       ],
+      voxcpm: [
+        { id: "studio_female_01", name: "スタジオ女性 (48kHzクリアナレーション)" },
+        { id: "studio_male_01", name: "スタジオ男性 (48kHz重厚解説)" },
+        { id: "story_female", name: "ストーリー女性 (感情豊か・朗読調)" },
+        { id: "documentary_male", name: "ドキュメンタリー男性 (深みのある語り)" },
+        { id: "rachel", name: "Rachel (知的女性・自然な抑揚)" },
+        { id: "adam", name: "Adam (映画調ナレーター)" }
+      ],
+      oss_elevenlabs: [
+        { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel (高品質OSS・知的女性)" },
+        { id: "pNInz6obpgDQGcFmaJgB", name: "Adam (高品質OSS・重厚ナレーター)" },
+        { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella (高品質OSS・穏やか女性)" },
+        { id: "ErXwobaYiN019PkySvjV", name: "Antoni (高品質OSS・解説調)" }
+      ],
       gtts: [
         { id: "ja", name: "日本語 (標準)" }
       ]
@@ -3274,20 +3288,28 @@ class AppController {
           const data = await window.apiClient.listBGM();
           const tracks = data.bgm_tracks || [];
           customGroupEl.innerHTML = '';
-          tracks.forEach(t => {
+          if (tracks.length === 0) {
             const opt = document.createElement('option');
-            opt.value = t.filename || t.bgm_id;
-            opt.textContent = `登録BGM: ${t.title} (${t.keywords || 'カスタム'})`;
-            opt.dataset.previewUrl = t.storage_url || `${window.apiClient.baseUrl}/api/bgm/file/${encodeURIComponent(t.filename || t.bgm_id)}`;
+            opt.value = "";
+            opt.disabled = true;
+            opt.textContent = "（登録楽曲なし）";
             customGroupEl.appendChild(opt);
-          });
+          } else {
+            tracks.forEach(t => {
+              const opt = document.createElement('option');
+              opt.value = t.filename || t.bgm_id;
+              opt.textContent = `登録BGM: ${t.title} (${t.keywords || 'カスタム'})`;
+              opt.dataset.previewUrl = t.storage_url || `${window.apiClient.baseUrl}/api/bgm/file/${encodeURIComponent(t.filename || t.bgm_id)}`;
+              customGroupEl.appendChild(opt);
+            });
+          }
         } catch (_) {}
       };
       refreshCustomBgmList();
 
       if (volEl && volLabel) {
         volEl.addEventListener('input', () => {
-          const pct = parseInt(volEl.value, 10) || 20;
+          const pct = parseInt(volEl.value, 10) || 18;
           volLabel.textContent = `${pct}%`;
           if (audioEl) {
             audioEl.volume = Math.min(1.0, Math.max(0.05, pct / 100));
@@ -3297,48 +3319,19 @@ class AppController {
 
       if (previewBtn && selectEl && audioEl) {
         previewBtn.addEventListener('click', async () => {
-          const val = selectEl.value || 'auto_script';
-          if (val === 'none') {
+          const val = selectEl.value || 'none';
+          if (!val || val === 'none') {
             audioEl.pause();
             audioEl.style.display = 'none';
-            return this.showToast('「BGMなし（無音）」が選択されています', 'info');
+            return this.showToast('「BGMなし」が選択されています。BGMを使用する場合は管理画面でBGMを登録してください。', 'info');
           }
 
           let targetUrl = '';
-          if (val === 'auto_script') {
-            // 台本データ内の1カット目のbgm_tagまたはスタイルに応じた内蔵BGMを試聴
-            const vStyle = document.getElementById(visualStyleSelectId)?.value || 'anime_modern';
-            const genre = document.getElementById(genreSelectId)?.value || 'story';
-            let presetId = (vStyle === 'ukiyoe' || genre === 'edoculture') ? 'edo_ukiyoe' : 'corporate_clean';
-            const jsonVal = document.getElementById(scriptTextareaId)?.value?.trim();
-            if (jsonVal && vStyle !== 'ukiyoe') {
-              try {
-                const parsed = JSON.parse(jsonVal);
-                const firstCut = (parsed.cuts && parsed.cuts[0]) || (parsed.chapters && parsed.chapters[0]?.cuts?.[0]);
-                const tag = firstCut?.bgm_tag || 'neutral';
-                const tagMap = {
-                  cheerful: 'upbeat_marimba',
-                  funny: 'upbeat_marimba',
-                  warm: 'calm_piano',
-                  touching: 'calm_piano',
-                  suspense: 'mystery_synth',
-                  frightening: 'mystery_synth',
-                  epic: 'dramatic_strings',
-                  neutral: 'corporate_clean'
-                };
-                presetId = tagMap[tag] || 'corporate_clean';
-              } catch (_) {}
-            }
-            targetUrl = window.apiClient.getBuiltinBgmPreviewUrl(presetId);
-          } else if (val.startsWith('builtin:')) {
-            targetUrl = window.apiClient.getBuiltinBgmPreviewUrl(val);
-          } else {
-            const selectedOpt = selectEl.options[selectEl.selectedIndex];
-            targetUrl = selectedOpt?.dataset?.previewUrl || `${window.apiClient.baseUrl}/api/bgm/file/${encodeURIComponent(val)}`;
-          }
+          const selectedOpt = selectEl.options[selectEl.selectedIndex];
+          targetUrl = selectedOpt?.dataset?.previewUrl || `${window.apiClient.baseUrl}/api/bgm/file/${encodeURIComponent(val)}`;
 
           audioEl.src = targetUrl;
-          const pct = parseInt(volEl?.value || '20', 10);
+          const pct = parseInt(volEl?.value || '18', 10);
           audioEl.volume = Math.min(1.0, Math.max(0.05, pct / 100));
           audioEl.style.display = 'block';
           try {
@@ -3350,15 +3343,8 @@ class AppController {
         });
       }
 
-      // 台本生成完了時に auto_script オプションのラベルへ検知BGMタグを表示するヘルパー
       return (scriptData) => {
-        if (!selectEl || !scriptData) return;
-        const cuts = scriptData.cuts || (scriptData.chapters ? scriptData.chapters.flatMap(ch => ch.cuts || []) : []);
-        const tags = [...new Set(cuts.map(c => c.bgm_tag).filter(Boolean))];
-        const autoOpt = selectEl.querySelector('option[value="auto_script"]');
-        if (autoOpt && tags.length > 0) {
-          autoOpt.textContent = `台本の自動BGM設定を使用（設定済タグ: ${tags.slice(0, 4).join(' -> ')}）`;
-        }
+        // デモ用BGMの自動付与は行わず、ユーザーの設定（BGMなし／登録BGM）を維持
       };
     };
 
@@ -3370,13 +3356,12 @@ class AppController {
     const updateProShortsBgmTags = setupWorkerBgmControls('proShorts', 'inputProShortsScriptJson', 'inputProShortsGenre', 'inputProShortsVisualStyle');
     const updateLongVideoBgmTags = setupWorkerBgmControls('longVideo', 'inputLongVideoScriptJson', 'inputLongVideoGenre', 'inputLongVideoVisualStyle');
 
-    // ジャンル変更時のおすすめスタイル・テロップ・BGMスマート連動（手動でのスタイル個別変更も完全自由）
+    // ジャンル変更時のおすすめスタイル・テロップ連動（BGMは勝手に変更しない）
     const bindGenreAndStyleSync = (genreId, styleId, telopStyleId, telopFontId, bgmSelectId, refreshTelopFn, comicBoxId) => {
       const gEl = document.getElementById(genreId);
       const sEl = document.getElementById(styleId);
       const tsEl = document.getElementById(telopStyleId);
       const tfEl = document.getElementById(telopFontId);
-      const bgmEl = document.getElementById(bgmSelectId);
       const comicBoxEl = comicBoxId ? document.getElementById(comicBoxId) : null;
 
       const syncComicBox = () => {
@@ -3391,11 +3376,9 @@ class AppController {
             sEl.value = 'ukiyoe';
             if (tsEl) tsEl.value = 'edo_ukiyoe_crimson';
             if (tfEl) tfEl.value = 'KaisoNext';
-            if (bgmEl) bgmEl.value = 'builtin:edo_ukiyoe';
           } else if (gEl.value === 'business' && sEl.value === 'ukiyoe') {
             sEl.value = 'comic_manga';
             if (tsEl) tsEl.value = 'clean_emerald_white';
-            if (bgmEl) bgmEl.value = 'auto_script';
           }
           syncComicBox();
           if (refreshTelopFn) refreshTelopFn();
@@ -3405,7 +3388,6 @@ class AppController {
           if (sEl.value === 'ukiyoe') {
             if (tsEl) tsEl.value = 'edo_ukiyoe_crimson';
             if (tfEl) tfEl.value = 'KaisoNext';
-            if (bgmEl && bgmEl.value === 'auto_script') bgmEl.value = 'builtin:edo_ukiyoe';
           }
           syncComicBox();
           if (refreshTelopFn) refreshTelopFn();
@@ -3619,7 +3601,7 @@ class AppController {
         const telopMode = document.getElementById('proShortsTelopMode')?.value || 'sequential';
         const telopFontSize = document.getElementById('proShortsTelopFontSize')?.value || 'medium';
         const telopFont = document.getElementById('proShortsTelopFont')?.value || 'keifont';
-        const bgmChoice = document.getElementById('proShortsBgmSelect')?.value || 'auto_script';
+        const bgmChoice = document.getElementById('proShortsBgmSelect')?.value || 'none';
         const bgmVolume = (parseInt(document.getElementById('proShortsBgmVolume')?.value || '20', 10)) / 100;
         const comicColorMode = document.getElementById('proShortsComicColorMode')?.value || 'color';
         const comicBubbleDelay = parseFloat(document.getElementById('proShortsComicBubbleDelay')?.value || '0.4');
@@ -4037,7 +4019,7 @@ class AppController {
         const telopMode = document.getElementById('longVideoTelopMode')?.value || 'sequential';
         const telopFontSize = document.getElementById('longVideoTelopFontSize')?.value || 'medium';
         const telopFont = document.getElementById('longVideoTelopFont')?.value || 'keifont';
-        const bgmChoice = document.getElementById('longVideoBgmSelect')?.value || 'auto_script';
+        const bgmChoice = document.getElementById('longVideoBgmSelect')?.value || 'none';
         const bgmVolume = (parseInt(document.getElementById('longVideoBgmVolume')?.value || '20', 10)) / 100;
         const comicColorMode = document.getElementById('longVideoComicColorMode')?.value || 'color';
         const comicBubbleDelay = parseFloat(document.getElementById('longVideoComicBubbleDelay')?.value || '0.4');

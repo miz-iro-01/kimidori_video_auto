@@ -16,7 +16,7 @@ import logging
 import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 
 import config
 
@@ -849,9 +849,9 @@ class VideoStockAndEditorService:
         # BGMの解決
         effective_bgm_map: Dict[str, str] = {}
         builtin_bgm_dir = config.DATA_DIR / "bgm"
-        choice = (bgm_choice or "auto_script").strip()
+        choice = (bgm_choice or "none").strip()
 
-        if choice == "none":
+        if choice in ("none", "", "null"):
             effective_bgm_map = {}
         elif choice.startswith("builtin:"):
             preset_wav = batch_gen.ensure_builtin_bgm_file(choice, builtin_bgm_dir)
@@ -861,21 +861,6 @@ class VideoStockAndEditorService:
             custom_bgm_file = builtin_bgm_dir / choice
             if custom_bgm_file.exists():
                 effective_bgm_map["__override__"] = str(custom_bgm_file)
-        if choice != "none" and "__override__" not in effective_bgm_map:
-            tag_to_builtin = {
-                "cheerful": "upbeat_marimba",
-                "funny": "upbeat_marimba",
-                "warm": "calm_piano",
-                "touching": "calm_piano",
-                "suspense": "mystery_synth",
-                "frightening": "mystery_synth",
-                "epic": "dramatic_strings",
-                "neutral": "edo_ukiyoe" if (visual_style == "ukiyoe" or genre == "edoculture") else "corporate_clean"
-            }
-            for t_k, b_id in tag_to_builtin.items():
-                b_wav = batch_gen.ensure_builtin_bgm_file(b_id, builtin_bgm_dir)
-                if b_wav:
-                    effective_bgm_map[t_k] = str(b_wav)
 
         if progress_callback:
             progress_callback(70, "FFmpegで編集済みタイムライン映像・テロップ・効果音・BGMを合成中...")

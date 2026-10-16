@@ -9,23 +9,24 @@
   - **AI・メディア生成基盤**:
     - テキスト・台本・Outlier分析 (無料枠標準): Google Gemini API (`gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, 既存優先枠フォールバック: `gemini-2.5-flash`, `gemini-2.5-pro`。※旧1.5系モデルは完全廃止・提供終了)
     - 無料枠対応Geminiモデル群 (2026年最新基準): `gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.8-live`, `gemini-3.8-flash-tts`, `gemini-3.5-flash-lite-tts`, `text-embedding-005`, `gemini-embedding-001`
-    - 一貫性キャラクター＆シーン画像生成 (Stage 1): 有料 Gemini API Nano Banana (`gemini-3.1-flash-image`, `gemini-nano-banana-2.1`, `gemini-3-pro-image`) / FLUX.1 / Google Colab GPU / Pexels
-    - リファレンス Image-to-Video アニメーション動画生成 (Stage 2): Google Colab ComfyUI (`LTX-Video I2V`) / 有料 Gemini API Veo 3.1 (`veo-3.1-fast-generate-preview`, `veo-3.1-generate-preview`)
-    - 音声合成 (TTS): Gemini TTS (`gemini-3.8-flash-tts`, `gemini-3.5-flash-lite-tts`), Edge TTS, VOICEVOX, Google Cloud TTS, ElevenLabs, OpenAI TTS, Azure Speech, Amazon Polly, SHAREVOX, COEIROINK, AivisSpeech, 音読さん, CoeFont
+    - 一貫性キャラクター＆シーン画像生成: 有料 Gemini API Nano Banana (`gemini-3.1-flash-image`, `gemini-nano-banana-2.1`, `gemini-3-pro-image`) / FLUX.1 / Google Colab GPU / Pexels
+    - リファレンス Image-to-Video アニメーション動画生成 (ComfyUI二刀流エンジン): ショート動画 (9:16縦型) は `LTX-Video I2V`、長尺動画 (16:9横型) は `MiniMax H3` を自動選定実行。有料 Gemini API Veo 3.1 (`veo-3.1-fast-generate-preview`, `veo-3.1-generate-preview`) にも対応。
+    - 音声合成 (ナレーション): 48kHzスタジオ音質 OpenBMB VoxCPM (VoxCPM2 2Bモデル)、Edge-TTS (標準)、VOICEVOX (キャラクター音声)、ElevenLabs、OpenAI、Google Cloud、Azure Speech、Amazon Polly、SHAREVOX、COEIROINK、AivisSpeech
   - **データ・ストレージ基盤**: Firebase Firestore / Local JSON Fallback (`backend/services/firestore_service.py`), Google Cloud Storage, YouTube Data API v3 (OAuth2)
 
 ---
 
 ## 2. 主要機能一覧
 1. **簡易ショート動画自動生成 (Mode A)**:
-   - テーマ入力・トレンドリサーチから台本生成、TTS音声合成、画像生成、テロップ合成、BGMミキシング、YouTube投稿までを自動実行。
-2. **Pro版ショート動画生成 (60秒・2段階I2Vアニメーション＆5層プロ仕様テロップ)**:
-   - **統一ワークフロー**: `テーマ記入` -> `Outlier（外れ値）リサーチ` -> `ジャンル選定 ＆ スタイル（絵柄）独立選定` -> `自前の台本入力欄` -> `1. 台本作成ボタン` -> `AI動画生成ワーカー（TTSその場試聴・テロップ即時プレビュー・BGM選曲変更＆試聴）` -> `2. ショート動画作成ボタン`。
+   - テーマ入力・トレンドリサーチから台本生成、音声合成、画像生成、テロップ合成、BGMミキシング、YouTube投稿までを自動実行。
+2. **Pro版ショート動画生成 (60秒・LTX-Videoアニメーション＆5層プロ仕様テロップ)**:
+   - **統一ワークフロー**: `テーマ記入` -> `Outlier（外れ値）リサーチ` -> `ジャンル選定 ＆ スタイル（絵柄）独立選定` -> `自前の台本入力欄` -> `1. 台本作成ボタン` -> `動画生成設定（ナレーション試聴・テロップ即時プレビュー・BGM設定＆試聴）` -> `2. ショート動画作成ボタン`。
+   - **洗練された商用UIUX**: 開発者目線の内部講釈（Stage1/2解説、TTS表記等）を完全排除し、直感的な「1. ナレーション音声」「2. テロップ書体・配色」「3. BGM設定」に統一。
+   - **BGMゼロデモ原則**: BGM初期値を「BGMなし」に絶対固定。未登録時にダミーのプリセットやタグを自動付与せず、ユーザーが明示的に登録・選択した場合のみ合成。
    - **ジャンルとスタイル（絵柄）の分離登録**: 構成ジャンル（`story`, `business`, `edoculture`, `trivia`）とビジュアルスタイル（`ukiyoe` 本格浮世絵・江戸木版画、`anime_modern`、`manga_dramatic`、`watercolor_ink`、`flat_2d_motion`、`photoreal_cinematic`）を独立指定可能。`ukiyoe` 選択時はアニメ調キーワードを完全排除し、北斎・広重・国芳・写楽風の伝統木版画（錦絵・和紙繊維質感・墨骨線・岩絵具）として一貫生成。
-   - **Stage 0**: 登場人物の単一バストアップ基準マスター画像を Nano Banana で `visual_style` に準拠して確定生成。
-   - **Stage 1**: マスター画像を `inlineData` リファレンス参照し、単一フルスクリーン9:16シーン静止画 (`bg_xxx.png`) を生成（分割パネル・外枠自動検出トリミング保護付き）。
-   - **Stage 2**: 生成したシーン静止画 (`bg_xxx.png`) をリファレンス入力として、Colab ComfyUI (`LTX-Video I2V`) または Gemini `Veo 3.1 I2V` でアニメーション動画 (`clip_xxx.mp4`) に変換。
-   - **Stage 3**: YouTube定番の極太日本語フォント8種から選択可能な5層マルチレイヤーテロップ（即時プレビューAPI `/api/telop/preview` 対応）および内蔵/カスタムBGM（`/api/bgm/builtin/{preset_id}`, `/api/bgm/file/{bgm_id}`）を合成。
+   - **登場人物一貫性**: 登場人物の基準マスター画像を Nano Banana で `visual_style` に準拠して確定生成し、フルスクリーン9:16シーン静止画 (`bg_xxx.png`) を生成（分割パネル・外枠自動検出トリミング保護付き）。
+   - **LTX-Video 高速アニメーション**: シーン静止画をリファレンス入力として、Colab ComfyUI (`LTX-Video I2V`) でダイナミックな縦型アニメーション動画 (`clip_xxx.mp4`) を生成。
+   - **YouTube定番フォント8種＆5層テロップ**: 5層マルチレイヤーテロップ（即時プレビュー対応）および登録BGMを合成。
 3. **長尺動画自動生成 (15〜20分・全5章構成)**:
    - Pro版ショート動画と同一の統一ワークフロー（テーマ・Outlierリサーチ・ジャンル×スタイル分離・自前台本・AI動画生成ワーカー内TTS試聴・テロップ即時プレビュー・BGM選択＆試聴）を搭載。
    - 全5章・120〜180カットのタイムラインJSON設計図生成、マルチBGMクロスフェード合成、カット単位の単体再生成リカバリー機能 (`/api/timeline/scene/regenerate`)。

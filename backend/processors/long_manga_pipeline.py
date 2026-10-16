@@ -485,9 +485,9 @@ async def run_long_manga_pipeline(
         # Step 3: BGM選曲の解決 ＆ マルチBGMクロスフェード動画合成 (70%〜90%)
         effective_bgm_map = dict(bgm_map or {})
         builtin_bgm_dir = config.DATA_DIR / "bgm"
-        choice = (bgm_choice or "auto_script").strip()
+        choice = (bgm_choice or "none").strip()
 
-        if choice == "none":
+        if choice in ("none", "", "null"):
             effective_bgm_map = {}
         elif choice.startswith("builtin:"):
             preset_wav = batch_gen.ensure_builtin_bgm_file(choice, builtin_bgm_dir)
@@ -508,31 +508,6 @@ async def run_long_manga_pipeline(
                         effective_bgm_map["__override__"] = str(dl_bgm)
                 except Exception as bgm_dl_err:
                     logger.warning(f"Failed to download custom BGM {choice}: {bgm_dl_err}")
-
-        # auto_script またはフォールバック補完: 未設定タグに内蔵BGMを自動割り当て
-        if choice != "none" and "__override__" not in effective_bgm_map:
-            tag_to_builtin = {
-                "cheerful": "upbeat_marimba",
-                "funny": "upbeat_marimba",
-                "warm": "calm_piano",
-                "touching": "calm_piano",
-                "suspense": "mystery_synth",
-                "frightening": "mystery_synth",
-                "epic": "dramatic_strings",
-                "neutral": "edo_ukiyoe" if (resolved_visual_style == "ukiyoe" or project.genre == "edoculture") else "corporate_clean"
-            }
-            if resolved_visual_style == "ukiyoe" or project.genre == "edoculture":
-                edo_wav = batch_gen.ensure_builtin_bgm_file("edo_ukiyoe", builtin_bgm_dir)
-                if edo_wav:
-                    for t_k in tag_to_builtin:
-                        if t_k not in effective_bgm_map or not Path(str(effective_bgm_map[t_k])).exists():
-                            effective_bgm_map[t_k] = str(edo_wav)
-            else:
-                for t_k, b_id in tag_to_builtin.items():
-                    if t_k not in effective_bgm_map or not Path(str(effective_bgm_map[t_k])).exists():
-                        b_wav = batch_gen.ensure_builtin_bgm_file(b_id, builtin_bgm_dir)
-                        if b_wav:
-                            effective_bgm_map[t_k] = str(b_wav)
 
         log_and_update(70, 4, "マルチBGMクロスフェード & 演出合成中", f"BGM設定 ({choice}) ＆ テロップ合成を実行しています...")
         composer = MangaVideoComposer()
